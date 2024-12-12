@@ -17,7 +17,29 @@
 #define SPEED_4MHZ &furi_hal_spi_preset_1edge_low_4m // 4 MHZ
 #define SPEED_2MHZ &furi_hal_spi_preset_1edge_low_2m // 2 MHZ
 
-// FUNCTIONS
+/**
+ * Alloc the spi instance
+ */
 FuriHalSpiBusHandle* spi_alloc();
+
+/**
+ * Send data via spi
+ */
+bool spi_send(FuriHalSpiBusHandle* spi, uint8_t* buffer, size_t size);
+
+/**
+ * Read data via spi
+ */
+bool spi_send_and_read(
+    FuriHalSpiBusHandle* spi,
+    uint8_t* action_address,
+    uint8_t* data_read,
+    size_t size_to_send,
+    size_t size_to_read);
+
+/**
+ * Free the spi instance
+ */
+void spi_free(FuriHalSpiBusHandle* spi);
 
 #endif

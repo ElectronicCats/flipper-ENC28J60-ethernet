@@ -65,19 +65,29 @@ FuriHalSpiBusHandle* spi_alloc() {
 }
 
 // Function to send data
-bool spi_send(FuriHalSpiBusHandle* spi, uint8_t* buffer) {
+bool spi_send(FuriHalSpiBusHandle* spi, uint8_t* buffer, size_t size) {
     furi_hal_spi_acquire(spi);
-    bool ret = furi_hal_spi_bus_tx(spi, buffer, sizeof(buffer), TIMEOUT_SPI);
+    bool ret = furi_hal_spi_bus_tx(spi, buffer, size, TIMEOUT_SPI);
     furi_hal_spi_release(spi);
     return ret;
 }
 
 // Function to read register
-bool spi_send_and_read(FuriHalSpiBusHandle* spi, uint8_t* action_address, uint8_t* data_read) {
+bool spi_send_and_read(
+    FuriHalSpiBusHandle* spi,
+    uint8_t* action_address,
+    uint8_t* data_read,
+    size_t size_to_send,
+    size_t size_to_read) {
     furi_hal_spi_acquire(spi);
     bool ret =
         (furi_hal_spi_bus_tx(spi, action_address, sizeof(action_address), TIMEOUT_SPI) &&
          furi_hal_spi_bus_rx(spi, data_read, sizeof(data_read), TIMEOUT_SPI));
     furi_hal_spi_release(spi);
     return ret;
+}
+
+// Function to free Spi
+void spi_free(FuriHalSpiBusHandle* spi) {
+    free(spi);
 }
