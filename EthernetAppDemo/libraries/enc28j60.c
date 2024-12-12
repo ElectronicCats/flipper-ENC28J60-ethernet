@@ -18,6 +18,9 @@
 #define enc_warning(format, ...) \
     if(DEBUG_ENC28J60) FURI_LOG_W(DEBUG_TAG_ENC28J60, format, ##__VA_ARGS__)
 
+#define enc_debug(format, ...) \
+    if(DEBUG_ENC28J60) FURI_LOG_D(DEBUG_TAG_ENC28J60, format, ##__VA_ARGS__)
+
 /**
  * To debug the registers information
  */
@@ -25,8 +28,8 @@
 #define DEBUG_TAG_REGISTERS "ENC28J60 REGISTERS"
 #define DEBUG_REGISTERS     true
 
-#define reg_info(format, ...) \
-    if(DEBUG_REGISTERS) FURI_LOG_I(DEBUG_TAG_REGISTERS, format, ##__VA_ARGS__)
+#define reg_debug(format, ...) \
+    if(DEBUG_REGISTERS) FURI_LOG_D(DEBUG_TAG_REGISTERS, format, ##__VA_ARGS__)
 
 #define reg_exception(format, ...) \
     if(DEBUG_REGISTERS) FURI_LOG_E(DEBUG_TAG_REGISTERS, format, ##__VA_ARGS__)
@@ -38,7 +41,7 @@
  * Command, registers and mask for the ENC28J60
  */
 
-// Mask to use
+// Masks for the registers and bank
 #define ADDR_MASK 0x1F
 #define BANK_MASK 0x60
 #define SPRD_MASK 0x80
@@ -51,52 +54,41 @@
 #define ECON1 0x1F
 
 // Bank 0 registers
-#define ERDPTL   (0x00 | 0x00)
-#define ERDPTH   (0x01 | 0x00)
-#define EWRPTL   (0x02 | 0x00)
-#define EWRPTH   (0x03 | 0x00)
-#define ETXSTL   (0x04 | 0x00)
-#define ETXSTH   (0x05 | 0x00)
-#define ETXNDL   (0x06 | 0x00)
-#define ETXNDH   (0x07 | 0x00)
-#define ERXSTL   (0x08 | 0x00)
-#define ERXSTH   (0x09 | 0x00)
-#define ERXNDL   (0x0A | 0x00)
-#define ERXNDH   (0x0B | 0x00)
-#define ERXRDPTL (0x0C | 0x00)
-#define ERXRDPTH (0x0D | 0x00)
-#define ERXWRPTL (0x0E | 0x00)
-#define ERXWRPTH (0x0F | 0x00)
-#define EDMASTL  (0x10 | 0x00)
-#define EDMASTH  (0x11 | 0x00)
-#define EDMANDL  (0x12 | 0x00)
-#define EDMANDH  (0x13 | 0x00)
-#define EDMADSTL (0x14 | 0x00)
-#define EDMADSTH (0x15 | 0x00)
-#define EDMACSL  (0x16 | 0x00)
-#define EDMACSH  (0x17 | 0x00)
+#define ERDPT   (0x00 | 0x00)
+#define EWRPT   (0x02 | 0x00)
+#define ETXST   (0x04 | 0x00)
+#define ETXND   (0x06 | 0x00)
+#define ERXST   (0x08 | 0x00)
+#define ERXND   (0x0A | 0x00)
+#define ERXRDPT (0x0C | 0x00)
+
+// #define ERXWRPT         (0x0E|0x00)
+#define EDMAST (0x10 | 0x00)
+#define EDMAND (0x12 | 0x00)
+
+// #define EDMADST         (0x14|0x00)
+#define EDMACS (0x16 | 0x00)
 
 // Bank 1 registers
-#define EHT0    (0x00 | 0x20)
-#define EHT1    (0x01 | 0x20)
-#define EHT2    (0x02 | 0x20)
-#define EHT3    (0x03 | 0x20)
-#define EHT4    (0x04 | 0x20)
-#define EHT5    (0x05 | 0x20)
-#define EHT6    (0x06 | 0x20)
-#define EHT7    (0x07 | 0x20)
-#define EPMM0   (0x08 | 0x20)
-#define EPMM1   (0x09 | 0x20)
-#define EPMM2   (0x0A | 0x20)
-#define EPMM3   (0x0B | 0x20)
-#define EPMM4   (0x0C | 0x20)
-#define EPMM5   (0x0D | 0x20)
-#define EPMM6   (0x0E | 0x20)
-#define EPMM7   (0x0F | 0x20)
-#define EPMCSL  (0x10 | 0x20)
-#define EPMCSH  (0x11 | 0x20)
-#define EPMOL   (0x14 | 0x20)
-#define EPMOH   (0x15 | 0x20)
+#define EHT0  (0x00 | 0x20)
+#define EHT1  (0x01 | 0x20)
+#define EHT2  (0x02 | 0x20)
+#define EHT3  (0x03 | 0x20)
+#define EHT4  (0x04 | 0x20)
+#define EHT5  (0x05 | 0x20)
+#define EHT6  (0x06 | 0x20)
+#define EHT7  (0x07 | 0x20)
+#define EPMM0 (0x08 | 0x20)
+#define EPMM1 (0x09 | 0x20)
+#define EPMM2 (0x0A | 0x20)
+#define EPMM3 (0x0B | 0x20)
+#define EPMM4 (0x0C | 0x20)
+#define EPMM5 (0x0D | 0x20)
+#define EPMM6 (0x0E | 0x20)
+#define EPMM7 (0x0F | 0x20)
+#define EPMCS (0x10 | 0x20)
+
+// #define EPMO            (0x14|0x20)
 #define EWOLIE  (0x16 | 0x20)
 #define EWOLIR  (0x17 | 0x20)
 #define ERXFCON (0x18 | 0x20)
@@ -104,24 +96,19 @@
 
 // Bank 2 registers
 #define MACON1   (0x00 | 0x40 | 0x80)
-#define MACON2   (0x01 | 0x40 | 0x80)
 #define MACON3   (0x02 | 0x40 | 0x80)
 #define MACON4   (0x03 | 0x40 | 0x80)
 #define MABBIPG  (0x04 | 0x40 | 0x80)
-#define MAIPGL   (0x06 | 0x40 | 0x80)
-#define MAIPGH   (0x07 | 0x40 | 0x80)
+#define MAIPG    (0x06 | 0x40 | 0x80)
 #define MACLCON1 (0x08 | 0x40 | 0x80)
 #define MACLCON2 (0x09 | 0x40 | 0x80)
-#define MAMXFLL  (0x0A | 0x40 | 0x80)
-#define MAMXFLH  (0x0B | 0x40 | 0x80)
+#define MAMXFL   (0x0A | 0x40 | 0x80)
 #define MAPHSUP  (0x0D | 0x40 | 0x80)
 #define MICON    (0x11 | 0x40 | 0x80)
 #define MICMD    (0x12 | 0x40 | 0x80)
 #define MIREGADR (0x14 | 0x40 | 0x80)
-#define MIWRL    (0x16 | 0x40 | 0x80)
-#define MIWRH    (0x17 | 0x40 | 0x80)
-#define MIRDL    (0x18 | 0x40 | 0x80)
-#define MIRDH    (0x19 | 0x40 | 0x80)
+#define MIWR     (0x16 | 0x40 | 0x80)
+#define MIRD     (0x18 | 0x40 | 0x80)
 
 // Bank 3 registers
 #define MAADR1  (0x00 | 0x60 | 0x80)
@@ -132,25 +119,12 @@
 #define MAADR4  (0x05 | 0x60 | 0x80)
 #define EBSTSD  (0x06 | 0x60)
 #define EBSTCON (0x07 | 0x60)
-#define EBSTCSL (0x08 | 0x60)
-#define EBSTCSH (0x09 | 0x60)
+#define EBSTCS  (0x08 | 0x60)
 #define MISTAT  (0x0A | 0x60 | 0x80)
 #define EREVID  (0x12 | 0x60)
 #define ECOCON  (0x15 | 0x60)
 #define EFLOCON (0x17 | 0x60)
-#define EPAUSL  (0x18 | 0x60)
-#define EPAUSH  (0x19 | 0x60)
-
-// PHY registers
-#define PHCON1  0x00
-#define PHSTAT1 0x01
-#define PHHID1  0x02
-#define PHHID2  0x03
-#define PHCON2  0x10
-#define PHSTAT2 0x11
-#define PHIE    0x12
-#define PHIR    0x13
-#define PHLCON  0x14
+#define EPAUS   (0x18 | 0x60)
 
 // ENC28J60 ERXFCON Register Bit Definitions
 #define ERXFCON_UCEN  0x80
@@ -211,14 +185,6 @@
 #define MACON1_PASSALL 0x02
 #define MACON1_MARXEN  0x01
 
-// ENC28J60 MACON2 Register Bit Definitions
-#define MACON2_MARST   0x80
-#define MACON2_RNDRST  0x40
-#define MACON2_MARXRST 0x08
-#define MACON2_RFUNRST 0x04
-#define MACON2_MATXRST 0x02
-#define MACON2_TFUNRST 0x01
-
 // ENC28J60 MACON3 Register Bit Definitions
 #define MACON3_PADCFG2 0x80
 #define MACON3_PADCFG1 0x40
@@ -238,18 +204,37 @@
 #define MISTAT_SCAN   0x02
 #define MISTAT_BUSY   0x01
 
+// ENC28J60 EBSTCON Register Bit Definitions
+#define EBSTCON_PSV2   0x80
+#define EBSTCON_PSV1   0x40
+#define EBSTCON_PSV0   0x20
+#define EBSTCON_PSEL   0x10
+#define EBSTCON_TMSEL1 0x08
+#define EBSTCON_TMSEL0 0x04
+#define EBSTCON_TME    0x02
+#define EBSTCON_BISTST 0x01
+
+// PHY registers
+#define PHCON1  0x00
+#define PHSTAT1 0x01
+#define PHHID1  0x02
+#define PHHID2  0x03
+#define PHCON2  0x10
+#define PHSTAT2 0x11
+#define PHIE    0x12
+#define PHIR    0x13
+#define PHLCON  0x14
+
 // ENC28J60 PHY PHCON1 Register Bit Definitions
 #define PHCON1_PRST    0x8000
 #define PHCON1_PLOOPBK 0x4000
 #define PHCON1_PPWRSV  0x0800
 #define PHCON1_PDPXMD  0x0100
-
 // ENC28J60 PHY PHSTAT1 Register Bit Definitions
 #define PHSTAT1_PFDPX  0x1000
 #define PHSTAT1_PHDPX  0x0800
 #define PHSTAT1_LLSTAT 0x0004
 #define PHSTAT1_JBSTAT 0x0002
-
 // ENC28J60 PHY PHCON2 Register Bit Definitions
 #define PHCON2_FRCLINK 0x4000
 #define PHCON2_TXDIS   0x2000
@@ -276,8 +261,16 @@
  */
 
 // Function to write using an operation
-static void
-    write_operation(FuriHalSpiBusHandle* spi, uint8_t operation, uint8_t address, uint8_t data) {
+static void write_operation(
+    FuriHalSpiBusHandle* spi,
+    const uint8_t operation,
+    const uint8_t address,
+    const uint8_t data) {
+    reg_debug("-----------Operation Write----------");
+    reg_debug("Operation: %x", operation);
+    reg_debug("Register: %x", address);
+    reg_debug("Data: %x", data);
+
     uint8_t buffer[] = {operation | (address & ADDR_MASK), data};
 
     furi_hal_spi_acquire(spi);
@@ -286,8 +279,13 @@ static void
 }
 
 // Funtion to read using an operation
-static uint8_t read_operation(FuriHalSpiBusHandle* spi, uint8_t op, uint8_t address) {
-    uint8_t buffer = op | (address & ADDR_MASK);
+static uint8_t
+    read_operation(FuriHalSpiBusHandle* spi, const uint8_t operation, const uint8_t address) {
+    reg_debug("-----------Operation Read----------");
+    reg_debug("Operation: %x", operation);
+    reg_debug("Register: %x", address);
+
+    uint8_t buffer = operation | (address & ADDR_MASK);
 
     uint8_t result = 0;
 
@@ -298,6 +296,9 @@ static uint8_t read_operation(FuriHalSpiBusHandle* spi, uint8_t op, uint8_t addr
     if(address & 0x80) furi_hal_spi_bus_rx(spi, &result, 1, TIMEOUT_SPI);
 
     furi_hal_spi_release(spi);
+
+    reg_debug("Result: result");
+
     return result;
 }
 
@@ -306,17 +307,123 @@ static uint8_t get_current_bank(FuriHalSpiBusHandle* spi) {
     return read_operation(spi, ENC28J60_READ_CTRL_REG, ECON1) & 0x03;
 }
 
-// Function to write register
-void set_bank_with_mask(FuriHalSpiBusHandle* spi, uint8_t address) {
+// Function to set the bank
+static void set_bank_with_mask(FuriHalSpiBusHandle* spi, const uint8_t address) {
     // Read Actual Bank
     uint8_t current_bank = get_current_bank(spi);
 
     // Set the bank
     uint8_t bank_to_set = (address & BANK_MASK) >> 5;
 
+    enc_debug("Current bank: %x", current_bank);
+
     // If the current bank is different, set the new bank
     if(current_bank != (address & BANK_MASK)) {
         write_operation(spi, ENC28J60_BIT_FIELD_CLR, ECON1, 0x03);
         write_operation(spi, ENC28J60_BIT_FIELD_SET, ECON1, bank_to_set);
+
+        enc_debug("Bank to set: %x", bank_to_set);
     }
+}
+
+// Function to write just one byte of a register
+static void
+    write_register_byte(FuriHalSpiBusHandle* spi, const uint8_t address, const uint8_t data) {
+    set_bank_with_mask(spi, address);
+    write_operation(spi, ENC28J60_WRITE_CTRL_REG, address, data);
+}
+
+// Function to write or set a register
+static void write_register(FuriHalSpiBusHandle* spi, uint8_t address, const uint16_t data) {
+    write_register_byte(spi, address, data);
+    write_register_byte(spi, address + 1, data >> 8);
+}
+
+// Function to read a byte register
+static uint8_t read_register_byte(FuriHalSpiBusHandle* spi, const uint8_t address) {
+    set_bank_with_mask(spi, address);
+    return read_operation(spi, ENC28J60_READ_CTRL_REG, address);
+}
+
+// Function to read a register
+static uint16_t read_register(FuriHalSpiBusHandle* spi, const uint8_t address) {
+    return read_register_byte(spi, address) + (read_register_byte(spi, address + 1) << 8);
+}
+
+enc28j60_t* enc28j60_alloc(uint8_t* mac_address) {
+    enc28j60_t* ethernet_enc = (enc28j60_t*)malloc(sizeof(enc28j60_t));
+    ethernet_enc->spi = spi_alloc();
+    ethernet_enc->mac_address = mac_address;
+    return ethernet_enc;
+}
+
+//  Deinit the enc28j60
+void enc28j60_deinit(enc28j60_t* instance) {
+    furi_hal_spi_bus_handle_deinit(instance->spi);
+}
+
+// Free enc28j60
+void free_enc28j60(enc28j60_t* instance) {
+    free(instance->spi);
+    free(instance);
+}
+
+// Function to start
+uint8_t enc28j60_start(enc28j60_t* instance) {
+    FuriHalSpiBusHandle* spi = instance->spi;
+    furi_hal_spi_bus_handle_init(spi);
+    write_operation(spi, ENC28J60_SOFT_RESET, 0, ENC28J60_SOFT_RESET);
+
+    furi_delay_ms(2);
+
+    while(!(read_operation(spi, ENC28J60_READ_CTRL_REG, ESTAT) & ESTAT_CLKRDY))
+        ;
+
+    write_register(spi, ERXST, RXSTART_INIT);
+    write_register(spi, ERXRDPT, RXSTART_INIT);
+    write_register(spi, ERXND, RXSTOP_INIT);
+    write_register(spi, ETXST, TXSTART_INIT);
+    write_register(spi, ETXND, TXSTOP_INIT);
+
+    write_register_byte(spi, ERXFCON, ERXFCON_UCEN | ERXFCON_CRCEN | ERXFCON_PMEN | ERXFCON_BCEN);
+    write_register(spi, EPMM0, 0x303f);
+    write_register(spi, EPMCS, 0xf7f9);
+
+    // writePhy(PHLCON, 0x476);
+
+    write_register_byte(spi, MACON1, MACON1_MARXEN);
+
+    write_operation(
+        spi, ENC28J60_BIT_FIELD_SET, MACON3, MACON3_PADCFG0 | MACON3_TXCRCEN | MACON3_FRMLNEN);
+    write_register(spi, MAIPG, 0x0C12);
+    write_register_byte(spi, MABBIPG, 0x12);
+    write_register(spi, MAMXFL, MAX_FRAMELEN);
+
+    write_register_byte(spi, MAADR5, instance->mac_address[0]);
+    write_register_byte(spi, MAADR4, instance->mac_address[1]);
+    write_register_byte(spi, MAADR3, instance->mac_address[2]);
+    write_register_byte(spi, MAADR2, instance->mac_address[3]);
+    write_register_byte(spi, MAADR1, instance->mac_address[4]);
+    write_register_byte(spi, MAADR0, instance->mac_address[5]);
+
+    // writePhy(PHCON2, PHCON2_HDLDIS);
+    set_bank_with_mask(spi, ECON1);
+    write_operation(spi, ENC28J60_BIT_FIELD_SET, EIE, EIE_INTIE | EIE_PKTIE);
+    write_operation(spi, ENC28J60_BIT_FIELD_SET, ECON1, ECON1_RXEN);
+
+    enc_info("READ THE MAC ADDRESS =============================================");
+    read_register_byte(spi, MAADR5);
+    read_register_byte(spi, MAADR4);
+    read_register_byte(spi, MAADR3);
+    read_register_byte(spi, MAADR2);
+    read_register_byte(spi, MAADR1);
+    read_register_byte(spi, MAADR0);
+
+    UNUSED(read_register);
+
+    uint8_t rev = read_register_byte(spi, EREVID);
+
+    if(rev > 5) ++rev;
+
+    return rev;
 }
