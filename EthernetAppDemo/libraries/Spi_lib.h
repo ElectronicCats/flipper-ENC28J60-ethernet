@@ -25,14 +25,14 @@ FuriHalSpiBusHandle* spi_alloc();
 /**
  * Send data via spi
  */
-bool spi_send(FuriHalSpiBusHandle* spi, uint8_t* buffer, size_t size);
+bool spi_send(FuriHalSpiBusHandle* spi, const uint8_t* buffer, size_t size);
 
 /**
  * Read data via spi
  */
 bool spi_send_and_read(
     FuriHalSpiBusHandle* spi,
-    uint8_t* action_address,
+    const uint8_t* action_address,
     uint8_t* data_read,
     size_t size_to_send,
     size_t size_to_read);
