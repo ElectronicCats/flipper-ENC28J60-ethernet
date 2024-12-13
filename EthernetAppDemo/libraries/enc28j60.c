@@ -335,6 +335,30 @@ static uint16_t read_register(FuriHalSpiBusHandle* spi, const uint8_t address) {
     return read_register_byte(spi, address) + (read_register_byte(spi, address + 1) << 8);
 }
 
+// Function to send buffer
+static void write_buffer(FuriHalSpiBusHandle* spi, uint16_t len, uint8_t* data) {
+    uint8_t command = ENC28J60_WRITE_BUF_MEM;
+
+    if(len == 0) return;
+
+    furi_hal_spi_acquire(spi);
+    furi_hal_spi_bus_tx(spi, &command, 1, TIMEOUT_SPI);
+    furi_hal_spi_bus_rx(spi, data, len, TIMEOUT_SPI);
+    furi_hal_spi_release(spi);
+}
+
+// Function to read buffer
+static void read_buffer(FuriHalSpiBusHandle* spi, uint16_t len, uint8_t* data) {
+    uint8_t command = ENC28J60_READ_BUF_MEM;
+
+    if(len == 0) return;
+
+    furi_hal_spi_acquire(spi);
+    furi_hal_spi_bus_tx(spi, &command, 1, TIMEOUT_SPI);
+    furi_hal_spi_bus_rx(spi, data, len, TIMEOUT_SPI);
+    furi_hal_spi_release(spi);
+}
+
 // To write the registers PHY
 static void write_Phy(FuriHalSpiBusHandle* spi, const uint8_t address, const uint16_t data) {
     write_register_byte(spi, MIREGADR, address);
@@ -440,4 +464,50 @@ uint8_t enc28j60_start(enc28j60_t* instance) {
 // Get if the ENC is linked
 bool is_link_up(enc28j60_t* instance) {
     return (read_Phy_byte(instance->spi, PHSTAT2) >> 2) & 1;
+}
+
+// Send a Ethernet Packet
+void sendPacket(enc28j60_t* instance, uint8_t* buffer, uint16_t len) {
+    uint8_t retry = 0;
+
+    FuriHalSpiBusHandle* spi = instance->spi;
+
+    while(1) {
+        write_operation(spi, ENC28J60_BIT_FIELD_SET, ECON1, ECON1_TXRST);
+        write_operation(spi, ENC28J60_BIT_FIELD_CLR, ECON1, ECON1_TXRST);
+        write_operation(spi, ENC28J60_BIT_FIELD_CLR, EIR, EIR_TXERIF | EIR_TXIF);
+
+        if(retry == 0) {
+            write_register(spi, EWRPT, TXSTART_INIT);
+            write_register(spi, ETXND, TXSTART_INIT + len);
+            write_operation(spi, ENC28J60_WRITE_BUF_MEM, 0, 0x00);
+            write_buffer(spi, len, buffer);
+        }
+
+        // Init Transmission
+        write_operation(spi, ENC28J60_BIT_FIELD_SET, ECON1, ECON1_TXRTS);
+
+        uint16_t count = 0;
+        while((read_register_byte(spi, EIR) & (EIR_TXIF | EIR_TXERIF)) == 0 && ++count < 1000)
+            furi_delay_us(1);
+
+        if(!(read_register_byte(spi, EIR) & EIR_TXERIF) && count < 1000U) {
+            break;
+        }
+
+        // cancel previous transmission if stuck
+        write_operation(spi, ENC28J60_BIT_FIELD_CLR, ECON1, ECON1_TXRTS);
+
+        uint8_t tsv[7];
+
+        uint16_t etxnd = read_register(spi, ETXND);
+        write_register(spi, ERDPT, etxnd + 1);
+        read_buffer(spi, sizeof(tsv), tsv);
+
+        if(!((read_register_byte(spi, EIR) & EIR_TXERIF) && (tsv[3] & 1 << 5)) || retry > 16) {
+            break;
+        }
+
+        retry++;
+    }
 }
