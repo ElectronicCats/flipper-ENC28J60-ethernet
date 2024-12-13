@@ -11,6 +11,8 @@ int app_main(void* p) {
 
     enc28j60_start(ethernet);
 
+    log_info("ENC connected: %u", is_link_up(ethernet));
+
     free_enc28j60(ethernet);
 
     log_info("Program FINISHES");

@@ -343,6 +343,16 @@ static void write_Phy(FuriHalSpiBusHandle* spi, const uint8_t address, const uin
         furi_delay_us(1);
 }
 
+// To read the register Phy
+static uint16_t read_Phy_byte(FuriHalSpiBusHandle* spi, const uint8_t address) {
+    write_register_byte(spi, MIREGADR, address);
+    write_register_byte(spi, MICMD, MICMD_MIIRD);
+    while(read_register_byte(spi, MISTAT) & MISTAT_BUSY)
+        ;
+    write_register_byte(spi, MICMD, 0x00);
+    return read_register_byte(spi, MIRD + 1);
+}
+
 // Alloc memory for the enc28j60 struct
 enc28j60_t* enc28j60_alloc(uint8_t* mac_address) {
     enc28j60_t* ethernet_enc = (enc28j60_t*)malloc(sizeof(enc28j60_t));
@@ -371,7 +381,7 @@ uint8_t enc28j60_start(enc28j60_t* instance) {
     furi_delay_ms(2);
 
     while(!(read_operation(spi, ENC28J60_READ_CTRL_REG, ESTAT) & ESTAT_CLKRDY))
-        ;
+        furi_delay_us(1);
 
     write_register(spi, ERXST, RXSTART_INIT);
     write_register(spi, ERXRDPT, RXSTART_INIT);
@@ -425,4 +435,9 @@ uint8_t enc28j60_start(enc28j60_t* instance) {
     if(rev > 5) ++rev;
 
     return rev;
+}
+
+// Get if the ENC is linked
+bool is_link_up(enc28j60_t* instance) {
+    return (read_Phy_byte(instance->spi, PHSTAT2) >> 2) & 1;
 }
