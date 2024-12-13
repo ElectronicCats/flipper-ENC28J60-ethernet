@@ -350,6 +350,14 @@ static uint16_t read_register(FuriHalSpiBusHandle* spi, const uint8_t address) {
     return read_register_byte(spi, address) + (read_register_byte(spi, address + 1) << 8);
 }
 
+// To write the registers PHY
+static void write_Phy(FuriHalSpiBusHandle* spi, const uint8_t address, const uint16_t data) {
+    write_register_byte(spi, MIREGADR, address);
+    write_register(spi, MIWR, data);
+    while(read_register_byte(spi, MISTAT) & MISTAT_BUSY)
+        furi_delay_us(1);
+}
+
 enc28j60_t* enc28j60_alloc(uint8_t* mac_address) {
     enc28j60_t* ethernet_enc = (enc28j60_t*)malloc(sizeof(enc28j60_t));
     ethernet_enc->spi = spi_alloc();
@@ -389,7 +397,7 @@ uint8_t enc28j60_start(enc28j60_t* instance) {
     write_register(spi, EPMM0, 0x303f);
     write_register(spi, EPMCS, 0xf7f9);
 
-    // writePhy(PHLCON, 0x476);
+    write_Phy(spi, PHLCON, 0x476);
 
     write_register_byte(spi, MACON1, MACON1_MARXEN);
 
@@ -406,7 +414,7 @@ uint8_t enc28j60_start(enc28j60_t* instance) {
     write_register_byte(spi, MAADR1, instance->mac_address[4]);
     write_register_byte(spi, MAADR0, instance->mac_address[5]);
 
-    // writePhy(PHCON2, PHCON2_HDLDIS);
+    write_Phy(spi, PHCON2, PHCON2_HDLDIS);
     set_bank_with_mask(spi, ECON1);
     write_operation(spi, ENC28J60_BIT_FIELD_SET, EIE, EIE_INTIE | EIE_PKTIE);
     write_operation(spi, ENC28J60_BIT_FIELD_SET, ECON1, ECON1_RXEN);
