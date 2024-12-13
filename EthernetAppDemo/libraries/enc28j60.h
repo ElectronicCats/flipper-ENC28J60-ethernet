@@ -2,10 +2,10 @@
 #define _ENC28J60_LIBRARY_
 
 #include <furi.h>
-#include <furi/core/log.h>
 #include <furi_hal.h>
 
 #include "Spi_lib.h"
+#include "log_user.h"
 
 #define MAX_FRAMELEN 1500
 

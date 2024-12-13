@@ -29,7 +29,7 @@
 #define DEBUG_REGISTERS     true
 
 #define reg_debug(format, ...) \
-    if(DEBUG_REGISTERS) FURI_LOG_D(DEBUG_TAG_REGISTERS, format, ##__VA_ARGS__)
+    if(DEBUG_REGISTERS) FURI_LOG_I(DEBUG_TAG_REGISTERS, format, ##__VA_ARGS__)
 
 #define reg_exception(format, ...) \
     if(DEBUG_REGISTERS) FURI_LOG_E(DEBUG_TAG_REGISTERS, format, ##__VA_ARGS__)
@@ -266,11 +266,6 @@ static void write_operation(
     const uint8_t operation,
     const uint8_t address,
     const uint8_t data) {
-    reg_debug("-----------Operation Write----------");
-    reg_debug("Operation: %x", operation);
-    reg_debug("Register: %x", address);
-    reg_debug("Data: %x", data);
-
     uint8_t buffer[] = {operation | (address & ADDR_MASK), data};
 
     furi_hal_spi_acquire(spi);
@@ -281,10 +276,6 @@ static void write_operation(
 // Funtion to read using an operation
 static uint8_t
     read_operation(FuriHalSpiBusHandle* spi, const uint8_t operation, const uint8_t address) {
-    reg_debug("-----------Operation Read----------");
-    reg_debug("Operation: %x", operation);
-    reg_debug("Register: %x", address);
-
     uint8_t buffer = operation | (address & ADDR_MASK);
 
     uint8_t result = 0;
@@ -296,8 +287,6 @@ static uint8_t
     if(address & 0x80) furi_hal_spi_bus_rx(spi, &result, 1, TIMEOUT_SPI);
 
     furi_hal_spi_release(spi);
-
-    reg_debug("Result: result");
 
     return result;
 }
@@ -315,14 +304,10 @@ static void set_bank_with_mask(FuriHalSpiBusHandle* spi, const uint8_t address) 
     // Set the bank
     uint8_t bank_to_set = (address & BANK_MASK) >> 5;
 
-    enc_debug("Current bank: %x", current_bank);
-
     // If the current bank is different, set the new bank
     if(current_bank != (address & BANK_MASK)) {
         write_operation(spi, ENC28J60_BIT_FIELD_CLR, ECON1, 0x03);
         write_operation(spi, ENC28J60_BIT_FIELD_SET, ECON1, bank_to_set);
-
-        enc_debug("Bank to set: %x", bank_to_set);
     }
 }
 
@@ -358,6 +343,7 @@ static void write_Phy(FuriHalSpiBusHandle* spi, const uint8_t address, const uin
         furi_delay_us(1);
 }
 
+// Alloc memory for the enc28j60 struct
 enc28j60_t* enc28j60_alloc(uint8_t* mac_address) {
     enc28j60_t* ethernet_enc = (enc28j60_t*)malloc(sizeof(enc28j60_t));
     ethernet_enc->spi = spi_alloc();
@@ -419,13 +405,18 @@ uint8_t enc28j60_start(enc28j60_t* instance) {
     write_operation(spi, ENC28J60_BIT_FIELD_SET, EIE, EIE_INTIE | EIE_PKTIE);
     write_operation(spi, ENC28J60_BIT_FIELD_SET, ECON1, ECON1_RXEN);
 
-    enc_info("READ THE MAC ADDRESS =============================================");
-    read_register_byte(spi, MAADR5);
-    read_register_byte(spi, MAADR4);
-    read_register_byte(spi, MAADR3);
-    read_register_byte(spi, MAADR2);
-    read_register_byte(spi, MAADR1);
-    read_register_byte(spi, MAADR0);
+    uint8_t mac_read_it[6] = {0};
+
+    mac_read_it[0] = read_register_byte(spi, MAADR5);
+    mac_read_it[1] = read_register_byte(spi, MAADR4);
+    mac_read_it[2] = read_register_byte(spi, MAADR3);
+    mac_read_it[3] = read_register_byte(spi, MAADR2);
+    mac_read_it[4] = read_register_byte(spi, MAADR1);
+    mac_read_it[5] = read_register_byte(spi, MAADR0);
+
+    for(uint8_t i = 0; i < 6; i++) {
+        enc_info("MAC %u: %u", i, mac_read_it[i]);
+    }
 
     UNUSED(read_register);
 
