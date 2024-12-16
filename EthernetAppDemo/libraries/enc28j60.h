@@ -34,5 +34,7 @@ void enc28j60_deinit(enc28j60_t* instance);
 void free_enc28j60(enc28j60_t* instance);
 uint8_t enc28j60_start(enc28j60_t* instance);
 bool is_link_up(enc28j60_t* instance);
+uint16_t receive_packet(enc28j60_t* instance, uint8_t* buffer, uint16_t size);
+void send_packet(enc28j60_t* instance, uint8_t* buffer, uint16_t len);
 
 #endif

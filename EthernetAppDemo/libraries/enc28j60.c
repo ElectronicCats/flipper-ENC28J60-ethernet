@@ -257,6 +257,12 @@
 #define ENC28J60_SOFT_RESET     0xFF
 
 /**
+ * variable to know the bank
+ */
+
+uint8_t bank = 0;
+
+/**
  * Functions to set the ENC28J60
  */
 
@@ -298,16 +304,21 @@ static uint8_t get_current_bank(FuriHalSpiBusHandle* spi) {
 
 // Function to set the bank
 static void set_bank_with_mask(FuriHalSpiBusHandle* spi, const uint8_t address) {
-    // Read Actual Bank
-    uint8_t current_bank = get_current_bank(spi);
-
     // Set the bank
     uint8_t bank_to_set = (address & BANK_MASK) >> 5;
+
+    // Via software to know if it is the same
+    if(bank_to_set == bank) return;
+
+    // Read Actual Bank
+    uint8_t current_bank = get_current_bank(spi);
 
     // If the current bank is different, set the new bank
     if(current_bank != (address & BANK_MASK)) {
         write_operation(spi, ENC28J60_BIT_FIELD_CLR, ECON1, 0x03);
         write_operation(spi, ENC28J60_BIT_FIELD_SET, ECON1, bank_to_set);
+
+        bank = bank_to_set;
     }
 }
 
@@ -439,21 +450,6 @@ uint8_t enc28j60_start(enc28j60_t* instance) {
     write_operation(spi, ENC28J60_BIT_FIELD_SET, EIE, EIE_INTIE | EIE_PKTIE);
     write_operation(spi, ENC28J60_BIT_FIELD_SET, ECON1, ECON1_RXEN);
 
-    uint8_t mac_read_it[6] = {0};
-
-    mac_read_it[0] = read_register_byte(spi, MAADR5);
-    mac_read_it[1] = read_register_byte(spi, MAADR4);
-    mac_read_it[2] = read_register_byte(spi, MAADR3);
-    mac_read_it[3] = read_register_byte(spi, MAADR2);
-    mac_read_it[4] = read_register_byte(spi, MAADR1);
-    mac_read_it[5] = read_register_byte(spi, MAADR0);
-
-    for(uint8_t i = 0; i < 6; i++) {
-        enc_info("MAC %u: %u", i, mac_read_it[i]);
-    }
-
-    UNUSED(read_register);
-
     uint8_t rev = read_register_byte(spi, EREVID);
 
     if(rev > 5) ++rev;
@@ -467,7 +463,7 @@ bool is_link_up(enc28j60_t* instance) {
 }
 
 // Send a Ethernet Packet
-void sendPacket(enc28j60_t* instance, uint8_t* buffer, uint16_t len) {
+void send_packet(enc28j60_t* instance, uint8_t* buffer, uint16_t len) {
     uint8_t retry = 0;
 
     FuriHalSpiBusHandle* spi = instance->spi;
@@ -510,4 +506,45 @@ void sendPacket(enc28j60_t* instance, uint8_t* buffer, uint16_t len) {
 
         retry++;
     }
+}
+
+// To get a packet from
+uint16_t receive_packet(enc28j60_t* instance, uint8_t* buffer, uint16_t size) {
+    FuriHalSpiBusHandle* spi = instance->spi;
+    static uint16_t get_next_packet = RXSTART_INIT;
+    static bool unreleased_packet = false;
+    uint16_t len = 0;
+
+    if(unreleased_packet) {
+        if(get_next_packet == 0)
+            write_register(spi, ERXRDPT, RXSTOP_INIT);
+        else
+            write_register(spi, ERXRDPT, get_next_packet - 1);
+        unreleased_packet = false;
+    }
+
+    if(read_register_byte(spi, EPKTCNT) > 0) {
+        write_register(spi, ERDPT, get_next_packet);
+
+        struct {
+            uint16_t next_packet;
+            uint16_t byteCount;
+            uint16_t status;
+        } header;
+
+        read_buffer(spi, sizeof(header), (uint8_t*)&header);
+
+        get_next_packet = header.next_packet;
+        len = header.byteCount - 4; //remove the CRC count
+        if(len > size - 1) len = size - 1;
+        if((header.status & 0x80) == 0)
+            len = 0;
+        else
+            read_buffer(spi, len, buffer);
+        buffer[len] = 0;
+        unreleased_packet = true;
+
+        write_operation(spi, ENC28J60_BIT_FIELD_SET, ECON2, ECON2_PKTDEC);
+    }
+    return len;
 }
