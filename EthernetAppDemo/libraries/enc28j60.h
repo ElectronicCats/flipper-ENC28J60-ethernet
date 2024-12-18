@@ -36,5 +36,11 @@ uint8_t enc28j60_start(enc28j60_t* instance);
 bool is_link_up(enc28j60_t* instance);
 uint16_t receive_packet(enc28j60_t* instance, uint8_t* buffer, uint16_t size);
 void send_packet(enc28j60_t* instance, uint8_t* buffer, uint16_t len);
+void enable_broadcast(enc28j60_t* instance);
+void disable_broadcast(enc28j60_t* instance);
+void enable_multicast(enc28j60_t* instance);
+void disable_multicast(enc28j60_t* instance);
+void enable_promiscuous(enc28j60_t* instance);
+void disable_promiscuous(enc28j60_t* instance);
 
 #endif

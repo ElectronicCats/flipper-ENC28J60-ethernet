@@ -548,3 +548,33 @@ uint16_t receive_packet(enc28j60_t* instance, uint8_t* buffer, uint16_t size) {
     }
     return len;
 }
+
+void enable_broadcast(enc28j60_t* instance) {
+    FuriHalSpiBusHandle* spi = instance->spi;
+    write_register_byte(spi, ERXFCON, read_register_byte(spi, ERXFCON) | ERXFCON_BCEN);
+}
+
+void disable_broadcast(enc28j60_t* instance) {
+    FuriHalSpiBusHandle* spi = instance->spi;
+    write_register_byte(spi, ERXFCON, read_register_byte(spi, ERXFCON) & ~ERXFCON_BCEN);
+}
+
+void enable_multicast(enc28j60_t* instance) {
+    FuriHalSpiBusHandle* spi = instance->spi;
+    write_register_byte(spi, ERXFCON, read_register_byte(spi, ERXFCON) | ERXFCON_MCEN);
+}
+
+void disable_multicast(enc28j60_t* instance) {
+    FuriHalSpiBusHandle* spi = instance->spi;
+    write_register_byte(spi, ERXFCON, read_register_byte(spi, ERXFCON) & ~ERXFCON_MCEN);
+}
+
+void enable_promiscuous(enc28j60_t* instance) {
+    FuriHalSpiBusHandle* spi = instance->spi;
+    write_register_byte(spi, ERXFCON, read_register_byte(spi, ERXFCON) & ERXFCON_CRCEN);
+}
+
+void disable_promiscuous(enc28j60_t* instance) {
+    FuriHalSpiBusHandle* spi = instance->spi;
+    write_register_byte(spi, ERXFCON, ERXFCON_UCEN | ERXFCON_CRCEN | ERXFCON_PMEN | ERXFCON_BCEN);
+}

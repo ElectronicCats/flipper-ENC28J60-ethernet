@@ -47,20 +47,10 @@ int app_main(void* p) {
     set_source_mac();
     set_data();
 
-    log_info("ENC connected: %u", is_link_up(ethernet));
+    // log_info("ENC connected: %u", is_link_up(ethernet));
 
     while(furi_hal_gpio_read(&gpio_button_back)) {
         if(furi_hal_gpio_read(&gpio_button_ok)) {
-            //log_info("Pressed");
-            /*len = receive_packet(ethernet, buffer, 500);
-            if(len) {
-                for(uint16_t i = 0; i < len; i++) {
-                    log_info("P(%x): %x", i, buffer[i]);
-                }
-            } else {
-                log_warning("Packet Not Received");
-            }*/
-
             log_info("Send Packet");
 
             send_packet(ethernet, packet, 60);
@@ -68,14 +58,17 @@ int app_main(void* p) {
             furi_delay_ms(200);
         }
 
-        len = receive_packet(ethernet, buffer, 500);
+        if(is_link_up(ethernet)) {
+            len = receive_packet(ethernet, buffer, 500);
 
-        if(len) {
-            printf("-------------------------------------------------------------------------\n");
-            for(uint16_t i = 0; i < len; i++) {
-                printf("%x ", buffer[i]);
+            if(len) {
+                printf(
+                    "-------------------------------------------------------------------------\n");
+                for(uint16_t i = 0; i < len; i++) {
+                    printf("%x ", buffer[i]);
+                }
+                printf("\n");
             }
-            printf("\n");
         }
 
         furi_delay_ms(1);
