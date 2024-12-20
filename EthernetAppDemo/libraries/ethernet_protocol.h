@@ -4,7 +4,7 @@
 #include "enc28j60.h"
 
 typedef struct {
-    uint8_t mac_destiny[6];
+    uint8_t mac_destination[6];
     uint8_t mac_source[6];
     uint8_t type[2];
 } ethernet_header_t;
@@ -23,7 +23,7 @@ void ethernet_deinit(ethernet_t* ethernet);
 bool set_ethernet_header(
     ethernet_header_t* ethernet_header,
     uint8_t* mac_origin,
-    uint8_t* mac_destiny,
+    uint8_t* mac_destination,
     uint8_t* type);
 
 #endif
