@@ -15,14 +15,6 @@
 #define TXSTART_INIT 0x0C00
 #define TXSTOP_INIT  0x11FF
 
-// Struct for the packets
-typedef struct {
-    uint8_t destination_addr[6];
-    uint8_t source_addr[6];
-    uint8_t type_length[2];
-    uint8_t data_packet[MAX_FRAMELEN];
-} packet_t;
-
 // Struct for the enc28j60
 typedef struct {
     FuriHalSpiBusHandle* spi;
