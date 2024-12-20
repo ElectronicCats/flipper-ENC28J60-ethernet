@@ -17,6 +17,9 @@ typedef struct {
     uint8_t dest_ip[4]; // destination ip(4 bytes)
 } ipv4_header_t;
 
+// Function to calculate checksum
+uint16_t calculate_checksum(uint8_t* data, uint16_t len);
+
 // Set the header
 bool ipv4_set_header(
     ipv4_header_t* header,
