@@ -44,13 +44,14 @@ bool set_udp_header(udp_header_t* header, uint16_t source_port, uint16_t destina
     if(!header) return false;
 
     header->dest_port[0] = destination_port >> 8;
-    header->dest_port[0] = (uint8_t)destination_port;
+    header->dest_port[1] = (uint8_t)destination_port;
 
     header->source_port[0] = source_port >> 8;
-    header->source_port[0] = (uint8_t)source_port;
+    header->source_port[1] = (uint8_t)source_port;
 
-    // Checksum set in zeros
-    memset(header->checksum, 0, 2);
+    // Checksum set in zeros (in IPV4 is optional)
+    header->checksum[0] = 0;
+    header->checksum[1] = 0;
 
     return true;
 }

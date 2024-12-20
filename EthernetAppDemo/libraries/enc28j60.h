@@ -18,7 +18,7 @@
 // Struct for the enc28j60
 typedef struct {
     FuriHalSpiBusHandle* spi;
-    uint8_t* mac_address;
+    uint8_t mac_address[6];
 } enc28j60_t;
 
 enc28j60_t* enc28j60_alloc(uint8_t* mac_address);
