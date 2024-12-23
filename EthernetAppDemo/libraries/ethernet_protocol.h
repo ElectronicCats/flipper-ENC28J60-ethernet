@@ -12,14 +12,14 @@ typedef struct {
 
 /**
  *
- * To init the ethernet
+ * Functions
  *
  */
 
 bool set_ethernet_header(
-    ethernet_header_t* ethernet_header,
+    uint8_t* buffer,
     uint8_t* mac_origin,
     uint8_t* mac_destination,
-    uint8_t* type);
+    uint16_t type);
 
 #endif

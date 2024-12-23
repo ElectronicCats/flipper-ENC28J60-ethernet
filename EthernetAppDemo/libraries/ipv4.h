@@ -21,8 +21,8 @@ typedef struct {
 uint16_t calculate_checksum(uint8_t* data, uint16_t len);
 
 // Set the header
-bool ipv4_set_header(
-    ipv4_header_t* header,
+bool set_ipv4_header(
+    uint8_t* buffer,
     uint8_t protocol,
     uint16_t data_length,
     uint8_t* src_ip,

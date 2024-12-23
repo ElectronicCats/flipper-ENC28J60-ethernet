@@ -12,6 +12,10 @@ typedef struct {
 } udp_header_t;
 
 // Set the header UDP
-bool set_udp_header(udp_header_t* header, uint16_t source_port, uint16_t destination_port);
+bool set_udp_header(
+    uint8_t* buffer,
+    uint16_t source_port,
+    uint16_t destination_port,
+    uint16_t length);
 
 #endif

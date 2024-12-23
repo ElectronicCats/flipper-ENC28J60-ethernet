@@ -40,14 +40,24 @@ uint16_t udp_calculate_checksum(
     return calculate_checksum(buffer, sizeof(ip_pseudo_header_t) + total_len);
 }
 
-bool set_udp_header(udp_header_t* header, uint16_t source_port, uint16_t destination_port) {
-    if(!header) return false;
+bool set_udp_header(
+    uint8_t* buffer,
+    uint16_t source_port,
+    uint16_t destination_port,
+    uint16_t length) {
+    if(!buffer) return false;
 
-    header->dest_port[0] = destination_port >> 8;
-    header->dest_port[1] = (uint8_t)destination_port;
+    udp_header_t* header = (udp_header_t*)buffer;
 
-    header->source_port[0] = source_port >> 8;
-    header->source_port[1] = (uint8_t)source_port;
+    header->dest_port[0] = (destination_port >> 8) & 0xff;
+    header->dest_port[1] = destination_port & 0xff;
+
+    header->source_port[0] = (source_port >> 8) & 0xff;
+    header->source_port[1] = source_port & 0xff;
+
+    // Set lenght of the Message
+    header->length[0] = (length >> 8) & 0xff;
+    header->length[1] = length & 0xff;
 
     // Checksum set in zeros (in IPV4 is optional)
     header->checksum[0] = 0;

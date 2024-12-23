@@ -1,18 +1,22 @@
 #include "ethernet_protocol.h"
 
 bool set_ethernet_header(
-    ethernet_header_t* ethernet_header,
+    uint8_t* buffer,
     uint8_t* mac_origin,
     uint8_t* mac_destination,
-    uint8_t* type) {
-    if(!ethernet_header || !mac_origin || !mac_destination || !type) {
+    uint16_t type) {
+    if(!buffer || !mac_origin || !mac_destination) {
         printf("Error: Puntero nulo detectado\n");
         return false;
     }
 
+    ethernet_header_t* ethernet_header = (ethernet_header_t*)buffer;
+
     memcpy(ethernet_header->mac_destination, mac_destination, 6);
     memcpy(ethernet_header->mac_source, mac_origin, 6);
-    memcpy(ethernet_header->type, type, 2);
+
+    ethernet_header->type[0] = (type >> 8) & 0xff;
+    ethernet_header->type[1] = type & 0xff;
 
     return true;
 }

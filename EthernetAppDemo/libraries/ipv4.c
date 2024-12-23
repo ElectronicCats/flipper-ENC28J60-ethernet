@@ -21,16 +21,18 @@ uint16_t calculate_checksum(uint8_t* data, uint16_t len) {
     return ~sum;
 }
 
-bool ipv4_set_header(
-    ipv4_header_t* header,
+bool set_ipv4_header(
+    uint8_t* buffer,
     uint8_t protocol,
     uint16_t data_length,
     uint8_t* src_ip,
     uint8_t* dst_ip) {
     // If any of the arrays are NULL, will return false
-    if(!header || !src_ip || !dst_ip) {
+    if(!buffer || !src_ip || !dst_ip) {
         return false;
     }
+
+    ipv4_header_t* header = (ipv4_header_t*)buffer;
 
     // Inicialize the header
     memset(header, 0, sizeof(*header));
@@ -66,7 +68,7 @@ bool ipv4_set_header(
     // Set checksum
     uint16_t checksum = calculate_checksum((uint8_t*)header, sizeof(ipv4_header_t));
 
-    header->checksum[0] = checksum >> 8;
-    header->checksum[1] = (uint8_t)checksum;
+    header->checksum[0] = (checksum >> 8) & 0xff;
+    header->checksum[1] = checksum & 0xff;
     return true;
 }
