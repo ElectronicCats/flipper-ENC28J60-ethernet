@@ -5,7 +5,6 @@
 #include <furi_hal.h>
 
 #include "Spi_lib.h"
-#include "log_user.h"
 
 #define MAX_FRAMELEN 1500
 

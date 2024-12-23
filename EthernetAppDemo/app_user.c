@@ -13,36 +13,16 @@ int app_main(void* p) {
     enc28j60_t* enc = enc28j60_alloc(MAC);
     enc28j60_start(enc);
 
-    uint8_t payload[] = "Holamundo!";
+    udp_message_t message;
+
+    udp_set_enc_device(&message, enc);
+    udp_set_mac_address(&message, MAC, broadcast);
+    udp_set_ip_address(&message, ip_origin, ip_destination);
+    udp_set_port(&message, 0, 80);
+
+    uint8_t payload[] = "Hello Kitty significa: Hola demonio";
 
     uint16_t payload_length = sizeof(payload);
-
-    uint8_t buffer[1520];
-
-    memset(buffer, 0, sizeof(buffer));
-
-    set_ethernet_header(buffer, MAC, broadcast, 0x0800);
-
-    set_ipv4_header(
-        buffer + sizeof(ethernet_header_t),
-        0x11,
-        payload_length + sizeof(udp_header_t),
-        ip_origin,
-        ip_destination);
-
-    set_udp_header(
-        buffer + sizeof(ethernet_header_t) + sizeof(ipv4_header_t),
-        0,
-        80,
-        payload_length + sizeof(udp_header_t));
-
-    memcpy(
-        buffer + sizeof(ethernet_header_t) + sizeof(ipv4_header_t) + sizeof(udp_header_t),
-        payload,
-        payload_length);
-
-    uint16_t total_length =
-        sizeof(ethernet_header_t) + sizeof(ipv4_header_t) + sizeof(udp_header_t) + payload_length;
 
     uint8_t buffer_to_received[1500];
     uint16_t length_buffer = 0;
@@ -58,16 +38,11 @@ int app_main(void* p) {
                 }
                 printf("\n");
             }
-        }
 
-        if(furi_hal_gpio_read(&gpio_button_ok)) {
-            printf("Send Frame: ===========================================\n");
-            for(uint16_t i = 0; i < total_length; i++) {
-                printf("%x ", buffer[i]);
+            if(furi_hal_gpio_read(&gpio_button_ok)) {
+                udp_send_packet(message, payload, payload_length);
+                furi_delay_ms(250);
             }
-            printf("\n");
-            send_packet(enc, buffer, total_length);
-            furi_delay_ms(250);
         }
     }
 
