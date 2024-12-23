@@ -20,4 +20,7 @@ bool set_udp_header(
     uint16_t destination_port,
     uint16_t length);
 
+// Get the UDP header from the message
+udp_header_t udp_get_header(uint8_t* buffer);
+
 #endif

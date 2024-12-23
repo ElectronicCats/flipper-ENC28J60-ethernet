@@ -30,4 +30,7 @@ bool set_ipv4_header(
     uint8_t* src_ip,
     uint8_t* dst_ip);
 
+// get the IPv4 header
+ipv4_header_t ipv4_get_header(uint8_t* buffer);
+
 #endif

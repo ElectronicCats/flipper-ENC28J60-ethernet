@@ -72,3 +72,11 @@ bool set_ipv4_header(
     header->checksum[1] = checksum & 0xff;
     return true;
 }
+
+ipv4_header_t ipv4_get_header(uint8_t* buffer) {
+    ipv4_header_t ip_header = {0};
+
+    memcpy((uint8_t*)&ip_header, buffer + 14, IP_HEADER_LEN);
+
+    return ip_header;
+}

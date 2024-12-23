@@ -58,7 +58,7 @@ bool udp_listen(udp_message_t* message) {
     uint8_t buffer[1520];
     uint16_t total_length = receive_packet(message->ethernet, buffer, 1520);
 
-    if(!total_length) return false;
+    if(total_length < (ETHERNET_HEADER_LEN + IP_HEADER_LEN + UDP_HEADER_LEN)) return false;
 
     return true;
 }

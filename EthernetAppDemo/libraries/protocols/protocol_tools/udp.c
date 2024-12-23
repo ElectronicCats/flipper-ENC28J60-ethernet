@@ -64,3 +64,11 @@ bool set_udp_header(
 
     return true;
 }
+
+udp_header_t udp_get_header(uint8_t* buffer) {
+    udp_header_t udp_header = {0};
+
+    memcpy((uint8_t*)&udp_header, buffer + 34, UDP_HEADER_LEN);
+
+    return udp_header;
+}

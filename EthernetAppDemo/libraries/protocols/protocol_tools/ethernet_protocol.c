@@ -20,3 +20,11 @@ bool set_ethernet_header(
 
     return true;
 }
+
+ethernet_header_t ethernet_get_header(uint8_t* buffer) {
+    ethernet_header_t header = {0};
+
+    memcpy((uint8_t*)&header, buffer, ETHERNET_HEADER_LEN);
+
+    return header;
+}
