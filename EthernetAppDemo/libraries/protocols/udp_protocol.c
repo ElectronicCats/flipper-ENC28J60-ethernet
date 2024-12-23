@@ -53,12 +53,27 @@ void udp_set_port(udp_message_t* message, uint16_t src_port, uint16_t des_port) 
     message->src_port = src_port;
 }
 
-bool udp_listen(udp_message_t* message) {
+bool udp_listen(udp_message_t* message, uint8_t* payload, uint16_t* payload_length) {
     memset(message, 0, sizeof(udp_message_t));
     uint8_t buffer[1520];
     uint16_t total_length = receive_packet(message->ethernet, buffer, 1520);
 
     if(total_length < (ETHERNET_HEADER_LEN + IP_HEADER_LEN + UDP_HEADER_LEN)) return false;
+
+    ethernet_header_t header = ethernet_get_header(buffer);
+
+    if((header.type[0] << 8 | header.type[1]) != 0x0800) return false;
+
+    ipv4_header_t ip_header = ipv4_get_header(buffer);
+
+    if(ip_header.protocol != 0x11) return false;
+
+    udp_header_t udp_header = udp_get_header(buffer);
+
+    *payload_length = (udp_header.length[0] << 8 | udp_header.length[1]) - 8;
+
+    memcpy(
+        payload, buffer + ETHERNET_HEADER_LEN + IP_HEADER_LEN + UDP_HEADER_LEN, *payload_length);
 
     return true;
 }

@@ -14,7 +14,9 @@ int app_main(void* p) {
     enc28j60_start(enc);
 
     udp_message_t message;
+    udp_message_t message_to_received = {0};
 
+    udp_set_enc_device(&message_to_received, enc);
     udp_set_enc_device(&message, enc);
     udp_set_mac_address(&message, MAC, broadcast);
     udp_set_ip_address(&message, ip_origin, ip_destination);
@@ -29,14 +31,8 @@ int app_main(void* p) {
 
     while(furi_hal_gpio_read(&gpio_button_back)) {
         if(is_link_up(enc)) {
-            length_buffer = receive_packet(enc, buffer_to_received, 1500);
-            if(length_buffer) {
-                printf(
-                    "-------------------------------------------------------------------------------------------- \n");
-                for(uint16_t i = 0; i < length_buffer; i++) {
-                    printf("%x ", buffer_to_received[i]);
-                }
-                printf("\n");
+            if(udp_listen(&message_to_received, buffer_to_received, &length_buffer)) {
+                printf("Es UDP\n");
             }
 
             if(furi_hal_gpio_read(&gpio_button_ok)) {
