@@ -4,6 +4,8 @@
 #include <furi.h>
 #include <furi_hal.h>
 
+#define IP_HEADER_LEN 20
+
 typedef struct {
     uint8_t version_ihl; // 4 bits for the versión + 4 bits of header length (IHL)
     uint8_t type_of_service; // type of service

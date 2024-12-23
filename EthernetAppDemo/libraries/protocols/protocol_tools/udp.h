@@ -4,6 +4,8 @@
 #include <furi.h>
 #include <furi_hal.h>
 
+#define UDP_HEADER_LEN 8
+
 typedef struct {
     uint8_t source_port[2]; // Source Port(2 bytes)
     uint8_t dest_port[2]; // Puerto de destino (2 bytes)
