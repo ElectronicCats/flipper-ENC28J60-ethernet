@@ -354,7 +354,7 @@ static void write_buffer(FuriHalSpiBusHandle* spi, uint16_t len, uint8_t* data) 
 
     furi_hal_spi_acquire(spi);
     furi_hal_spi_bus_tx(spi, &command, 1, TIMEOUT_SPI);
-    furi_hal_spi_bus_rx(spi, data, len, TIMEOUT_SPI);
+    furi_hal_spi_bus_tx(spi, data, len, TIMEOUT_SPI);
     furi_hal_spi_release(spi);
 }
 
