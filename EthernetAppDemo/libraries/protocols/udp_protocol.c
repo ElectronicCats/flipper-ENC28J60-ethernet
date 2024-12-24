@@ -54,7 +54,10 @@ void udp_set_port(udp_message_t* message, uint16_t src_port, uint16_t des_port) 
 }
 
 bool udp_listen(udp_message_t* message, uint8_t* payload, uint16_t* payload_length) {
-    memset(message, 0, sizeof(udp_message_t));
+    if(message == NULL) return false;
+
+    if(payload == NULL || payload_length == NULL) return false;
+
     uint8_t buffer[1520];
     uint16_t total_length = receive_packet(message->ethernet, buffer, 1520);
 

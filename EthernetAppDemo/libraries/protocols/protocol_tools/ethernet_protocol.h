@@ -4,7 +4,7 @@
 #include <furi.h>
 #include <furi_hal.h>
 
-#define ETHERNET_HEADER_LEN 12
+#define ETHERNET_HEADER_LEN 14
 
 typedef struct {
     uint8_t mac_destination[6];

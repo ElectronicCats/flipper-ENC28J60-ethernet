@@ -32,7 +32,12 @@ int app_main(void* p) {
     while(furi_hal_gpio_read(&gpio_button_back)) {
         if(is_link_up(enc)) {
             if(udp_listen(&message_to_received, buffer_to_received, &length_buffer)) {
-                printf("Es UDP\n");
+                printf("Es UDP ===============================================================\n");
+                for(uint16_t i = 0; i < length_buffer; i++) {
+                    printf("%02x ", buffer_to_received[i]);
+                }
+
+                printf("\n");
             }
 
             if(furi_hal_gpio_read(&gpio_button_ok)) {
@@ -40,6 +45,8 @@ int app_main(void* p) {
                 furi_delay_ms(250);
             }
         }
+
+        furi_delay_ms(1);
     }
 
     enc28j60_deinit(enc);
