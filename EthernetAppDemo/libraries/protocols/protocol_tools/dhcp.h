@@ -21,7 +21,14 @@ typedef struct {
     uint8_t dhcp_options[1000];
 } dhcp_message_t;
 
-dhcp_message_t dhcp_message_received(uint8_t* MAC_ADDRESS, uint32_t xid, uint16_t* len);
+dhcp_message_t dhcp_message_discover(uint8_t* MAC_ADDRESS, uint32_t xid, uint16_t* len);
+
+dhcp_message_t dhcp_message_request(
+    uint8_t* MAC_ADDRESS,
+    uint32_t xid,
+    uint8_t* ip_client,
+    uint8_t* ip_server,
+    uint16_t* len);
 
 dhcp_message_t dhcp_deconstruct_dhcp_message(uint8_t* payload, uint16_t len);
 
