@@ -33,4 +33,7 @@ bool set_ipv4_header(
 // get the IPv4 header
 ipv4_header_t ipv4_get_header(uint8_t* buffer);
 
+// Get if the frame is IPv4
+bool is_ipv4(uint8_t* buffer);
+
 #endif

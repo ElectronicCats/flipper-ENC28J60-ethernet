@@ -72,3 +72,10 @@ udp_header_t udp_get_header(uint8_t* buffer) {
 
     return udp_header;
 }
+
+bool is_udp_packet(uint8_t* buffer){
+    ipv4_header_t ip_header = ipv4_get_header(buffer);
+
+    if(ip_header.protocol != 0x11) return false;
+    return true;  
+}

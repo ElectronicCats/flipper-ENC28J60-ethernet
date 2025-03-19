@@ -4,6 +4,7 @@
 #include <furi.h>
 #include <furi_hal.h>
 
+#
 #define UDP_HEADER_LEN 8
 
 typedef struct {
@@ -22,5 +23,8 @@ bool set_udp_header(
 
 // Get the UDP header from the message
 udp_header_t udp_get_header(uint8_t* buffer);
+
+// To know if the buffer is UDP
+bool is_udp_packet(uint8_t* buffer);
 
 #endif

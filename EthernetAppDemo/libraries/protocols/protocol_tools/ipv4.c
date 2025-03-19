@@ -1,4 +1,5 @@
 #include "ipv4.h"
+#include "ethernet_protocol.h"
 
 uint16_t calculate_checksum(uint8_t* data, uint16_t len) {
     uint32_t sum = 0;
@@ -79,4 +80,14 @@ ipv4_header_t ipv4_get_header(uint8_t* buffer) {
     memcpy((uint8_t*)&ip_header, buffer + 14, IP_HEADER_LEN);
 
     return ip_header;
+}
+
+bool is_ipv4(uint8_t* buffer){
+    ethernet_header_t header = ethernet_get_header(buffer);
+
+    uint16_t type = header.type[0]<<8 | header.type[1];
+
+    if(type != 0x0800) return false;
+
+    return true;
 }
