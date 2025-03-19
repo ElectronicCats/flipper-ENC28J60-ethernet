@@ -30,9 +30,16 @@ dhcp_message_t dhcp_message_request(
     uint8_t* ip_server,
     uint16_t* len);
 
-dhcp_message_t dhcp_deconstruct_dhcp_message(uint8_t* payload, uint16_t len);
+dhcp_message_t dhcp_deconstruct_dhcp_message(uint8_t* buffer);
+
+bool dhcp_is_discover(dhcp_message_t message);
 
 bool dhcp_is_offer(dhcp_message_t message);
 
+bool dhcp_is_request(dhcp_message_t message);
+
 bool dhcp_is_acknoledge(dhcp_message_t message);
+
+bool is_dhcp(uint8_t* buffer);
+
 #endif
