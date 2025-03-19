@@ -82,10 +82,10 @@ ipv4_header_t ipv4_get_header(uint8_t* buffer) {
     return ip_header;
 }
 
-bool is_ipv4(uint8_t* buffer){
+bool is_ipv4(uint8_t* buffer) {
     ethernet_header_t header = ethernet_get_header(buffer);
 
-    uint16_t type = header.type[0]<<8 | header.type[1];
+    uint16_t type = header.type[0] << 8 | header.type[1];
 
     if(type != 0x0800) return false;
 

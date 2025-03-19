@@ -204,10 +204,9 @@ dhcp_message_t dhcp_message_request(
 
 // Function to deconstruct the dhcp message
 dhcp_message_t dhcp_deconstruct_dhcp_message(uint8_t* buffer) {
-
     udp_header_t udp_header = udp_get_header(buffer);
-    uint16_t len = (udp_header.length[0]<<8 | udp_header.length[1]) - 8;
-    
+    uint16_t len = (udp_header.length[0] << 8 | udp_header.length[1]) - 8;
+
     dhcp_message_t message = {0};
     memcpy((uint8_t*)&message, buffer + 42, len);
 
@@ -215,7 +214,7 @@ dhcp_message_t dhcp_deconstruct_dhcp_message(uint8_t* buffer) {
 }
 
 // Function to know if it is a dhcp discover message
-bool dhcp_is_discover(dhcp_message_t message){
+bool dhcp_is_discover(dhcp_message_t message) {
     if(message.operation != 1) return false;
     if(message.dhcp_options[2] != DHCP_DISCOVER) return false;
     return true;
@@ -229,9 +228,9 @@ bool dhcp_is_offer(dhcp_message_t message) {
 }
 
 // Function to know if it is a dhcp request message
-bool dhcp_is_request(dhcp_message_t message){
+bool dhcp_is_request(dhcp_message_t message) {
     if(message.operation != 1) return false;
-    if(message.dhcp_options[2] != DHCP_REQUEST)return false;
+    if(message.dhcp_options[2] != DHCP_REQUEST) return false;
     return true;
 }
 
@@ -244,7 +243,7 @@ bool dhcp_is_acknoledge(dhcp_message_t message) {
 }
 
 // Function to know if the payload is a DHCP message
-bool is_dhcp(uint8_t* buffer){
+bool is_dhcp(uint8_t* buffer) {
     udp_header_t udp_header = udp_get_header(buffer);
 
     uint16_t source_port = udp_header.source_port[0] << 8 | udp_header.source_port[1];
