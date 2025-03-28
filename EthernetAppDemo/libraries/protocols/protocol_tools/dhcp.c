@@ -1,9 +1,6 @@
 #include "udp.h"
 #include "dhcp.h"
 
-const uint8_t HOST[] = "Flipper0";
-const uint8_t host_size = sizeof(HOST);
-
 // Parameters of type of message
 #define DHCP_DISCOVER   1
 #define DHCP_OFFER      2
@@ -55,7 +52,8 @@ const uint8_t host_size = sizeof(HOST);
 #define DHCP_END 0xff
 
 // Throw a dhcp discover message
-dhcp_message_t dhcp_message_discover(uint8_t* MAC_ADDRESS, uint32_t xid, uint16_t* len) {
+dhcp_message_t
+    dhcp_message_discover(uint8_t* MAC_ADDRESS, uint32_t xid, uint8_t* host_name, uint16_t* len) {
     dhcp_message_t message = {0};
     message.operation = 1;
     message.htype = 1;
@@ -93,7 +91,7 @@ dhcp_message_t dhcp_message_discover(uint8_t* MAC_ADDRESS, uint32_t xid, uint16_
 
     // The host name
     uint8_t third_option[] = {DHCP_OP_HOST_NAME, 8, 0, 0, 0, 0, 0, 0, 0, 0};
-    memcpy(third_option + 2, HOST, 8);
+    memcpy(third_option + 2, host_name, 8);
 
     memcpy(message.dhcp_options + size, third_option, sizeof(third_option));
     size += sizeof(third_option);
@@ -123,6 +121,7 @@ dhcp_message_t dhcp_message_request(
     uint32_t xid,
     uint8_t* ip_client,
     uint8_t* ip_server,
+    uint8_t* host_name,
     uint16_t* len) {
     dhcp_message_t message = {0};
     message.operation = 1;
@@ -138,9 +137,9 @@ dhcp_message_t dhcp_message_request(
     memset(message.secs, 0, 2);
     memset(message.flags, 0, 2);
 
-    memcpy(message.ciaddr, ip_client, 4);
+    memset(message.ciaddr, 0, 4);
 
-    memcpy(message.siaddr, ip_server, 4);
+    memset(message.siaddr, 0, 4);
 
     memcpy(message.chaddr, MAC_ADDRESS, 6);
 
@@ -165,7 +164,7 @@ dhcp_message_t dhcp_message_request(
 
     // The host name
     uint8_t third_option[] = {DHCP_OP_HOST_NAME, 8, 0, 0, 0, 0, 0, 0, 0, 0};
-    memcpy(third_option + 2, HOST, 8);
+    memcpy(third_option + 2, host_name, 8);
 
     memcpy(message.dhcp_options + size, third_option, sizeof(third_option));
     size += sizeof(third_option);
@@ -177,6 +176,7 @@ dhcp_message_t dhcp_message_request(
     memcpy(message.dhcp_options + size, fourth_option, sizeof(fourth_option));
     size += sizeof(fourth_option);
 
+    // Add the option of DHCP Server Identifier
     uint8_t fifth_option[] = {DHCP_OP_SERVER_IDENTIFIER, 4, 0, 0, 0, 0};
     memcpy(fifth_option + 2, ip_server, 4);
 
@@ -211,6 +211,27 @@ dhcp_message_t dhcp_deconstruct_dhcp_message(uint8_t* buffer) {
     memcpy((uint8_t*)&message, buffer + 42, len);
 
     return message;
+}
+
+// Function to get the data of an option data
+bool dhcp_get_option_data(dhcp_message_t message, uint8_t option, uint8_t* data, uint8_t* len_data) {
+    uint8_t pos = 0;
+
+    while(pos != 0xff) {
+        if(message.dhcp_options[pos] == option) {
+            printf("Pos  = %i       starts in: %x\n", pos, message.dhcp_options[pos]);
+
+            printf("Len = %u \n", message.dhcp_options[pos + 1]);
+
+            memcpy(data, message.dhcp_options + pos + 2, message.dhcp_options[pos + 1]);
+            *len_data = message.dhcp_options[pos + 1];
+
+            return true;
+        }
+        pos = pos + message.dhcp_options[pos + 1] + 2;
+    }
+
+    return false;
 }
 
 // Function to know if it is a dhcp discover message
