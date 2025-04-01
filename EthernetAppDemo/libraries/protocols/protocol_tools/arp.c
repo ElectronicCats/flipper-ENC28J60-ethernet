@@ -2,15 +2,21 @@
 #include "ethernet_protocol.h"
 
 // Function to set the arp header with ipv4 protocol
-bool arp_set_header_ipv4(uint8_t* buffer, uint8_t* MAC_SRC, uint8_t* MAC_DES, uint8_t* IP_SRC, uint8_t* IP_DES, uint8_t* opcode){ 
-
-    if(buffer == NULL || MAC_SRC == NULL || MAC_DES == NULL || IP_SRC == NULL || IP_DES == NULL || opcode == NULL) return false;
+bool arp_set_header_ipv4(
+    uint8_t* buffer,
+    uint8_t* MAC_SRC,
+    uint8_t* MAC_DES,
+    uint8_t* IP_SRC,
+    uint8_t* IP_DES,
+    uint16_t opcode) {
+    if(buffer == NULL || MAC_SRC == NULL || MAC_DES == NULL || IP_SRC == NULL || IP_DES == NULL)
+        return false;
 
     // set the range
-    arp_header_t* header = (arp_header_t*) buffer;
+    arp_header_t* header = (arp_header_t*)buffer;
 
     // initialize the header
-    memset(header,0,sizeof(*header));
+    memset(header, 0, sizeof(*header));
 
     // set the hardware type on ethernet
     header->hardware_type[0] = 0;
@@ -27,8 +33,9 @@ bool arp_set_header_ipv4(uint8_t* buffer, uint8_t* MAC_SRC, uint8_t* MAC_DES, ui
     header->protocol_length = 4;
 
     // Set opcode
-    memcpy(header->operation_code,opcode,2);
-    
+    header->operation_code[0] = opcode >> 8 & 0xff;
+    header->operation_code[1] = opcode & 0xff;
+
     // set the ip source
     memcpy(header->ip_source, IP_SRC, 4);
 
@@ -45,10 +52,10 @@ bool arp_set_header_ipv4(uint8_t* buffer, uint8_t* MAC_SRC, uint8_t* MAC_DES, ui
 }
 
 // Function to know if it is a arp header
-bool is_arp(uint8_t* buffer){
+bool is_arp(uint8_t* buffer) {
     ethernet_header_t header = ethernet_get_header(buffer);
 
-    uint16_t type = header.type[0]<<8 | header.type[1];
+    uint16_t type = header.type[0] << 8 | header.type[1];
 
     if(type != 0x0806) return false;
 
@@ -56,7 +63,7 @@ bool is_arp(uint8_t* buffer){
 }
 
 // Function to get the arp header
-arp_header_t arp_get_header(uint8_t* buffer){
+arp_header_t arp_get_header(uint8_t* buffer) {
     arp_header_t arp_header = {0};
 
     if(buffer == NULL) return arp_header;

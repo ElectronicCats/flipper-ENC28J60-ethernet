@@ -24,7 +24,7 @@ bool arp_set_header_ipv4(
     uint8_t* MAC_DES,
     uint8_t* IP_SRC,
     uint8_t* IP_DES,
-    uint8_t* opcode);
+    uint16_t opcode);
 
 bool is_arp(uint8_t* buffer);
 
