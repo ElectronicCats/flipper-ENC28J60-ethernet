@@ -6,7 +6,6 @@ bool set_ethernet_header(
     uint8_t* mac_destination,
     uint16_t type) {
     if(!buffer || !mac_origin || !mac_destination) {
-        printf("Error: Puntero nulo detectado\n");
         return false;
     }
 

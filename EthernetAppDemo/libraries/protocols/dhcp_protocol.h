@@ -3,13 +3,10 @@
 
 #include <furi.h>
 #include <furi_hal.h>
+#include "chip/enc28j60.h"
 
-void set_dhcp_discover_message(uint8_t* buffer, uint16_t* length);
+bool process_dora(enc28j60_t* ethernet, uint8_t* static_ip, uint8_t* ip_router);
 
-bool deconstruct_dhcp_offer(uint8_t* buffer);
-
-void set_dhcp_request_message(uint8_t* buffer, uint16_t* length);
-
-bool deconstruct_dhcp_ack(uint8_t* buffer);
+void get_mac_server(uint8_t* MAC_SERVER);
 
 #endif
