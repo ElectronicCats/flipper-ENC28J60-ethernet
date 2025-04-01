@@ -219,10 +219,6 @@ bool dhcp_get_option_data(dhcp_message_t message, uint8_t option, uint8_t* data,
 
     while(pos != 0xff) {
         if(message.dhcp_options[pos] == option) {
-            printf("Pos  = %i       starts in: %x\n", pos, message.dhcp_options[pos]);
-
-            printf("Len = %u \n", message.dhcp_options[pos + 1]);
-
             memcpy(data, message.dhcp_options + pos + 2, message.dhcp_options[pos + 1]);
             *len_data = message.dhcp_options[pos + 1];
 
@@ -265,6 +261,8 @@ bool dhcp_is_acknoledge(dhcp_message_t message) {
 
 // Function to know if the payload is a DHCP message
 bool is_dhcp(uint8_t* buffer) {
+    if(!is_udp_packet(buffer)) return false;
+
     udp_header_t udp_header = udp_get_header(buffer);
 
     uint16_t source_port = udp_header.source_port[0] << 8 | udp_header.source_port[1];
