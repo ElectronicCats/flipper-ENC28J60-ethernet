@@ -3,6 +3,7 @@
 #include "protocol_tools/ipv4.h"
 #include "protocol_tools/udp.h"
 #include "protocol_tools/dhcp.h"
+#include "chip/log_user.h"
 
 // The Host Name need to be of 8 bytes length
 uint8_t HOST[] = "Flipper0";
@@ -74,7 +75,11 @@ void set_dhcp_discover_message(uint8_t* buffer, uint16_t* length) {
 bool deconstruct_dhcp_offer(uint8_t* buffer) {
     if(buffer == NULL) return false;
 
+    if(!is_dhcp(buffer)) return false;
+
     dhcp_message_t dhcp_message = dhcp_deconstruct_dhcp_message(buffer);
+
+    if(!dhcp_is_offer(dhcp_message)) return false;
 
     uint32_t is_the_xid = dhcp_message.xid[0] << 24 | dhcp_message.xid[1] << 16 |
                           dhcp_message.xid[2] << 8 | dhcp_message.xid[3];
@@ -115,12 +120,20 @@ void set_dhcp_request_message(uint8_t* buffer, uint16_t* length) {
 
     *length = dhcp_len + ETHERNET_HEADER_LEN + IP_HEADER_LEN + UDP_HEADER_LEN;
 }
-
-// Function to deconstruct the acknwoledge message
+// Function to deconstruct the acknowledge message
 bool deconstruct_dhcp_ack(uint8_t* buffer) {
     if(buffer == NULL) return false;
 
+    if(!is_dhcp(buffer)) return false;
+
     dhcp_message_t dhcp_message = dhcp_deconstruct_dhcp_message(buffer);
+
+    if(!dhcp_is_acknoledge(dhcp_message)) return false;
+
+    uint32_t is_the_xid = dhcp_message.xid[0] << 24 | dhcp_message.xid[1] << 16 |
+                          dhcp_message.xid[2] << 8 | dhcp_message.xid[3];
+
+    if(is_the_xid != xid) return false;
 
     memcpy(myip, dhcp_message.yiaddr, 4);
 
@@ -131,6 +144,8 @@ bool deconstruct_dhcp_ack(uint8_t* buffer) {
     dhcp_get_option_data(dhcp_message, DHCP_OP_ROUTER, gateway, &length);
 
     dhcp_get_option_data(dhcp_message, DHCP_OP_NAME_SERVER, dns_server, &length);
+
+    dhcp_get_option_data(dhcp_message, DHCP_OP_SERVER_IDENTIFIER, dhcp_server_ip, &length);
 
     return true;
 }
@@ -145,9 +160,10 @@ bool process_dora(enc28j60_t* ethernet, uint8_t* static_ip, uint8_t* ip_router) 
 
     uint8_t buffer[1500] = {0};
     uint16_t length = 0;
-    uint16_t size_frame = 1500;
 
     state_dora_t state = DHCP_STATE_INIT;
+
+    enable_broadcast(ethernet);
 
     while(state != DHCP_OK) {
         switch(state) {
@@ -155,26 +171,29 @@ bool process_dora(enc28j60_t* ethernet, uint8_t* static_ip, uint8_t* ip_router) 
         case DHCP_STATE_INIT:
             set_dhcp_discover_message(buffer, &length);
             send_packet(ethernet, buffer, length);
+            memset(buffer, 0, 1500);
             state = DHCP_STATE_WAITING;
-
             break;
 
         // This state is to send the request message
         case DHCP_STATE_REQUEST:
             set_dhcp_request_message(buffer, &length);
             send_packet(ethernet, buffer, length);
+            memset(buffer, 0, 1500);
             state = DHCP_STATE_WAITING;
             break;
 
         // It will waiting for a dhcp message, any of offer or
         case DHCP_STATE_WAITING:
-            receive_packet(ethernet, buffer, size_frame);
+            length = receive_packet(ethernet, buffer, 1500);
 
-            // To know if the Message is dhcp
+            // This part helps to know if it is dhcp offer
             if(is_dhcp(buffer)) {
-                // This part helps to know if it is dhcp offer
+                show_message(buffer, length); // To show the message
+
                 if(deconstruct_dhcp_offer(buffer)) {
                     state = DHCP_STATE_REQUEST; // set the state in request
+                    memset(buffer, 0, 1500);
                 }
 
                 // This part helps to know if it is dhcp acknowledge
@@ -193,11 +212,13 @@ bool process_dora(enc28j60_t* ethernet, uint8_t* static_ip, uint8_t* ip_router) 
             break;
         }
 
-        if(furi_get_tick() > (current_time + 5000)) {
+        if(furi_get_tick() > (current_time + 10000)) {
             state = DHCP_FAIL;
         }
         furi_delay_ms(1);
     }
+
+    disable_broadcast(ethernet);
 
     memcpy(static_ip, myip, 4);
 

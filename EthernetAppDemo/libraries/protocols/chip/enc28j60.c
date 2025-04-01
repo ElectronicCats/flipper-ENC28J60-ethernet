@@ -38,6 +38,27 @@
     if(DEBUG_REGISTERS) FURI_LOG_W(DEBUG_TAG_REGISTERS, format, ##__VA_ARGS__)
 
 /**
+ * To debug the message it lands
+ */
+
+#define DEBUG_MESSAGE 0
+
+void show_message(uint8_t* buffer, uint16_t len) {
+    UNUSED(buffer);
+    UNUSED(len);
+
+#if DEBUG_MESSAGE
+    printf("Message: %i bytes --------------------------------------", len);
+
+    for(uint16_t i = 0; i < len; i++) {
+        printf("%u\t", buffer[i]);
+    }
+
+    printf("\n");
+#endif
+}
+
+/**
  * Command, registers and mask for the ENC28J60
  */
 

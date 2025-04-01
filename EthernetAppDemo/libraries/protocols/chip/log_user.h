@@ -6,7 +6,7 @@
 #include <furi_hal.h>
 
 #define LOG_TAG  "INFO_WRITTEN"
-#define LOG_SHOW true
+#define LOG_SHOW 0
 
 #define log_info(format, ...) \
     if(LOG_SHOW) FURI_LOG_I(LOG_TAG, format, ##__VA_ARGS__)

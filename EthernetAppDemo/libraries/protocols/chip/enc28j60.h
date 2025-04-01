@@ -34,4 +34,7 @@ void disable_multicast(enc28j60_t* instance);
 void enable_promiscuous(enc28j60_t* instance);
 void disable_promiscuous(enc28j60_t* instance);
 
+// To debugg
+void show_message(uint8_t* buffer, uint16_t len);
+
 #endif

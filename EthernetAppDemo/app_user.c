@@ -7,6 +7,13 @@ uint8_t MAC[6] = {0xba, 0x3f, 0x91, 0xc2, 0x7e, 0x5d}; // BA:3F:91:C2:7E:5D
 uint8_t my_ip[4] = {0};
 uint8_t router_ip[4] = {0};
 
+void show_ip(uint8_t* data) {
+    for(uint8_t i = 0; i < 4; i++) {
+        printf("%u:", data[i]);
+    }
+    printf("\n");
+}
+
 int app_main(void* p) {
     UNUSED(p);
 
@@ -26,9 +33,13 @@ int app_main(void* p) {
             if(furi_hal_gpio_read(&gpio_button_ok)) {
                 if(process_dora(enc, my_ip, router_ip)) {
                     FURI_LOG_I("FLIPPER", "ALL OKAY");
+                    show_ip(my_ip);
+                    show_ip(router_ip);
                 } else {
                     FURI_LOG_E("FLIPPER", "NOTHING");
                 }
+
+                furi_delay_ms(200);
             }
         }
         furi_delay_ms(1);
