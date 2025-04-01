@@ -29,19 +29,18 @@ int app_main(void* p) {
     enc28j60_start(enc);
 
     while(furi_hal_gpio_read(&gpio_button_back)) {
-        if(is_link_up(enc)) {
-            if(furi_hal_gpio_read(&gpio_button_ok)) {
-                if(process_dora(enc, my_ip, router_ip)) {
-                    FURI_LOG_I("FLIPPER", "ALL OKAY");
-                    show_ip(my_ip);
-                    show_ip(router_ip);
-                } else {
-                    FURI_LOG_E("FLIPPER", "NOTHING");
-                }
-
-                furi_delay_ms(200);
+        if(furi_hal_gpio_read(&gpio_button_ok)) {
+            if(process_dora(enc, my_ip, router_ip)) {
+                FURI_LOG_I("FLIPPER", "ALL OKAY");
+                show_ip(my_ip);
+                show_ip(router_ip);
+            } else {
+                FURI_LOG_E("FLIPPER", "NOTHING");
             }
+
+            furi_delay_ms(200);
         }
+
         furi_delay_ms(1);
     }
 

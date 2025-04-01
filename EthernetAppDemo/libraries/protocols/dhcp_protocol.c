@@ -3,7 +3,6 @@
 #include "protocol_tools/ipv4.h"
 #include "protocol_tools/udp.h"
 #include "protocol_tools/dhcp.h"
-#include "chip/log_user.h"
 
 // The Host Name need to be of 8 bytes length
 uint8_t HOST[] = "Flipper0";
@@ -154,6 +153,8 @@ bool deconstruct_dhcp_ack(uint8_t* buffer) {
 bool process_dora(enc28j60_t* ethernet, uint8_t* static_ip, uint8_t* ip_router) {
     uint32_t current_time = furi_get_tick();
 
+    bool ret = false;
+
     xid = furi_hal_random_get();
 
     memcpy(MAC_ADDRESS, ethernet->mac_address, 6);
@@ -165,7 +166,7 @@ bool process_dora(enc28j60_t* ethernet, uint8_t* static_ip, uint8_t* ip_router) 
 
     enable_broadcast(ethernet);
 
-    while(state != DHCP_OK) {
+    while(state != DHCP_OK && is_link_up(ethernet)) {
         switch(state) {
         // This state is to send the discover message
         case DHCP_STATE_INIT:
@@ -199,6 +200,7 @@ bool process_dora(enc28j60_t* ethernet, uint8_t* static_ip, uint8_t* ip_router) 
                 // This part helps to know if it is dhcp acknowledge
                 if(deconstruct_dhcp_ack(buffer)) {
                     state = DHCP_OK; // state ok
+                    ret = true;
                 }
             }
             break;
@@ -224,7 +226,7 @@ bool process_dora(enc28j60_t* ethernet, uint8_t* static_ip, uint8_t* ip_router) 
 
     memcpy(ip_router, gateway, 4);
 
-    return true;
+    return ret;
 }
 
 // Function to copy the MAC DESTINATION in this case the MAC of the router
