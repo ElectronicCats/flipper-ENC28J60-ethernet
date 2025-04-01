@@ -231,3 +231,8 @@ bool process_dora(enc28j60_t* ethernet, uint8_t* static_ip, uint8_t* ip_router) 
 void get_mac_server(uint8_t* MAC_SERVER) {
     memcpy(MAC_SERVER, MAC_DESTINATION, 6);
 }
+
+// Function to get the gateway
+void get_gateway_ip(uint8_t* ip_gateway) {
+    memcpy(ip_gateway, gateway, 4);
+}
