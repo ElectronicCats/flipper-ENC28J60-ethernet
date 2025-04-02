@@ -3,6 +3,7 @@
 #include "../libraries/protocol_tools/ipv4.h"
 #include "../libraries/protocol_tools/udp.h"
 #include "../libraries/protocol_tools/dhcp.h"
+#include "../libraries/generals/ethernet_generals.h"
 
 // The Host Name need to be of 8 bytes length
 uint8_t HOST[] = "Flipper0";
@@ -10,13 +11,11 @@ uint8_t host_size = sizeof(HOST);
 
 uint8_t MAC_ADDRESS[6] = {0, 0, 0, 0, 0, 0}; // Este lo vamos a cambiar desde el Flipper Zero
 
-uint8_t MAC_BROADCAST[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
-
 // The MAC destination for the DHCP SERVER at this case, the gateway or router/modem
 uint8_t MAC_DESTINATION[6] = {0};
 
 // Unique identifier for the DHCP communication
-uint32_t xid = 0xDE078987;
+uint32_t xid = 0x0;
 
 // This is for the IPv4 Header
 uint8_t source_ip[] = {0x0, 0x0, 0x0, 0x0};
