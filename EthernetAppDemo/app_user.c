@@ -1,6 +1,6 @@
 #include "app_user.h"
 
-#include "libraries/dhcp_protocol.h"
+#include "modules/dhcp_protocol.h"
 
 #include "libraries/protocol_tools/arp.h"
 #include "libraries/protocol_tools/ethernet_protocol.h"
@@ -54,9 +54,9 @@ void send_arp_spoofing(uint8_t* buffer, uint16_t len) {
     if((furi_get_tick()) > (prev_time + (1000 / packet_rate))) {
         send_packet(enc, buffer, len);
 
-        #if DEBUG_FILE
+#if DEBUG_FILE
         printf("ATTACKING!!!\n");
-        #endif
+#endif
 
         prev_time = furi_get_tick();
     }
@@ -66,12 +66,10 @@ void send_arp_spoofing(uint8_t* buffer, uint16_t len) {
  * Function to get the connection
  */
 bool connection() {
-
     uint32_t prev_time = furi_get_tick();
 
-    while (!process_dora(enc, my_ip, router_ip))
-    {
-        if(furi_get_tick()>(prev_time+5000)) return false;
+    while(!process_dora(enc, my_ip, router_ip)) {
+        if(furi_get_tick() > (prev_time + 5000)) return false;
     }
 
 #if DEBUG_FILE
@@ -98,11 +96,10 @@ int app_main(void* p) {
     bool start = false;
 
     enc = enc28j60_alloc(MAC);
-    if(enc28j60_start(enc)!=0xff){
-
-        #if DEBUG_FILE
+    if(enc28j60_start(enc) != 0xff) {
+#if DEBUG_FILE
         printf("Chip conectado\n");
-        #endif
+#endif
 
         start = connection();
     }

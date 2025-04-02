@@ -1,8 +1,8 @@
 #include "dhcp_protocol.h"
-#include "protocol_tools/ethernet_protocol.h"
-#include "protocol_tools/ipv4.h"
-#include "protocol_tools/udp.h"
-#include "protocol_tools/dhcp.h"
+#include "../libraries/protocol_tools/ethernet_protocol.h"
+#include "../libraries/protocol_tools/ipv4.h"
+#include "../libraries/protocol_tools/udp.h"
+#include "../libraries/protocol_tools/dhcp.h"
 
 // The Host Name need to be of 8 bytes length
 uint8_t HOST[] = "Flipper0";

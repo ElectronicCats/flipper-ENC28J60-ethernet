@@ -438,8 +438,8 @@ uint8_t enc28j60_start(enc28j60_t* instance) {
 
     uint32_t prev_time = furi_get_tick();
 
-    while(!(read_operation(spi, ENC28J60_READ_CTRL_REG, ESTAT) & ESTAT_CLKRDY)){
-        if((furi_get_tick())>(prev_time+1000)) return 0xff;
+    while(!(read_operation(spi, ENC28J60_READ_CTRL_REG, ESTAT) & ESTAT_CLKRDY)) {
+        if((furi_get_tick()) > (prev_time + 1000)) return 0xff;
         furi_delay_us(1);
     }
 

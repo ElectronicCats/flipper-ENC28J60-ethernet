@@ -3,7 +3,7 @@
 
 #include <furi.h>
 #include <furi_hal.h>
-#include "chip/enc28j60.h"
+#include "../libraries/chip/enc28j60.h"
 
 bool process_dora(enc28j60_t* ethernet, uint8_t* static_ip, uint8_t* ip_router);
 
