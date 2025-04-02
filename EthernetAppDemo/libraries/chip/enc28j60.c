@@ -41,7 +41,7 @@
  * To debug the message it lands
  */
 
-#define DEBUG_MESSAGE 0
+#define DEBUG_MESSAGE false
 
 void show_message(uint8_t* buffer, uint16_t len) {
     UNUSED(buffer);
@@ -436,8 +436,12 @@ uint8_t enc28j60_start(enc28j60_t* instance) {
 
     furi_delay_ms(2);
 
-    while(!(read_operation(spi, ENC28J60_READ_CTRL_REG, ESTAT) & ESTAT_CLKRDY))
+    uint32_t prev_time = furi_get_tick();
+
+    while(!(read_operation(spi, ENC28J60_READ_CTRL_REG, ESTAT) & ESTAT_CLKRDY)){
+        if((furi_get_tick())>(prev_time+1000)) return 0xff;
         furi_delay_us(1);
+    }
 
     write_register(spi, ERXST, RXSTART_INIT);
     write_register(spi, ERXRDPT, RXSTART_INIT);

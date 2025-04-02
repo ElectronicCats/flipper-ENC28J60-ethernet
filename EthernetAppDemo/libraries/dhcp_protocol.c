@@ -173,6 +173,9 @@ bool process_dora(enc28j60_t* ethernet, uint8_t* static_ip, uint8_t* ip_router) 
             set_dhcp_discover_message(buffer, &length);
             send_packet(ethernet, buffer, length);
             memset(buffer, 0, 1500);
+
+            printf("SEND DHCP DISCOVER\n");
+
             state = DHCP_STATE_WAITING;
             break;
 
@@ -181,6 +184,9 @@ bool process_dora(enc28j60_t* ethernet, uint8_t* static_ip, uint8_t* ip_router) 
             set_dhcp_request_message(buffer, &length);
             send_packet(ethernet, buffer, length);
             memset(buffer, 0, 1500);
+
+            printf("SEND DHCP REQUEST\n");
+
             state = DHCP_STATE_WAITING;
             break;
 
