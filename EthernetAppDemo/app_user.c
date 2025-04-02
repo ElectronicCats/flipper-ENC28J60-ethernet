@@ -1,9 +1,9 @@
 #include "app_user.h"
 
-#include "libraries/protocols/dhcp_protocol.h"
+#include "libraries/dhcp_protocol.h"
 
-#include "libraries/protocols/protocol_tools/arp.h"
-#include "libraries/protocols/protocol_tools/ethernet_protocol.h"
+#include "libraries/protocol_tools/arp.h"
+#include "libraries/protocol_tools/ethernet_protocol.h"
 
 uint8_t MAC[6] = {0xba, 0x3f, 0x91, 0xc2, 0x7e, 0x5d}; // BA:3F:91:C2:7E:5D
 uint8_t MAC_ALL[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
