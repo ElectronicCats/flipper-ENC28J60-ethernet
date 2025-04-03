@@ -5,6 +5,11 @@
 #include <furi_hal.h>
 #include "../libraries/chip/enc28j60.h"
 
+typedef struct {
+    uint8_t mac[6];
+    uint8_t ip[4];
+} arp_list;
+
 // Function to set the message for the ARPspoofing
 void set_arp_message_for_attack_all(
     uint8_t* buffer,
@@ -14,5 +19,15 @@ void set_arp_message_for_attack_all(
 
 // Function to attack the network with the ARP Spoofing to all
 void send_arp_spoofing(enc28j60_t* ethernet, uint8_t* buffer, uint16_t len);
+
+// Function to sget all the ip in the network
+bool arp_scan_network(
+    enc28j60_t* ethernet,
+    arp_list* list,
+    uint8_t* own_mac,
+    uint8_t* own_ip,
+    uint8_t init_ip[4],
+    uint8_t* list_count,
+    uint8_t range);
 
 #endif

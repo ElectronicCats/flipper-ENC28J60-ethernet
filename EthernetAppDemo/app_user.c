@@ -11,8 +11,15 @@ enc28j60_t* enc = NULL;
 uint8_t MAC[6] = {0xba, 0x3f, 0x91, 0xc2, 0x7e, 0x5d}; // BA:3F:91:C2:7E:5D
 
 // The ip for the client and the server
-uint8_t my_ip[4] = {192, 168, 0, 185};
+uint8_t MY_IP[4] = {192, 168, 0, 185};
 uint8_t router_ip[4] = {192, 168, 0, 1};
+
+// IP to start
+uint8_t ip_to_start[4] = {192, 168, 0, 100};
+
+uint8_t count_of_list = 0;
+
+#define devices_to_search 100
 
 // Just to help to see the IP
 void show_ip(uint8_t* data) {
@@ -28,13 +35,13 @@ void show_ip(uint8_t* data) {
 bool connection() {
     uint32_t prev_time = furi_get_tick();
 
-    while(!process_dora(enc, my_ip, router_ip)) {
+    while(!process_dora(enc, MY_IP, router_ip)) {
         if(furi_get_tick() > (prev_time + 5000)) return false;
     }
 
 #if DEBUG_FILE
     printf("MY IP: \n");
-    show_ip(my_ip);
+    show_ip(MY_IP);
     printf("ROUTER IP: \n");
     show_ip(router_ip);
 #endif
@@ -57,35 +64,35 @@ int app_main(void* p) {
 
     enc = enc28j60_alloc(MAC);
     if(enc28j60_start(enc) != 0xff) {
-#if DEBUG_FILE
-        printf("Chip conectado\n");
-#endif
-
         start = connection();
     }
 
-    set_arp_message_for_attack_all(buffer, MAC, router_ip, &lenght);
-
-    bool attack = false;
+    arp_list list_ip_to_find[devices_to_search] = {0};
 
     while(furi_hal_gpio_read(&gpio_button_back) && start) {
         if(furi_hal_gpio_read(&gpio_button_ok)) {
-            // if(process_dora(enc, my_ip, router_ip)) {
-            //     FURI_LOG_I("FLIPPER", "ALL OKAY");
-            //     show_ip(my_ip);
-            //     show_ip(router_ip);
-            // } else {
-            //     FURI_LOG_E("FLIPPER", "NOTHING");
-            // }
+            arp_scan_network(
+                enc, list_ip_to_find, MAC, MY_IP, ip_to_start, &count_of_list, devices_to_search);
 
-            // send_packet(enc, buffer, lenght);
+            printf("IP after the scan\n");
 
-            attack = !attack;
-
+            for(uint8_t i = 0; i < count_of_list; i++) {
+                printf(
+                    "%u:  %u:%u:%u:%u   with MAC: %x:%x:%x:%x:%x:%x\n",
+                    i,
+                    list_ip_to_find[i].ip[0],
+                    list_ip_to_find[i].ip[1],
+                    list_ip_to_find[i].ip[2],
+                    list_ip_to_find[i].ip[3],
+                    list_ip_to_find[i].mac[0],
+                    list_ip_to_find[i].mac[1],
+                    list_ip_to_find[i].mac[2],
+                    list_ip_to_find[i].mac[3],
+                    list_ip_to_find[i].mac[4],
+                    list_ip_to_find[i].mac[5]);
+            }
             furi_delay_ms(200);
         }
-
-        if(attack && is_link_up(enc)) send_arp_spoofing(enc, buffer, lenght);
 
         furi_delay_ms(1);
     }
