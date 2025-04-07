@@ -1,104 +1,105 @@
 #include "app_user.h"
-#include "modules/dhcp_protocol.h"
-#include "modules/arp_module.h"
 
-#define DEBUG_FILE true
-
-// Instance for the ENC28j60
-enc28j60_t* enc = NULL;
-
-// MAC Address
-uint8_t MAC[6] = {0xba, 0x3f, 0x91, 0xc2, 0x7e, 0x5d}; // BA:3F:91:C2:7E:5D
-
-// The ip for the client and the server
-uint8_t MY_IP[4] = {192, 168, 0, 185};
-uint8_t router_ip[4] = {192, 168, 0, 1};
-
-// IP to start
-uint8_t ip_to_start[4] = {192, 168, 0, 100};
-
-uint8_t count_of_list = 0;
-
-#define devices_to_search 100
-
-// Just to help to see the IP
-void show_ip(uint8_t* data) {
-    for(uint8_t i = 0; i < 4; i++) {
-        printf("%u:", data[i]);
-    }
-    printf("\n");
+static bool app_scene_costum_callback(void* context, uint32_t costum_event) {
+    furi_assert(context);
+    App* app = (App*)context;
+    return scene_manager_handle_custom_event(app->scene_manager, costum_event);
 }
 
-/**
- * Function to get the connection
- */
-bool connection() {
-    uint32_t prev_time = furi_get_tick();
+static bool app_scene_back_event(void* context) {
+    furi_assert(context);
+    App* app = (App*)context;
+    return scene_manager_handle_back_event(app->scene_manager);
+}
 
-    while(!process_dora(enc, MY_IP, router_ip)) {
-        if(furi_get_tick() > (prev_time + 5000)) return false;
-    }
+static void app_tick_event(void* context) {
+    furi_assert(context);
+    App* app = (App*)context;
+    UNUSED(app);
+}
 
-#if DEBUG_FILE
-    printf("MY IP: \n");
-    show_ip(MY_IP);
-    printf("ROUTER IP: \n");
-    show_ip(router_ip);
-#endif
+App* app_alloc() {
+    // Alloc the app memory
+    App* app = (App*)malloc(sizeof(App));
 
-    return true;
+    // Alloc the scene manager and view dispatcher
+    app->scene_manager = scene_manager_alloc(&app_scene_handlers, app);
+    app->view_dispatcher = view_dispatcher_alloc();
+
+    // Set the navegation on the view dispatcher
+    view_dispatcher_set_custom_event_callback(app->view_dispatcher, app_scene_costum_callback);
+    view_dispatcher_set_event_callback_context(app->view_dispatcher, app);
+    view_dispatcher_set_navigation_event_callback(app->view_dispatcher, app_scene_back_event);
+    view_dispatcher_set_tick_event_callback(app->view_dispatcher, app_tick_event, 100);
+
+    // Alloc the GUI Modules and add the view in the view dispatcher
+    app->widget = widget_alloc();
+    view_dispatcher_add_view(app->view_dispatcher, WidgetView, widget_get_view(app->widget));
+
+    app->submenu = submenu_alloc();
+    view_dispatcher_add_view(app->view_dispatcher, SubmenuView, submenu_get_view(app->submenu));
+
+    app->varList = variable_item_list_alloc();
+    view_dispatcher_add_view(
+        app->view_dispatcher, VarListView, variable_item_list_get_view(app->varList));
+
+    app->textBox = text_box_alloc();
+    view_dispatcher_add_view(app->view_dispatcher, TextBoxView, text_box_get_view(app->textBox));
+
+    app->input_byte_value = byte_input_alloc();
+    view_dispatcher_add_view(
+        app->view_dispatcher, InputByteView, byte_input_get_view(app->input_byte_value));
+
+    // app->file_browser = file_browser_alloc(app->path);
+    // view_dispatcher_add_view(
+    //     app->view_dispatcher, FileBrowserView, file_browser_get_view(app->file_browser));
+
+    app->ethernet = enc28j60_alloc(app->mac_device);
+
+    return app;
+}
+
+void app_free(App* app) {
+    //  Free all the views from the View Dispatcher
+    view_dispatcher_remove_view(app->view_dispatcher, SubmenuView);
+    view_dispatcher_remove_view(app->view_dispatcher, WidgetView);
+    view_dispatcher_remove_view(app->view_dispatcher, TextBoxView);
+    view_dispatcher_remove_view(app->view_dispatcher, VarListView);
+    view_dispatcher_remove_view(app->view_dispatcher, InputByteView);
+    // view_dispatcher_remove_view(app->view_dispatcher, FileBrowserView);
+
+    // Free memory of Scene Manager and View Dispatcher
+    scene_manager_free(app->scene_manager);
+    view_dispatcher_free(app->view_dispatcher);
+
+    // Free memory of GUI modules
+    widget_free(app->widget);
+    submenu_free(app->submenu);
+    text_box_free(app->textBox);
+    byte_input_free(app->input_byte_value);
+    // file_browser_free(app->file_browser);
+
+    // Free memory of ENC
+    free_enc28j60(app->ethernet);
+
+    free(app);
 }
 
 int app_main(void* p) {
     UNUSED(p);
 
-    uint8_t buffer[1500] = {0};
+    App* app = app_alloc();
 
-    uint16_t lenght = 0;
+    Gui* gui = furi_record_open(RECORD_GUI);
 
-    UNUSED(buffer);
+    view_dispatcher_attach_to_gui(app->view_dispatcher, gui, ViewDispatcherTypeFullscreen);
 
-    UNUSED(lenght);
+    scene_manager_next_scene(app->scene_manager, app_scene_main_menu_option);
 
-    bool start = false;
+    view_dispatcher_run(app->view_dispatcher);
+    furi_record_close(RECORD_GUI);
 
-    enc = enc28j60_alloc(MAC);
-    if(enc28j60_start(enc) != 0xff) {
-        start = connection();
-    }
-
-    arp_list list_ip_to_find[devices_to_search] = {0};
-
-    while(furi_hal_gpio_read(&gpio_button_back) && start) {
-        if(furi_hal_gpio_read(&gpio_button_ok)) {
-            arp_scan_network(
-                enc, list_ip_to_find, MAC, MY_IP, ip_to_start, &count_of_list, devices_to_search);
-
-            printf("IP after the scan\n");
-
-            for(uint8_t i = 0; i < count_of_list; i++) {
-                printf(
-                    "%u:  %u:%u:%u:%u   with MAC: %x:%x:%x:%x:%x:%x\n",
-                    i,
-                    list_ip_to_find[i].ip[0],
-                    list_ip_to_find[i].ip[1],
-                    list_ip_to_find[i].ip[2],
-                    list_ip_to_find[i].ip[3],
-                    list_ip_to_find[i].mac[0],
-                    list_ip_to_find[i].mac[1],
-                    list_ip_to_find[i].mac[2],
-                    list_ip_to_find[i].mac[3],
-                    list_ip_to_find[i].mac[4],
-                    list_ip_to_find[i].mac[5]);
-            }
-            furi_delay_ms(200);
-        }
-
-        furi_delay_ms(1);
-    }
-
-    enc28j60_deinit(enc);
-    free_enc28j60(enc);
+    app_free(app);
 
     return 0;
 }
