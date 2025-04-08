@@ -16,8 +16,12 @@
 #include <storage/storage.h>
 
 #include "scenes_config/app_scene_functions.h"
+#include "ethernet_app_icons.h"
 
 #include "libraries/chip/enc28j60.h"
+
+#define APP_NAME    "FLIPPER ETHERNET\nAPP"
+#define APP_VERSION "BETA"
 
 // Struct for the App
 typedef struct {
@@ -33,6 +37,8 @@ typedef struct {
     ByteInput* input_byte_value;
     // FileBrowser* file_browser;
     enc28j60_t* ethernet; // Instance for the enc28j60
+
+    FuriThread* thread;
 } App;
 
 // Views in the App

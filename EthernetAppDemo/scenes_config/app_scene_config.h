@@ -3,3 +3,4 @@
  */
 
 ADD_SCENE(app, main_menu, main_menu_option)
+ADD_SCENE(app, settings, settings_option)

@@ -6,4 +6,5 @@ App(
     requires=["gui"],
     stack_size=30 * 1024,
     fap_category="ElectronicCats",
+    fap_icon_assets="assets"
 )

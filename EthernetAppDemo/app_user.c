@@ -1,5 +1,9 @@
 #include "app_user.h"
 
+// Just to set as initial MAC the user must to modify to have other MAC address
+uint8_t MAC_INITIAL[6] = {0xba, 0x3f, 0x91, 0xc2, 0x7e, 0x5d};
+uint8_t IP_DEFAULT[4] = {192, 168, 0, 2};
+
 static bool app_scene_costum_callback(void* context, uint32_t costum_event) {
     furi_assert(context);
     App* app = (App*)context;
@@ -54,7 +58,14 @@ App* app_alloc() {
     // view_dispatcher_add_view(
     //     app->view_dispatcher, FileBrowserView, file_browser_get_view(app->file_browser));
 
+    // Alloc the memory for the enc28j60 instance
     app->ethernet = enc28j60_alloc(app->mac_device);
+
+    // Copy the MAC Address by default
+    memcpy(app->mac_device, MAC_INITIAL, 6);
+
+    // Copy the IP Address by default
+    memcpy(app->ip_device, IP_DEFAULT, 4);
 
     return app;
 }
