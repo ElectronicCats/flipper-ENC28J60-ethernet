@@ -20,7 +20,7 @@
 
 #include "libraries/chip/enc28j60.h"
 
-#define APP_NAME    "FLIPPER ETHERNET\nAPP"
+#define APP_NAME    "ETHERNET APP"
 #define APP_VERSION "BETA"
 
 // Struct for the App

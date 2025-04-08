@@ -21,7 +21,7 @@ void draw_start(App* app) {
 
     widget_add_icon_element(app->widget, 40, 1, &I_EC48x26);
     widget_add_string_element(
-        app->widget, 64, 40, AlignCenter, AlignCenter, FontPrimary, "ETHERNET APP");
+        app->widget, 64, 40, AlignCenter, AlignCenter, FontPrimary, APP_NAME);
     widget_add_string_element(
         app->widget, 64, 55, AlignCenter, AlignCenter, FontSecondary, "Electronic Cats");
 
