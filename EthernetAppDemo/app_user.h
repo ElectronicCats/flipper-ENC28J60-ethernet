@@ -38,6 +38,7 @@ typedef struct {
     // FileBrowser* file_browser;
     enc28j60_t* ethernet; // Instance for the enc28j60
 
+    FuriString* text;
     FuriThread* thread;
 } App;
 

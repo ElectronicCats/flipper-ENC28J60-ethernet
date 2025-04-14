@@ -58,6 +58,8 @@ App* app_alloc() {
     // view_dispatcher_add_view(
     //     app->view_dispatcher, FileBrowserView, file_browser_get_view(app->file_browser));
 
+    app->text = furi_string_alloc();
+
     // Alloc the memory for the enc28j60 instance
     app->ethernet = enc28j60_alloc(app->mac_device);
 
@@ -92,6 +94,9 @@ void app_free(App* app) {
 
     // Free memory of ENC
     free_enc28j60(app->ethernet);
+
+    // Free memory of the text
+    furi_string_free(app->text);
 
     free(app);
 }

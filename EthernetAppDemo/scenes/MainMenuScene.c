@@ -34,15 +34,13 @@ void draw_start(App* app) {
 void main_menu_options_callback(void* context, uint32_t index) {
     App* app = (App*)context;
 
-    UNUSED(app);
-
     switch(index) {
     case ARP_OPTION:
         /* code */
         break;
 
     case SETTINGS_OPTION:
-        /* code */
+        scene_manager_next_scene(app->scene_manager, app_scene_settings_option);
         break;
 
     default:
