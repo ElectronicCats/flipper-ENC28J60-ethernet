@@ -2,6 +2,12 @@
  * Add Scenes to work with the app scene manager
  */
 
+// The main menu
 ADD_SCENE(app, main_menu, main_menu_option)
+
+/**
+ * These scenes are for the settings
+ */
 ADD_SCENE(app, settings, settings_option)
 ADD_SCENE(app, settings_options_menu, settings_options_menu_option)
+ADD_SCENE(app, set_address, set_address_option)

@@ -7,6 +7,21 @@
  * generate randomly the MAC Address
  */
 
+/**
+ * Function to generate a RANDOM MAC
+ */
+
+void generate_random_mac(uint8_t* mac) {
+    // Generate random bytes for the MAC address
+    for(int i = 0; i < 6; i++) {
+        mac[i] = (uint8_t)furi_hal_random_get() & 0xFF;
+    }
+
+    // Set the locally administered bit (bit 1) and clear the multicast bit (bit 0)
+    // This ensures the MAC address is valid for local use and is unicast
+    mac[0] = (mac[0] & 0xFC) | 0x02;
+}
+
 // Enumeration
 enum {
     MAC_OPTION_SETTING,
@@ -17,22 +32,10 @@ enum {
 void app_scene_settings_callback(void* context, uint32_t index) {
     App* app = (App*)context;
 
-    switch(index) {
-    case MAC_OPTION_SETTING:
-        scene_manager_set_scene_state(
-            app->scene_manager, app_scene_settings_options_menu_option, MAC_OPTION_SETTING);
-        scene_manager_next_scene(app->scene_manager, app_scene_settings_options_menu_option);
-        break;
-
-    case IP_OPTION_SETTING:
-        scene_manager_set_scene_state(
-            app->scene_manager, app_scene_settings_options_menu_option, IP_OPTION_SETTING);
-        scene_manager_next_scene(app->scene_manager, app_scene_settings_options_menu_option);
-        break;
-
-    default:
-        break;
-    }
+    scene_manager_set_scene_state(
+        app->scene_manager, app_scene_settings_options_menu_option, index);
+    scene_manager_set_scene_state(app->scene_manager, app_scene_set_address_option, index);
+    scene_manager_next_scene(app->scene_manager, app_scene_settings_options_menu_option);
 }
 
 // Function of the settings scene on enter
@@ -103,6 +106,29 @@ void app_scene_settings_on_exit(void* context) {
  * Functions to draw the options for MAC and IP address
  */
 
+// Callback to set a random MAC address
+void callback_random_mac(void* context, uint32_t index) {
+    App* app = (App*)context;
+
+    UNUSED(index);
+
+    generate_random_mac(app->mac_device);
+    scene_manager_previous_scene(app->scene_manager);
+}
+
+// Callback to get the IP in the network
+void callback_get_ip(void* context, uint32_t index) {
+    UNUSED(context);
+    UNUSED(index);
+}
+
+// Set the address depending of the scene state
+void set_address_callback(void* context, uint32_t index) {
+    App* app = (App*)context;
+    UNUSED(index);
+    scene_manager_next_scene(app->scene_manager, app_scene_set_address_option);
+}
+
 // Function to draw the menu in the MAC options
 void draw_menu_for_MAC_settings(App* app) {
     submenu_reset(app->submenu);
@@ -111,10 +137,10 @@ void draw_menu_for_MAC_settings(App* app) {
     submenu_set_header(app->submenu, "SET MAC ADDRESS");
 
     // Generate a Random MAC
-    submenu_add_item(app->submenu, "Set Random MAC", 0, NULL, app);
+    submenu_add_item(app->submenu, "Set Random MAC", 0, callback_random_mac, app);
 
     // Set the MAC via manually
-    submenu_add_item(app->submenu, "Set MAC manually", 1, NULL, app);
+    submenu_add_item(app->submenu, "Set MAC manually", 1, set_address_callback, app);
 }
 
 // Function to draw the menu in the IP options
@@ -125,10 +151,10 @@ void draw_menu_for_IP_settings(App* app) {
     submenu_set_header(app->submenu, "SET IP ADDRESS");
 
     // Generate a Random MAC
-    submenu_add_item(app->submenu, "Get IP", 0, NULL, app);
+    submenu_add_item(app->submenu, "Get IP", 0, callback_get_ip, app);
 
     // Set the MAC via manually
-    submenu_add_item(app->submenu, "Set IP manually", 1, NULL, app);
+    submenu_add_item(app->submenu, "Set IP manually", 1, set_address_callback, app);
 }
 
 // Settings option menu on enter
@@ -166,4 +192,54 @@ bool app_scene_settings_options_menu_on_event(void* context, SceneManagerEvent e
 void app_scene_settings_options_menu_on_exit(void* context) {
     App* app = (App*)context;
     submenu_reset(app->submenu);
+}
+
+/**
+ * Functions to set an Address
+ */
+
+//  Callback for the Input
+void settings_input_byte_address(void* context) {
+    App* app = (App*)context;
+    scene_manager_previous_scene(app->scene_manager);
+}
+
+// Function to set MAC address
+void mac_set_address_view(App* app) {
+    byte_input_set_header_text(app->input_byte_value, "MAC ADDRESS");
+    byte_input_set_result_callback(
+        app->input_byte_value, settings_input_byte_address, NULL, app, app->mac_device, 6);
+}
+
+// Function to set the IP address
+void ip_set_address_view(App* app) {
+    byte_input_set_header_text(app->input_byte_value, "IP ADDRESS");
+    byte_input_set_result_callback(
+        app->input_byte_value, settings_input_byte_address, NULL, app, app->ip_device, 4);
+}
+
+// Function on enter when the user needs to set the IP or the MAC address
+void app_scene_set_address_on_enter(void* context) {
+    App* app = (App*)context;
+
+    uint32_t state =
+        scene_manager_get_scene_state(app->scene_manager, app_scene_set_address_option);
+
+    if(state == MAC_OPTION_SETTING) mac_set_address_view(app);
+    if(state == IP_OPTION_SETTING) ip_set_address_view(app);
+    view_dispatcher_switch_to_view(app->view_dispatcher, InputByteView);
+}
+
+// Function on event when the user needs to set the IP or the MAC address
+bool app_scene_set_address_on_event(void* context, SceneManagerEvent event) {
+    App* app = (App*)context;
+    bool consumed = false;
+    UNUSED(app);
+    UNUSED(event);
+    return consumed;
+}
+
+// Function on exit when the user needs to set the IP or the MAC address
+void app_scene_set_address_on_exit(void* context) {
+    UNUSED(context);
 }
