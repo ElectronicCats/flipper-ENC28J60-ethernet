@@ -4,7 +4,7 @@
 #include "../libraries/protocol_tools/arp.h"
 
 // Packets sent per second
-uint8_t packet_rate = 100;
+uint8_t packet_rate = 120;
 
 // My Mac
 uint8_t my_mac[6] = {0};

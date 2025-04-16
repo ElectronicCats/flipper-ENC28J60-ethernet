@@ -7,7 +7,7 @@
  */
 
 // The Gateway IP
-uint8_t gateway_ip[4] = {0};
+uint8_t gateway_ip[4] = {192, 168, 0, 1};
 
 // ArpSpoofing thread
 int32_t arpspoofing_thread(void* context);
@@ -63,6 +63,14 @@ void draw_waiting_start_attack(App* app) {
     widget_add_button_element(app->widget, GuiButtonTypeCenter, "Start", NULL, app);
 }
 
+// Function to draw when is waiting for the IP of the DORA process
+void draw_waiting_for_ip(App* app) {
+    widget_reset(app->widget);
+    widget_add_string_element(
+        app->widget, 64, 32, AlignCenter, AlignCenter, FontPrimary, "Waiting for IP");
+}
+
+// Function to draw when a Ip is got it
 void draw_your_ip_is(App* app) {
     widget_reset(app->widget);
     widget_add_string_element(
@@ -109,6 +117,8 @@ int32_t arpspoofing_thread(void* context) {
     bool start = enc28j60_start(ethernet) != 0xff; // To know if the enc28j60 is connected
     bool program_loop = start; // This variable will help for the loop
 
+    bool attack = false; // variable for the attacking
+
     if(!is_the_network_connected(ethernet)) {
         draw_network_not_connected(app);
         program_loop = false;
@@ -129,6 +139,7 @@ int32_t arpspoofing_thread(void* context) {
 
             // Get the IP
             if(!furi_hal_gpio_read(&gpio_button_right)) {
+                draw_waiting_for_ip(app);
                 process_dora(ethernet, app->ip_device, gateway_ip);
                 break;
             }
@@ -144,6 +155,7 @@ int32_t arpspoofing_thread(void* context) {
     if(program_loop) {
         draw_your_ip_is(app);
         furi_delay_ms(1000);
+        set_arp_message_for_attack_all(buffer, app->mac_device, gateway_ip, &size);
         draw_waiting_start_attack(app);
     }
 
@@ -152,6 +164,12 @@ int32_t arpspoofing_thread(void* context) {
          * Code
          */
 
+        if(furi_hal_gpio_read(&gpio_button_ok)) {
+            attack = !attack;
+            furi_delay_ms(200);
+        }
+
+        if(attack) send_arp_spoofing(ethernet, buffer, size);
         furi_delay_ms(1);
     }
 
