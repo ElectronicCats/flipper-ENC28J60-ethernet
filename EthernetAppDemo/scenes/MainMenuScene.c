@@ -36,7 +36,7 @@ void main_menu_options_callback(void* context, uint32_t index) {
 
     switch(index) {
     case ARP_OPTION:
-        /* code */
+        scene_manager_next_scene(app->scene_manager, app_scene_arp_spoofing_option);
         break;
 
     case SETTINGS_OPTION:

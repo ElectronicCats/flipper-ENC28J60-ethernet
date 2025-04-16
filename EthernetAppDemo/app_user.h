@@ -19,6 +19,8 @@
 #include "ethernet_app_icons.h"
 
 #include "libraries/chip/enc28j60.h"
+#include "modules/arp_module.h"
+#include "modules/dhcp_protocol.h"
 
 #define APP_NAME    "ETHERNET APP"
 #define APP_VERSION "BETA"
@@ -53,6 +55,7 @@ typedef enum {
     // FileBrowserView,
 } scenesViews;
 
-// This functions works only to draw repetive views in widgets
+// This functions works only to draw repetitive views in widgets
 void draw_in_development(App* app); // draws when something is on development
 void draw_device_no_connected(App* app); // draws when the device is not connected
+void draw_network_not_connected(App* app); // draws if the device is not connected to a network

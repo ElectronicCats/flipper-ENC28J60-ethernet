@@ -487,6 +487,16 @@ bool is_link_up(enc28j60_t* instance) {
     return (read_Phy_byte(instance->spi, PHSTAT2) >> 2) & 1;
 }
 
+// To know if it is link up in a determinated time
+bool is_the_network_connected(enc28j60_t* instance) {
+    bool ret = false;
+    uint32_t last_time = furi_get_tick();
+    while(((furi_get_tick() - last_time) < 1500) && (!ret)) {
+        ret = is_link_up(instance);
+    }
+    return ret;
+}
+
 // Send a Ethernet Packet
 void send_packet(enc28j60_t* instance, uint8_t* buffer, uint16_t len) {
     uint8_t retry = 0;
