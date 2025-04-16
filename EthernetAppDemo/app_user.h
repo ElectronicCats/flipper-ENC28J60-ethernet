@@ -52,3 +52,7 @@ typedef enum {
     InputByteView,
     // FileBrowserView,
 } scenesViews;
+
+// This functions works only to draw repetive views in widgets
+void draw_in_development(App* app); // draws when something is on development
+void draw_device_no_connected(App* app); // draws when the device is not connected

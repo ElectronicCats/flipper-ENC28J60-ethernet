@@ -3,7 +3,7 @@
 /**
  * In this file you will find the ARP Spoofing scene and it worker,
  * for the usage of I played with the view dispatcher and the thread to show different
- * views for not use many scenes and avoid to define many 
+ * views for not use many scenes and avoid to define many
  */
 
 // ArpSpoofing thread
