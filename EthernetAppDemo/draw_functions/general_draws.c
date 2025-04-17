@@ -19,7 +19,7 @@ void draw_device_no_connected(App* app) {
 // Draws if the network is not link
 void draw_network_not_connected(App* app) {
     widget_reset(app->widget);
-    // widget_add_icon_element(app->widget, 4, 0, &I_NOC119x38); Needs to change the icon
+    widget_add_icon_element(app->widget, 41, 0, &I_NCR);
     widget_add_string_multiline_element(
-        app->widget, 64, 32, AlignCenter, AlignCenter, FontPrimary, "Network\nNot Detected");
+        app->widget, 64, 60, AlignCenter, AlignBottom, FontPrimary, "Network\nNot Detected");
 }
