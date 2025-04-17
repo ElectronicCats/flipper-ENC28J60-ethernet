@@ -58,9 +58,10 @@ void draw_ask_for_ip(App* app) {
 // Function to draw for waiting to attack
 void draw_waiting_start_attack(App* app) {
     widget_reset(app->widget);
-    widget_add_string_element(
-        app->widget, 64, 30, AlignCenter, AlignCenter, FontPrimary, "Start Attack");
-    widget_add_button_element(app->widget, GuiButtonTypeCenter, "Start", NULL, app);
+    widget_add_icon_element(app->widget, 40, 0, &I_SleepyCat50x50);
+    // widget_add_string_element(
+    //     app->widget, 64, 80, AlignCenter, AlignCenter, FontSecondary, "Start Attack??");
+    widget_add_button_element(app->widget, GuiButtonTypeCenter, "Attack??", NULL, app);
 }
 
 // Function to draw when is waiting for the IP of the DORA process
@@ -96,6 +97,38 @@ void draw_your_ip_is(App* app) {
         furi_string_get_cstr(app->text));
 }
 
+// Function to draw when you are attacking
+void draw_arpspoofing_attacking(App* app, uint8_t frame) {
+    widget_reset(app->widget);
+
+    switch(frame) {
+    case 0:
+        widget_add_icon_element(app->widget, 40, 0, &I_CatAttackingAnimation00);
+        break;
+
+    case 1:
+        widget_add_icon_element(app->widget, 40, 0, &I_CatAttackingAnimation01);
+        break;
+
+    case 2:
+        widget_add_icon_element(app->widget, 40, 0, &I_CatAttackingAnimation02);
+        break;
+
+    case 3:
+        widget_add_icon_element(app->widget, 40, 0, &I_CatAttackingAnimation03);
+        break;
+
+    case 4:
+        widget_add_icon_element(app->widget, 40, 0, &I_CatAttackingAnimation04);
+        break;
+
+    default:
+        break;
+    }
+
+    widget_add_button_element(app->widget, GuiButtonTypeCenter, "STOP", NULL, app);
+}
+
 /**
  * Main Thread for the ArpSpoofing
  * Here is where the main code comes for the worker
@@ -107,8 +140,9 @@ int32_t arpspoofing_thread(void* context) {
     uint8_t buffer[1500] = {0};
     uint16_t size = 0;
 
-    UNUSED(buffer);
-    UNUSED(size);
+    uint32_t last_time = 0;
+
+    uint8_t count_frame = 0;
 
     widget_reset(app->widget); // Reset the widget
     view_dispatcher_switch_to_view(
@@ -118,6 +152,8 @@ int32_t arpspoofing_thread(void* context) {
     bool program_loop = start; // This variable will help for the loop
 
     bool attack = false; // variable for the attacking
+
+    bool show_once = true; // To display a view once
 
     if(!is_the_network_connected(ethernet)) {
         draw_network_not_connected(app);
@@ -156,20 +192,36 @@ int32_t arpspoofing_thread(void* context) {
         draw_your_ip_is(app);
         furi_delay_ms(1000);
         set_arp_message_for_attack_all(buffer, app->mac_device, gateway_ip, &size);
-        draw_waiting_start_attack(app);
+        last_time = furi_get_tick();
     }
 
     while(furi_hal_gpio_read(&gpio_button_back) && program_loop) {
-        /**
-         * Code
-         */
-
+        // Waiting to read the gpio ok to attack or stop to attack
         if(furi_hal_gpio_read(&gpio_button_ok)) {
             attack = !attack;
+            if(!attack) show_once = true;
             furi_delay_ms(200);
         }
 
-        if(attack) send_arp_spoofing(ethernet, buffer, size);
+        // To show when it is waiting to attack
+        if(!attack && show_once) {
+            draw_waiting_start_attack(app);
+            show_once = false;
+            count_frame = 0;
+        }
+
+        // When the attacks start
+        if(attack) {
+            send_arp_spoofing(ethernet, buffer, size);
+        }
+
+        if(attack && ((furi_get_tick() - last_time) > 200)) {
+            last_time = furi_get_tick();
+            draw_arpspoofing_attacking(app, count_frame);
+            count_frame++;
+            if(count_frame > 4) count_frame = 0;
+        }
+
         furi_delay_ms(1);
     }
 
