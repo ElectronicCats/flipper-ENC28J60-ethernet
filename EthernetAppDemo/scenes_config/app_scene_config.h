@@ -8,6 +8,9 @@ ADD_SCENE(app, main_menu, main_menu_option)
 // ARPSpoofing Scene
 ADD_SCENE(app, arp_spoofing, arp_spoofing_option)
 
+// ARP scanner scene
+ADD_SCENE(app, arp_scanner, arp_scanner_option)
+
 /**
  * These scenes are for the settings
  */
