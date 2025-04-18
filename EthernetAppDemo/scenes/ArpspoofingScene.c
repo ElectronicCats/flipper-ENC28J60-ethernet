@@ -155,7 +155,7 @@ int32_t arpspoofing_thread(void* context) {
 
     bool show_once = true; // To display a view once
 
-    if(!is_the_network_connected(ethernet)) {
+    if(!is_the_network_connected(ethernet) && start) {
         draw_network_not_connected(app);
         program_loop = false;
     }
