@@ -21,7 +21,7 @@ void set_arp_message_for_attack_all(
 void send_arp_spoofing(enc28j60_t* ethernet, uint8_t* buffer, uint16_t len);
 
 // Function to sget all the ip in the network
-bool arp_scan_network(
+void arp_scan_network(
     enc28j60_t* ethernet,
     arp_list* list,
     uint8_t* own_mac,

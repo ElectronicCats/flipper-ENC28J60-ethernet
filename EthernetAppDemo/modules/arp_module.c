@@ -125,7 +125,7 @@ bool get_arp_reply(uint8_t* current_ip, uint8_t* get_mac, uint8_t* buffer, uint1
 /**
  *  Function to ARP scan, get all the IP
  */
-bool arp_scan_network(
+void arp_scan_network(
     enc28j60_t* ethernet,
     arp_list* list,
     uint8_t* own_mac,
@@ -174,7 +174,7 @@ bool arp_scan_network(
                 }
             }
 
-            if(furi_get_tick() > (current_time + 500)) {
+            if(furi_get_tick() > (current_time + 100)) {
                 break;
             }
         }
@@ -182,6 +182,4 @@ bool arp_scan_network(
     }
 
     *list_count = counter;
-
-    return true;
 }
