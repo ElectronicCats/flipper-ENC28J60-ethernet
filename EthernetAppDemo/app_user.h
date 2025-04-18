@@ -30,6 +30,7 @@ typedef struct {
     uint8_t mac_device[6];
     uint8_t ip_device[4];
     arp_list ip_list[255];
+    uint8_t count;
 
     SceneManager* scene_manager;
     ViewDispatcher* view_dispatcher;

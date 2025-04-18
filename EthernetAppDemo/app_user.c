@@ -69,6 +69,9 @@ App* app_alloc() {
     // Copy the IP Address by default
     memcpy(app->ip_device, IP_DEFAULT, 4);
 
+    // Set a default count for the IP list
+    app->count = 255;
+
     return app;
 }
 
