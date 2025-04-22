@@ -21,6 +21,7 @@
 #include "libraries/chip/enc28j60.h"
 #include "modules/arp_module.h"
 #include "modules/dhcp_protocol.h"
+#include "modules/tcp_module.h"
 
 #define APP_NAME    "ETHERNET APP"
 #define APP_VERSION "BETA"
