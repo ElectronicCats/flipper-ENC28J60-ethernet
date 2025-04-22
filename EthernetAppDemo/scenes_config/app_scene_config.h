@@ -12,6 +12,9 @@ ADD_SCENE(app, arp_spoofing, arp_spoofing_option)
 ADD_SCENE(app, arp_scanner_menu, arp_scanner_menu_option)
 ADD_SCENE(app, arp_scanner, arp_scanner_option)
 
+// Testing scene
+ADD_SCENE(app, testing_scene, testing_scene_option)
+
 /**
  * These scenes are for the settings
  */
