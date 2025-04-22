@@ -9,6 +9,7 @@ ADD_SCENE(app, main_menu, main_menu_option)
 ADD_SCENE(app, arp_spoofing, arp_spoofing_option)
 
 // ARP scanner scene
+ADD_SCENE(app, arp_scanner_menu, arp_scanner_menu_option)
 ADD_SCENE(app, arp_scanner, arp_scanner_option)
 
 /**
