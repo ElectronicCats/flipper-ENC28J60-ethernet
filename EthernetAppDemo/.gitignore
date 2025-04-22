@@ -5,3 +5,7 @@ dist/*
 .editorconfig
 .env
 .ufbt
+
+# This just will be like this for a moment
+libraries/protocol_tools/tcp.h
+libraries/protocol_tools/tcp.c
