@@ -53,13 +53,13 @@ bool arp_set_header_ipv4(
 
 // Function to know if it is a arp header
 bool is_arp(uint8_t* buffer) {
+    if(buffer == NULL) return false;
+
     ethernet_header_t header = ethernet_get_header(buffer);
 
     uint16_t type = header.type[0] << 8 | header.type[1];
 
-    if(type != 0x0806) return false;
-
-    return true;
+    return type == 0x0806;
 }
 
 // Function to get the arp header

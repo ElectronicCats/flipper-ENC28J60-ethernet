@@ -77,7 +77,7 @@ bool set_ipv4_header(
 ipv4_header_t ipv4_get_header(uint8_t* buffer) {
     ipv4_header_t ip_header = {0};
 
-    memcpy((uint8_t*)&ip_header, buffer + 14, IP_HEADER_LEN);
+    memcpy((uint8_t*)&ip_header, buffer + ETHERNET_HEADER_LEN, IP_HEADER_LEN);
 
     return ip_header;
 }
