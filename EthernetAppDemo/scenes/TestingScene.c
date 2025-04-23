@@ -7,6 +7,7 @@
 #include "../libraries/protocol_tools/ethernet_protocol.h"
 #include "../libraries/protocol_tools/ipv4.h"
 #include "../libraries/protocol_tools/tcp.h"
+#include "../libraries/protocol_tools/udp.h"
 #include "../libraries/generals/ethernet_generals.h"
 
 // Function for the thread
@@ -51,43 +52,6 @@ void app_scene_testing_scene_on_exit(void* context) {
  * Functions to test
  */
 
-bool create_tcp_message(
-    uint8_t* buffer,
-    uint16_t source_port,
-    uint16_t dest_port,
-    uint8_t* src_ip,
-    uint8_t* dst_ip,
-    const uint8_t* data,
-    uint16_t data_length) {
-    if(buffer == NULL || data == NULL || src_ip == NULL || dst_ip == NULL) return false;
-
-    // Set up the TCP header (starts after Ethernet + IP headers)
-    uint8_t* tcp_start = buffer + 14 + IP_HEADER_LEN;
-
-    // Set up TCP header with common values
-    set_tcp_header(
-        tcp_start,
-        source_port, // Source port
-        dest_port, // Destination port
-        0, // Initial sequence number
-        0, // ACK number (0 for initial SYN)
-        0x02, // Flags (0x02 = SYN flag)
-        8192, // Window size (typical initial value)
-        0 // Urgent pointer
-    );
-
-    memcpy(tcp_start + TCP_HEADER_LEN, data, data_length);
-
-    uint16_t checksum =
-        calculate_tcp_checksum(tcp_start, TCP_HEADER_LEN + data_length, src_ip, dst_ip);
-
-    // Set the calculated checksum
-    tcp_start[16] = (checksum >> 8) & 0xFF;
-    tcp_start[17] = checksum & 0xFF;
-
-    return true;
-}
-
 /**
  * Thread for the Testing Scene
  */
@@ -96,12 +60,38 @@ int32_t testing_thread(void* context) {
 
     enc28j60_t* ethernet = app->ethernet;
 
-    uint8_t buffer[1500] = {0};
-    uint16_t size = 1500;
+    // uint8_t tcp_message[] = {0x78, 0x8c, 0xb5, 0xb3, 0xd7, 0x8c, 0xfc, 0x34, 0x97, 0xa9, 0x5a,
+    //                          0xa4, 0x8,  0x0,  0x45, 0x0,  0x0,  0x3c, 0xf2, 0xb0, 0x40, 0x0,
+    //                          0x40, 0x6,  0x63, 0xa1, 0xc0, 0xa8, 0x0,  0x64, 0x5f, 0xd8, 0xc3,
+    //                          0x85, 0xc0, 0xc6, 0x0,  0x50, 0x8c, 0xdd, 0x2b, 0xcc, 0x0,  0x0,
+    //                          0x0,  0x0,  0xa0, 0x2,  0xfa, 0xf0, 0x25, 0xed, 0x0,  0x0,  0x2,
+    //                          0x4,  0x5,  0xb4, 0x4,  0x2,  0x8,  0xa,  0xa8, 0x53, 0x20, 0xa4,
+    //                          0x0,  0x0,  0x0,  0x0,  0x1,  0x3,  0x3,  0x7};
 
-    // Message to test TCP
-    uint8_t message[] = "Hello TCP!";
-    uint8_t message_size = sizeof(message);
+    // uint16_t size = sizeof(tcp_message);
+
+    uint8_t buffer[1500] = {0};
+
+    unsigned char message[] = "Hola TCP!";
+    uint8_t size_of_message = sizeof(message);
+
+    uint16_t total_message =
+        ETHERNET_HEADER_LEN + IP_HEADER_LEN + TCP_HEADER_LEN + size_of_message;
+
+    create_tcp_packet(
+        buffer,
+        app->mac_device,
+        MAC_BROADCAST,
+        app->ip_device,
+        IP_BROADCAST,
+        12345,
+        80,
+        1000,
+        0,
+        TCP_SYN,
+        8192,
+        message,
+        size_of_message);
 
     // Try to start the ENC28J60
     bool start = enc28j60_start(ethernet) != 0xff;
@@ -117,22 +107,21 @@ int32_t testing_thread(void* context) {
         start = false;
     }
 
-    // set an ethernet header with IPv4 type
-    set_ethernet_header(buffer, app->mac_device, MAC_BROADCAST, 0x0800);
-
-    // set the ipv4 header
-    set_ipv4_header(buffer + 14, 0x06, message_size + 20, app->ip_device, IP_BROADCAST);
-
     // Main loop
     while(start && furi_hal_gpio_read(&gpio_button_back)) {
         if(furi_hal_gpio_read(&gpio_button_ok)) {
-            printf("Enviando mensaje TCP\n");
+            printf("Send message\n");
 
-            // Create a TCP message
-            create_tcp_message(
-                buffer, 1234, 80, app->ip_device, app->ip_list[0].ip, message, message_size);
+            printf("\n");
+
             // Send the message through the ENC28J60
-            send_packet(ethernet, buffer, size);
+            // send_packet(
+            //     ethernet,
+            //     buffer,
+            //     ETHERNET_HEADER_LEN + IP_HEADER_LEN + TCP_HEADER_LEN + size_of_message);
+
+            send_packet(ethernet, buffer, total_message);
+
             furi_delay_ms(500);
         }
         furi_delay_ms(1); // Small delay to prevent CPU hogging

@@ -6,6 +6,16 @@
 
 #define TCP_HEADER_LEN 20 // Minimum TCP header length (without options)
 
+// TCP Flag definitions
+#define TCP_FIN 0x01
+#define TCP_SYN 0x02
+#define TCP_RST 0x04
+#define TCP_PSH 0x08
+#define TCP_ACK 0x10
+#define TCP_URG 0x20
+#define TCP_ECE 0x40
+#define TCP_CWR 0x80
+
 typedef struct {
     uint8_t source_port[2]; // Source port (16 bits)
     uint8_t dest_port[2]; // Destination port (16 bits)
@@ -42,5 +52,21 @@ uint16_t calculate_tcp_checksum(
     uint16_t tcp_length,
     uint8_t* src_ip,
     uint8_t* dst_ip);
+
+// Create a complete TCP packet
+bool create_tcp_packet(
+    uint8_t* buffer,
+    uint8_t* src_mac,
+    uint8_t* dst_mac,
+    uint8_t* src_ip,
+    uint8_t* dst_ip,
+    uint16_t src_port,
+    uint16_t dst_port,
+    uint32_t seq_num,
+    uint32_t ack_num,
+    uint8_t flags,
+    uint16_t window_size,
+    uint8_t* payload,
+    uint16_t payload_length);
 
 #endif

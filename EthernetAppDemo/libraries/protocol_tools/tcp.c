@@ -1,5 +1,6 @@
 #include "tcp.h"
 #include "ipv4.h"
+#include "ethernet_protocol.h"
 
 // Helper function to convert 16-bit value to network byte order (big-endian)
 static void uint16_to_bytes(uint16_t value, uint8_t* bytes) {
@@ -57,10 +58,28 @@ tcp_header_t tcp_get_header(uint8_t* buffer) {
     tcp_header_t header = {0};
 
     // TCP header starts after Ethernet + IP headers
-    uint8_t* tcp_start = buffer + 14 + IP_HEADER_LEN;
+    uint8_t* tcp_start = buffer + ETHERNET_HEADER_LEN + IP_HEADER_LEN;
 
-    // Copy header fields
-    memcpy(&header, tcp_start, sizeof(tcp_header_t));
+    // Copy source and destination ports
+    memcpy(header.source_port, tcp_start, 2);
+    memcpy(header.dest_port, tcp_start + 2, 2);
+
+    // Copy sequence and acknowledgment numbers
+    memcpy(header.sequence, tcp_start + 4, 4);
+    memcpy(header.ack_number, tcp_start + 8, 4);
+
+    // Copy data offset and flags
+    header.data_offset = tcp_start[12];
+    header.flags = tcp_start[13];
+
+    // Copy window size
+    memcpy(header.window_size, tcp_start + 14, 2);
+
+    // Copy checksum
+    memcpy(header.checksum, tcp_start + 16, 2);
+
+    // Copy urgent pointer
+    memcpy(header.urgent_pointer, tcp_start + 18, 2);
 
     return header;
 }
@@ -81,28 +100,38 @@ uint16_t calculate_tcp_checksum(
     uint16_t tcp_length,
     uint8_t* src_ip,
     uint8_t* dst_ip) {
+    // Create pseudo-header for checksum calculation
+    uint8_t pseudo_header[12];
+
+    // Source IP address (4 bytes)
+    memcpy(pseudo_header, src_ip, 4);
+
+    // Destination IP address (4 bytes)
+    memcpy(pseudo_header + 4, dst_ip, 4);
+
+    // Reserved byte (always 0)
+    pseudo_header[8] = 0;
+
+    // Protocol (TCP = 6)
+    pseudo_header[9] = 6;
+
+    // TCP segment length (16 bits)
+    pseudo_header[10] = (tcp_length >> 8) & 0xFF;
+    pseudo_header[11] = tcp_length & 0xFF;
+
+    // Calculate the sum of pseudo-header
     uint32_t sum = 0;
+    for(int i = 0; i < 12; i += 2) {
+        sum += (pseudo_header[i] << 8) + pseudo_header[i + 1];
+    }
+
+    // Add the TCP segment to the sum
     uint16_t* ptr = (uint16_t*)tcp_segment;
-
-    // Add TCP pseudo header
-    // Source IP
-    sum += (src_ip[0] << 8) | src_ip[1];
-    sum += (src_ip[2] << 8) | src_ip[3];
-
-    // Destination IP
-    sum += (dst_ip[0] << 8) | dst_ip[1];
-    sum += (dst_ip[2] << 8) | dst_ip[3];
-
-    // Protocol (TCP = 6) and TCP length
-    sum += 6;
-    sum += tcp_length;
-
-    // Add TCP header and data
-    for(uint16_t i = 0; i < tcp_length / 2; i++) {
+    for(int i = 0; i < tcp_length / 2; i++) {
         sum += ptr[i];
     }
 
-    // If length is odd, add the last byte
+    // If length is odd, add the last byte padded with zero
     if(tcp_length % 2) {
         sum += tcp_segment[tcp_length - 1] << 8;
     }
@@ -112,5 +141,59 @@ uint16_t calculate_tcp_checksum(
         sum = (sum & 0xFFFF) + (sum >> 16);
     }
 
+    // One's complement
     return ~sum;
+}
+
+// New function to create a complete TCP packet
+bool create_tcp_packet(
+    uint8_t* buffer,
+    uint8_t* src_mac,
+    uint8_t* dst_mac,
+    uint8_t* src_ip,
+    uint8_t* dst_ip,
+    uint16_t src_port,
+    uint16_t dst_port,
+    uint32_t seq_num,
+    uint32_t ack_num,
+    uint8_t flags,
+    uint16_t window_size,
+    uint8_t* payload,
+    uint16_t payload_length) {
+    if(!buffer || !src_mac || !dst_mac || !src_ip || !dst_ip) {
+        return false;
+    }
+
+    // Set Ethernet header
+    if(!set_ethernet_header(buffer, src_mac, dst_mac, 0x0800)) { // 0x0800 is IPv4
+        return false;
+    }
+
+    // Set IP header
+    uint8_t* ip_header_ptr = buffer + ETHERNET_HEADER_LEN;
+    uint16_t total_tcp_length = TCP_HEADER_LEN + payload_length;
+
+    if(!set_ipv4_header(ip_header_ptr, 6, total_tcp_length, src_ip, dst_ip)) { // 6 is TCP
+        return false;
+    }
+
+    // Set TCP header
+    uint8_t* tcp_header_ptr = buffer + ETHERNET_HEADER_LEN + IP_HEADER_LEN;
+
+    if(!set_tcp_header(
+           tcp_header_ptr, src_port, dst_port, seq_num, ack_num, flags, window_size, 0)) {
+        return false;
+    }
+
+    // Copy payload data if any
+    if(payload_length > 0 && payload != NULL) {
+        memcpy(tcp_header_ptr + TCP_HEADER_LEN, payload, payload_length);
+    }
+
+    // Calculate and set TCP checksum
+    uint16_t checksum = calculate_tcp_checksum(tcp_header_ptr, total_tcp_length, src_ip, dst_ip);
+    tcp_header_ptr[16] = (checksum >> 8) & 0xFF;
+    tcp_header_ptr[17] = checksum & 0xFF;
+
+    return true;
 }

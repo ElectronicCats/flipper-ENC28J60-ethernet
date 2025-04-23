@@ -118,6 +118,7 @@ void set_dhcp_request_message(uint8_t* buffer, uint16_t* length) {
 
     *length = dhcp_len + ETHERNET_HEADER_LEN + IP_HEADER_LEN + UDP_HEADER_LEN;
 }
+
 // Function to deconstruct the acknowledge message
 bool deconstruct_dhcp_ack(uint8_t* buffer) {
     if(buffer == NULL) return false;
