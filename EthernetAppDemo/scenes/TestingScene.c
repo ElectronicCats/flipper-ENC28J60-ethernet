@@ -10,6 +10,8 @@
 #include "../libraries/protocol_tools/udp.h"
 #include "../libraries/generals/ethernet_generals.h"
 
+#include "../modules/capture_module.h"
+
 // Function for the thread
 int32_t testing_thread(void* context);
 
@@ -60,28 +62,7 @@ int32_t testing_thread(void* context) {
 
     enc28j60_t* ethernet = app->ethernet;
 
-    uint8_t buffer[1500] = {0};
-
-    unsigned char message[] = "Hola TCP!";
-    uint8_t size_of_message = sizeof(message);
-
-    uint16_t total_message =
-        ETHERNET_HEADER_LEN + IP_HEADER_LEN + TCP_HEADER_LEN + size_of_message;
-
-    create_tcp_packet(
-        buffer,
-        app->mac_device,
-        MAC_BROADCAST,
-        app->ip_device,
-        IP_BROADCAST,
-        12345,
-        80,
-        1000,
-        0,
-        TCP_SYN,
-        8192,
-        message,
-        size_of_message);
+    pcap_capture_init(app->file, "Hola mundo");
 
     // Try to start the ENC28J60
     bool start = enc28j60_start(ethernet) != 0xff;
@@ -100,12 +81,6 @@ int32_t testing_thread(void* context) {
     // Main loop
     while(start && furi_hal_gpio_read(&gpio_button_back)) {
         if(furi_hal_gpio_read(&gpio_button_ok)) {
-            printf("Send message\n");
-
-            printf("\n");
-
-            send_packet(ethernet, buffer, total_message);
-
             furi_delay_ms(500);
         }
         furi_delay_ms(1); // Small delay to prevent CPU hogging

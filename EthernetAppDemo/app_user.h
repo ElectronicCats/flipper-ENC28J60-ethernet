@@ -51,6 +51,8 @@ typedef struct {
     Storage* storage; // Set the storage
     DialogsApp* dialogs;
 
+    File* file; // File to save logs
+
     FuriString* text; // String for general use
     FuriString* path; // String to get path from file browser
     FuriThread* thread; // For the threads
