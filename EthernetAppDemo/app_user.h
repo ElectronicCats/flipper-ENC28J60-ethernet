@@ -26,6 +26,12 @@
 #define APP_NAME    "ETHERNET APP"
 #define APP_VERSION "BETA"
 
+// Path for the files
+#define PATHAPP    "apps_data/ethernet" // Path
+#define PATHAPPEXT EXT_PATH(PATHAPP) // Add path to the Flipper
+
+#define PATHPCAPS PATHAPPEXT "/files" // Path to save pcaps
+
 // Struct for the App
 typedef struct {
     uint8_t mac_device[6];
@@ -39,11 +45,15 @@ typedef struct {
     VariableItemList* varList;
     TextBox* textBox;
     ByteInput* input_byte_value;
-    // FileBrowser* file_browser;
+    FileBrowser* file_browser;
     enc28j60_t* ethernet; // Instance for the enc28j60
 
-    FuriString* text;
-    FuriThread* thread;
+    Storage* storage; // Set the storage
+    DialogsApp* dialogs;
+
+    FuriString* text; // String for general use
+    FuriString* path; // String to get path from file browser
+    FuriThread* thread; // For the threads
 } App;
 
 // Views in the App
@@ -54,7 +64,7 @@ typedef enum {
     TextBoxView,
     DialogInfoView,
     InputByteView,
-    // FileBrowserView,
+    FileBrowserView,
 } scenesViews;
 
 // This functions works only to draw repetitive views in widgets

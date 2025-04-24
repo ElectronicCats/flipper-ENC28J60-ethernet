@@ -4,6 +4,18 @@
 uint8_t MAC_INITIAL[6] = {0xba, 0x3f, 0x91, 0xc2, 0x7e, 0x5d};
 uint8_t IP_DEFAULT[4] = {192, 168, 0, 2};
 
+// Function to make paths
+void make_paths(App* app) {
+    furi_assert(app);
+
+    if(!storage_simply_mkdir(app->storage, PATHAPPEXT)) {
+        dialog_message_show_storage_error(app->dialogs, "Cannot create\napp folder");
+    }
+    if(!storage_simply_mkdir(app->storage, PATHPCAPS)) {
+        dialog_message_show_storage_error(app->dialogs, "Cannot create\nlogs folder");
+    }
+}
+
 static bool app_scene_costum_callback(void* context, uint32_t costum_event) {
     furi_assert(context);
     App* app = (App*)context;
@@ -54,11 +66,17 @@ App* app_alloc() {
     view_dispatcher_add_view(
         app->view_dispatcher, InputByteView, byte_input_get_view(app->input_byte_value));
 
-    // app->file_browser = file_browser_alloc(app->path);
-    // view_dispatcher_add_view(
-    //     app->view_dispatcher, FileBrowserView, file_browser_get_view(app->file_browser));
+    app->path = furi_string_alloc();
+
+    app->file_browser = file_browser_alloc(app->path);
+    view_dispatcher_add_view(
+        app->view_dispatcher, FileBrowserView, file_browser_get_view(app->file_browser));
 
     app->text = furi_string_alloc();
+
+    // Init the storage
+    app->storage = furi_record_open(RECORD_STORAGE);
+    app->dialogs = furi_record_open(RECORD_DIALOGS);
 
     // Alloc the memory for the enc28j60 instance
     app->ethernet = enc28j60_alloc(app->mac_device);
@@ -68,6 +86,8 @@ App* app_alloc() {
 
     // Copy the IP Address by default
     memcpy(app->ip_device, IP_DEFAULT, 4);
+
+    make_paths(app);
 
     return app;
 }
@@ -79,7 +99,7 @@ void app_free(App* app) {
     view_dispatcher_remove_view(app->view_dispatcher, TextBoxView);
     view_dispatcher_remove_view(app->view_dispatcher, VarListView);
     view_dispatcher_remove_view(app->view_dispatcher, InputByteView);
-    // view_dispatcher_remove_view(app->view_dispatcher, FileBrowserView);
+    view_dispatcher_remove_view(app->view_dispatcher, FileBrowserView);
 
     // Free memory of Scene Manager and View Dispatcher
     scene_manager_free(app->scene_manager);
@@ -90,13 +110,18 @@ void app_free(App* app) {
     submenu_free(app->submenu);
     text_box_free(app->textBox);
     byte_input_free(app->input_byte_value);
-    // file_browser_free(app->file_browser);
+    file_browser_free(app->file_browser);
 
     // Free memory of ENC
     free_enc28j60(app->ethernet);
 
     // Free memory of the text
     furi_string_free(app->text);
+    furi_string_free(app->path);
+
+    // Close records
+    furi_record_close(RECORD_DIALOGS);
+    furi_record_close(RECORD_STORAGE);
 
     free(app);
 }
