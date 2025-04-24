@@ -1,5 +1,6 @@
 #include "udp.h"
 #include "ipv4.h"
+#include "ethernet_protocol.h"
 
 typedef struct {
     uint8_t src_ip[4];
@@ -79,4 +80,56 @@ bool is_udp_packet(uint8_t* buffer) {
     ipv4_header_t ip_header = ipv4_get_header(buffer);
 
     return ip_header.protocol == 0x11;
+}
+
+// Create a complete UDP packet with Ethernet, IP, and UDP headers
+bool create_udp_packet(
+    uint8_t* buffer,
+    uint8_t* src_mac,
+    uint8_t* dst_mac,
+    uint8_t* src_ip,
+    uint8_t* dst_ip,
+    uint16_t src_port,
+    uint16_t dst_port,
+    uint8_t* payload,
+    uint16_t payload_length) {
+    if(!buffer || !src_mac || !dst_mac || !src_ip || !dst_ip) {
+        return false;
+    }
+
+    // Set Ethernet header (type 0x0800 for IPv4)
+    if(!set_ethernet_header(buffer, src_mac, dst_mac, 0x0800)) {
+        return false;
+    }
+
+    // Set IP header (protocol 17 for UDP)
+    uint8_t* ip_header_ptr = buffer + ETHERNET_HEADER_LEN;
+    uint16_t total_udp_length = UDP_HEADER_LEN + payload_length;
+
+    if(!set_ipv4_header(ip_header_ptr, 17, total_udp_length, src_ip, dst_ip)) {
+        return false;
+    }
+
+    // Set UDP header
+    uint8_t* udp_header_ptr = buffer + ETHERNET_HEADER_LEN + IP_HEADER_LEN;
+
+    if(!set_udp_header(udp_header_ptr, src_port, dst_port, total_udp_length)) {
+        return false;
+    }
+
+    // Copy payload data if any
+    if(payload_length > 0 && payload != NULL) {
+        memcpy(udp_header_ptr + UDP_HEADER_LEN, payload, payload_length);
+    }
+
+    // Calculate and set UDP checksum (optional in IPv4 but recommended)
+    ipv4_header_t* ip_header = (ipv4_header_t*)ip_header_ptr;
+    udp_header_t* udp_header = (udp_header_t*)udp_header_ptr;
+
+    uint16_t checksum = udp_calculate_checksum(ip_header, udp_header, payload, payload_length);
+
+    udp_header->checksum[0] = (checksum >> 8) & 0xFF;
+    udp_header->checksum[1] = checksum & 0xFF;
+
+    return true;
 }
