@@ -60,31 +60,65 @@ void app_scene_testing_scene_on_exit(void* context) {
 int32_t testing_thread(void* context) {
     App* app = (App*)context;
 
-    enc28j60_t* ethernet = app->ethernet;
+    uint8_t example_packet[] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x78, 0x8c, 0xb5, 0xb3,
+                                0xd7, 0x8c, 0x8,  0x6,  0x0,  0x1,  0x8,  0x0,  0x6,  0x4,
+                                0x0,  0x1,  0x78, 0x8c, 0xb5, 0xb3, 0xd7, 0x8c, 0xc0, 0xa8,
+                                0x0,  0x1,  0x0,  0x0,  0x0,  0x0,  0x0,  0x0,  0xc0, 0xa8,
+                                0x0,  0xbb, 0x0,  0x0,  0x0,  0x0,  0x0,  0x0,  0x0,  0x0,
+                                0x0,  0x0,  0x0,  0x0,  0x0,  0x0,  0xc1, 0xcc, 0x55, 0xc2};
 
-    pcap_capture_init(app->file, "Hola mundo");
+    uint8_t example_packet2[] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x6c, 0x40, 0x8,  0xac,
+                                 0xc9, 0x94, 0x8,  0x6,  0x0,  0x1,  0x8,  0x0,  0x6,  0x4,
+                                 0x0,  0x1,  0x6c, 0x40, 0x8,  0xac, 0xc9, 0x94, 0xc0, 0xa8,
+                                 0x0,  0xc2, 0x0,  0x0,  0x0,  0x0,  0x0,  0x0,  0xc0, 0xa8,
+                                 0x0,  0xb6, 0x0,  0x0,  0x0,  0x0,  0x0,  0x0,  0x0,  0x0,
+                                 0x0,  0x0,  0x0,  0x0,  0x0,  0x0,  0x0,  0x0,  0x0,  0x0};
+
+    uint16_t packet_len = sizeof(example_packet);
+
+    // enc28j60_t* ethernet = app->ethernet;
 
     // Try to start the ENC28J60
-    bool start = enc28j60_start(ethernet) != 0xff;
+    // bool start = enc28j60_start(ethernet) != 0xff;
 
-    if(!start) {
-        // Device not connected
-        printf("No conectado\n");
-    }
+    create_pcap_name(app->path, PATHPCAPS, "File2");
 
-    if(!is_the_network_connected(ethernet) && start) {
-        // Network not connected
-        printf("La red no esta conectada\n");
-        start = false;
-    }
+    printf("%s\n", furi_string_get_cstr(app->path));
 
-    // Main loop
-    while(start && furi_hal_gpio_read(&gpio_button_back)) {
-        if(furi_hal_gpio_read(&gpio_button_ok)) {
-            furi_delay_ms(500);
-        }
-        furi_delay_ms(1); // Small delay to prevent CPU hogging
-    }
+    pcap_capture_init(app->file, furi_string_get_cstr(app->path));
+
+    printf("File opened\n");
+
+    pcap_capture_add_packet(app->file, example_packet, (uint32_t)packet_len);
+
+    furi_delay_ms(1000);
+
+    packet_len = sizeof(example_packet2);
+
+    pcap_capture_add_packet(app->file, example_packet2, (uint32_t)packet_len);
+
+    // if(!start) {
+    //     // Device not connected
+    //     printf("No conectado\n");
+    // }
+
+    // if(!is_the_network_connected(ethernet) && start) {
+    //     // Network not connected
+    //     printf("La red no esta conectada\n");
+    //     start = false;
+    // }
+
+    // // Main loop
+    // while(start && furi_hal_gpio_read(&gpio_button_back)) {
+    //     if(furi_hal_gpio_read(&gpio_button_ok)) {
+    //         furi_delay_ms(500);
+    //     }
+    //     furi_delay_ms(1);
+    // }
+
+    pcap_capture_close(app->file);
+
+    printf("File closed\n");
 
     return 0;
 }

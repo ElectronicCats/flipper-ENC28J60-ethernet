@@ -78,6 +78,9 @@ App* app_alloc() {
     app->storage = furi_record_open(RECORD_STORAGE);
     app->dialogs = furi_record_open(RECORD_DIALOGS);
 
+    // Alloc the file storage
+    app->file = storage_file_alloc(app->storage);
+
     // Alloc the memory for the enc28j60 instance
     app->ethernet = enc28j60_alloc(app->mac_device);
 
@@ -118,6 +121,9 @@ void app_free(App* app) {
     // Free memory of the text
     furi_string_free(app->text);
     furi_string_free(app->path);
+
+    // Free the file storage
+    storage_file_free(app->file);
 
     // Close records
     furi_record_close(RECORD_DIALOGS);
