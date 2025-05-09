@@ -19,6 +19,10 @@ typedef struct pcap_packet_header {
     uint32_t orig_len; // Actual length of packet
 } pcap_packet_header_t;
 
+// Base timestamp reference (to be initialized on first use)
+static uint32_t base_timestamp_sec = 0;
+static uint32_t base_tick = 0;
+
 // Function to create path name
 void create_pcap_name(FuriString* complete_path, const char* PATH, const char* name) {
     furi_string_reset(complete_path);
@@ -31,6 +35,24 @@ void create_pcap_name(FuriString* complete_path, const char* PATH, const char* n
 // Function to Initialize the pcap file
 // The filename includes the path
 bool pcap_capture_init(File* file, const char* filename) {
+    // Initialize timestamp reference
+    DateTime datetime;
+    furi_hal_rtc_get_datetime(&datetime);
+
+    // Start with a base timestamp for the current date
+    // This is an approximation since Flipper Zero doesn't have a full Unix timestamp
+    // Using 2023-01-01 as arbitrary epoch for demonstration
+    base_timestamp_sec =
+        (uint32_t)(datetime.year - 2023) * 365 * 24 * 3600 + // Years (approximate)
+        (uint32_t)(datetime.month * 30) * 24 * 3600 + // Months (approximate)
+        (uint32_t)(datetime.day) * 24 * 3600 + // Days
+        (uint32_t)(datetime.hour) * 3600 + // Hours
+        (uint32_t)(datetime.minute) * 60 + // Minutes
+        (uint32_t)(datetime.second); // Seconds
+
+    // Store the current tick for relative time calculation
+    base_tick = furi_get_tick();
+
     // Create the file
     if(!storage_file_open(file, filename, FSAM_WRITE, FSOM_CREATE_ALWAYS)) {
         return false;
@@ -63,19 +85,21 @@ bool pcap_capture_add_packet(File* file, const uint8_t* packet, uint32_t packet_
     // Create packet header
     pcap_packet_header_t packet_header;
 
-    // Get real time instead of ticks for better compatibility
-    DateTime datetime;
-    furi_hal_rtc_get_datetime(&datetime);
+    // Calculate time elapsed since base timestamp
+    uint32_t current_tick = furi_get_tick();
+    uint32_t elapsed_ticks = current_tick - base_tick;
 
-    // Convert to Unix timestamp (seconds since Jan 1, 1970)
-    // This is a simple approximation
-    uint32_t timestamp_sec = datetime.hour * 3600 + datetime.minute * 60 + datetime.second;
+    // Convert ticks to milliseconds (Flipper OS uses 1000 ticks per second)
+    uint32_t elapsed_ms = elapsed_ticks;
 
-    // Use milliseconds for microsecond field (better than nothing)
-    uint32_t timestamp_usec = furi_get_tick() % 1000 * 1000;
+    // Calculate seconds and microseconds
+    uint32_t elapsed_sec = elapsed_ms / 1000;
+    uint32_t elapsed_usec = (elapsed_ms % 1000) * 1000; // Convert remaining ms to us
 
-    packet_header.ts_sec = (uint32_t)(timestamp_sec / 1000000);
-    packet_header.ts_usec = (uint32_t)(timestamp_usec % 1000000);
+    // Add to base timestamp
+    packet_header.ts_sec = base_timestamp_sec + elapsed_sec;
+    packet_header.ts_usec = elapsed_usec;
+
     packet_header.incl_len = packet_len;
     packet_header.orig_len = packet_len;
 
