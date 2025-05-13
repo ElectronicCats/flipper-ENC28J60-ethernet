@@ -4,13 +4,6 @@
  */
 
 #include "../app_user.h"
-#include "../libraries/protocol_tools/ethernet_protocol.h"
-#include "../libraries/protocol_tools/ipv4.h"
-#include "../libraries/protocol_tools/tcp.h"
-#include "../libraries/protocol_tools/udp.h"
-#include "../libraries/generals/ethernet_generals.h"
-
-#include "../modules/capture_module.h"
 
 // Function for the thread
 int32_t testing_thread(void* context);
@@ -56,11 +49,6 @@ void app_scene_testing_scene_on_exit(void* context) {
 
 /**
  * Thread for the Testing Scene
- */
-
-/**
- * By the moment I'll try to simulate messages I only add buffers with them and try to get the correct time to be sniffed
- * Wish me luck!!
  */
 
 int32_t testing_thread(void* context) {
