@@ -8,6 +8,9 @@ ADD_SCENE(app, main_menu, main_menu_option)
 // Sniffer Scene
 ADD_SCENE(app, sniffer, sniffer_option)
 
+// Read pcaps
+ADD_SCENE(app, read_pcap, read_pcap_option)
+
 // ARPSpoofing Scene
 ADD_SCENE(app, arp_spoofing, arp_spoofing_option)
 
