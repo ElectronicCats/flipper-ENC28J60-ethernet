@@ -123,11 +123,11 @@ int32_t testing_thread(void* context) {
         printf("No conectado\n");
     }
 
-    if(!is_the_network_connected(ethernet) && start) {
-        // Network not connected
-        printf("La red no esta conectada\n");
-        start = false;
-    }
+    // if(!is_the_network_connected(ethernet) && start) {
+    //     // Network not connected
+    //     printf("La red no esta conectada\n");
+    //     start = false;
+    // }
 
     if(start) {
         create_pcap_name(app->path, PATHPCAPS, "File2");
