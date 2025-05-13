@@ -21,8 +21,21 @@ void app_scene_sniffer_on_enter(void* context) {
 bool app_scene_sniffer_on_event(void* context, SceneManagerEvent event) {
     bool consumed = false;
     App* app = (App*)context;
-    UNUSED(app);
-    UNUSED(event);
+
+    if(event.type == SceneManagerEventTypeCustom) {
+        switch(event.event) {
+        case 1:
+            // scene_manager_next_scene(app->scene_manager, );
+            break;
+
+        case 0xff:
+            scene_manager_previous_scene(app->scene_manager);
+            break;
+
+        default:
+            break;
+        }
+    }
     return consumed;
 }
 
@@ -36,10 +49,6 @@ void app_scene_sniffer_on_exit(void* context) {
     furi_thread_join(app->thread);
     furi_thread_free(app->thread);
 }
-
-/**
- *
- */
 
 /**
  * Function to solve paths
@@ -97,6 +106,28 @@ void draw_count_packets(App* app, uint32_t packets) {
 
     widget_add_string_element(
         widget, 64, 32, AlignCenter, AlignCenter, FontPrimary, furi_string_get_cstr(app->text));
+
+    widget_add_button_element(widget, GuiButtonTypeCenter, "Stop", NULL, NULL);
+}
+
+// Draw if the user want to sniff packets
+void draw_want_to_sniff(Widget* widget) {
+    widget_reset(widget);
+
+    widget_add_string_multiline_element(
+        widget, 64, 24, AlignCenter, AlignCenter, FontPrimary, "Start\nSniffing");
+
+    widget_add_button_element(widget, GuiButtonTypeCenter, "Start", NULL, NULL);
+}
+
+// Draw if the user wants to see the packets sniffed
+void draw_want_to_show_packets(Widget* widget) {
+    widget_reset(widget);
+
+    widget_add_string_multiline_element(
+        widget, 64, 32, AlignCenter, AlignCenter, FontPrimary, "Want to see packets?");
+
+    widget_add_button_element(widget, GuiButtonTypeRight, "Show", NULL, NULL);
 }
 
 /**
@@ -107,7 +138,8 @@ int32_t sniffer_thread(void* context) {
     App* app = (App*)context;
 
     enc28j60_t* ethernet = app->ethernet;
-    bool draw_once = true;
+    // bool draw_once = true;
+    bool show_packets = false;
     bool start = enc28j60_start(ethernet) != 0xff;
 
     uint8_t buffer[1500] = {0};
@@ -116,16 +148,14 @@ int32_t sniffer_thread(void* context) {
 
     if(!start) {
         draw_device_no_connected(app); // Draw if the dvice is not connected
+        furi_delay_ms(900);
     }
 
+    // Message to show if want to start the sniffing
     if(start) {
-        // Wait until the red is connected
-        while(!is_link_up(ethernet)) {
-            if(draw_once) {
-                draw_waiting_connection(app->widget);
-                draw_once = false;
-            }
+        draw_want_to_sniff(app->widget);
 
+        while(!furi_hal_gpio_read(&gpio_button_ok)) {
             if(!furi_hal_gpio_read(&gpio_button_back)) {
                 start = false;
                 break;
@@ -133,6 +163,23 @@ int32_t sniffer_thread(void* context) {
         }
     }
 
+    // Delay to avoid double click
+    furi_delay_ms(300);
+
+    // Moment to wait if the network is connected
+    if(start) {
+        draw_waiting_connection(app->widget);
+
+        // Wait until the red is connected
+        while(!is_link_up(ethernet)) {
+            if(!furi_hal_gpio_read(&gpio_button_back)) {
+                start = false;
+                break;
+            }
+        }
+    }
+
+    // Once the network is connected it will create the file for the pcap
     if(start) {
         // Solve the path to not repeat or rewrite files
         solve_paths(app->storage, app->path);
@@ -144,22 +191,49 @@ int32_t sniffer_thread(void* context) {
         draw_count_packets(app, packet_counter);
     }
 
-    // Starts
+    // Start sniffing packets
     while(start && furi_hal_gpio_read(&gpio_button_back)) {
-        packet_len = receive_packet(ethernet, buffer, 1500);
+        packet_len = receive_packet(ethernet, buffer, 1518);
 
         if(packet_len) {
             packet_counter++; // add more on the counter
             draw_count_packets(app, packet_counter); // Display count of packets
         }
 
+        // If user pressed button ok it stops and show packets
+        if(furi_hal_gpio_read(&gpio_button_ok)) {
+            show_packets = true;
+            furi_delay_ms(250);
+            break;
+        }
+
         furi_delay_ms(1);
     }
 
+    // Close the file if it started well
     if(start) {
         // Close the file
         pcap_capture_close(app->file);
     }
+
+    // Once it stop with the button ok shows if wants to read all packets
+    if(show_packets) {
+        draw_want_to_show_packets(app->widget);
+
+        // wait until the button okay
+        while(furi_hal_gpio_read(&gpio_button_right)) {
+            if(!furi_hal_gpio_read(&gpio_button_back)) {
+                show_packets = false;
+                break;
+            }
+        }
+    }
+
+    // Moment to show packets
+    if(show_packets) view_dispatcher_send_custom_event(app->view_dispatcher, 1);
+
+    // To exit if the enc28j60 is not connected
+    if(!start) view_dispatcher_send_custom_event(app->view_dispatcher, 0xff);
 
     return 0;
 }
