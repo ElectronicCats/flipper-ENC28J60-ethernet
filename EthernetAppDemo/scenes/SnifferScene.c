@@ -213,7 +213,7 @@ int32_t sniffer_thread(void* context) {
     // Close the file if it started well
     if(start) {
         // Close the file
-        pcap_capture_close(app->file);
+        pcap_close(app->file);
     }
 
     // Once it stop with the button ok shows if wants to read all packets

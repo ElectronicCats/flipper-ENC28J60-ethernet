@@ -135,7 +135,7 @@ int32_t testing_thread(void* context) {
     }
 
     if(start) {
-        pcap_capture_close(app->file);
+        pcap_close(app->file);
         disable_promiscuous(ethernet);
     }
 
