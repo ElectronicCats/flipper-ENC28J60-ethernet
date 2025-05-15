@@ -193,11 +193,15 @@ uint32_t pcap_scan(File* file, const char* filename, uint64_t* positions) {
         return 0;
     }
 
+    // Get the total size of the file
     uint64_t file_size = storage_file_size(file);
 
     printf("Size = %llu bytes", file_size);
 
+    // This is for the pcap header field
     pcap_global_header_t header;
+
+    // This part is to set the first position with bytes_read
     size_t bytes_read = storage_file_read(file, &header, sizeof(header));
 
     // Check if we read the complete header and magic number is correct
@@ -206,11 +210,8 @@ uint32_t pcap_scan(File* file, const char* filename, uint64_t* positions) {
         return 0;
     }
 
-    uint64_t position = bytes_read;
-
-    positions[counter] = position;
-
-    counter++;
+    // This variable will use to get the positions
+    uint64_t position = 0;
 
     printf("Position[%lu] %llu\n", counter, position);
 
@@ -221,12 +222,21 @@ uint32_t pcap_scan(File* file, const char* filename, uint64_t* positions) {
     pcap_packet_header_t packet_header;
 
     while(bytes_read > 0) {
-        bytes_read = storage_file_read(file, &packet_header, sizeof(packet_header));
-
-        bytes_read += storage_file_read(file, &packet, packet_header.orig_len);
-
+        // Add the value for the position with bytes_read
         position = position + bytes_read;
 
+        // Add the position
+        positions[counter] = position;
+
+        // Read the bytes to move the positions on the file, this line is for the packet header
+        bytes_read = storage_file_read(file, &packet_header, sizeof(packet_header));
+
+        // Pass the bytes on the file, this line is for the ethernet packet
+        bytes_read += storage_file_read(file, &packet, packet_header.orig_len);
+
+        //============================================================================================
+        //          DEBUG IF IM GETTIN THE PACKETS
+        //============================================================================================
         printf(
             "=====================Position[%lu] %llu  %lu =======================================\n",
             counter,
@@ -239,10 +249,14 @@ uint32_t pcap_scan(File* file, const char* filename, uint64_t* positions) {
 
         printf("\n");
 
+        //============================================================================================
+        //          DEBUG IF IM GETTIN THE PACKETS
+        //============================================================================================
+
+        // If the position has the same position as the total lenght of the file break the loop
         if(position == file_size) break;
 
-        positions[counter] = position;
-
+        // Change the position on the array to save the positions on the file
         counter++;
     }
 
