@@ -18,8 +18,10 @@ void pcap_close(File* file);
 // PCAP reading functions
 size_t pcap_reader_init(File* file, const char* filename);
 
-size_t pcap_get_packet(File* file, uint8_t* packet, uint32_t* packet_len);
+// PCAP get specific packet
+size_t pcap_get_specific_packet(File* file, uint8_t* packet, uint32_t packet_position);
 
+// Scan all the pcap file to get the position of the packets
 uint32_t pcap_scan(File* file, const char* filename, uint64_t* positions);
 
 #endif

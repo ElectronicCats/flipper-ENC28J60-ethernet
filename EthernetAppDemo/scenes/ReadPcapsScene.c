@@ -8,8 +8,8 @@ void app_scene_read_pcap_on_enter(void* context) {
     App* app = (App*)context;
 
     // Temporary time
-    // furi_string_reset(app->path);
-    // furi_string_cat_printf(app->path, "/ext/apps_data/ethernet/files/file_15_05_2025_1.pcap");
+    furi_string_reset(app->path);
+    furi_string_cat_printf(app->path, "/ext/apps_data/ethernet/files/file_14_05_2025_0.pcap");
 
     // Allocate and start the thread
     app->thread = furi_thread_alloc_ex("TESTING", 10 * 1024, thread_read_pcaps, app);
@@ -55,6 +55,10 @@ int32_t thread_read_pcaps(void* context) {
     uint32_t packet_count = 0;
     uint64_t packet_positions[2000];
 
+    uint8_t buffer[1518];
+
+    uint32_t len = 0;
+
     packet_count = pcap_scan(app->file, furi_string_get_cstr(app->path), packet_positions);
 
     if(packet_count) {
@@ -66,12 +70,24 @@ int32_t thread_read_pcaps(void* context) {
         for(uint32_t i = 0; i < packet_count; i++) {
             printf("Packet [%lu]: %llu \n", i, packet_positions[i]);
         }
-
-        // for(uint32_t i = 0; i < packet_len; i++) {
-        //     printf("%02x\t", buffer[i]);
-        // }
-
         printf("\n");
+
+        // ==========================================================================
+        //              TEST TO GET A PACKET
+        // ==========================================================================
+        printf("FIRST PACKET ========================================================:\n");
+
+        if(storage_file_open(
+               app->file, furi_string_get_cstr(app->path), FSAM_READ, FSOM_OPEN_EXISTING)) {
+            len = pcap_get_specific_packet(app->file, buffer, packet_positions[9]);
+
+            for(uint32_t i = 0; i < len; i++) {
+                printf("%02x\t", buffer[i]);
+            }
+            printf("\n");
+
+            storage_file_close(app->file);
+        }
     }
 
     return 0;

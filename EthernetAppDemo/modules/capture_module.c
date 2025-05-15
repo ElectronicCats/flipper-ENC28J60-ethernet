@@ -154,34 +154,28 @@ size_t pcap_reader_init(File* file, const char* filename) {
     return bytes_read;
 }
 
-// Get the next packet from the pcap file
-// Returns size of packet data read, 0 if error or EOF
-size_t pcap_get_packet(File* file, uint8_t* packet, uint32_t* packet_len) {
-    if(!file || !packet || !packet_len) return 0;
+// Get the packet and return the size of the packet
+size_t pcap_get_specific_packet(File* file, uint8_t* packet, uint32_t packet_position) {
+    if(!file || !storage_file_is_open(file)) return 0;
+
+    // Sync the file
+    if(!storage_file_sync(file)) return 0;
+
+    // Set the position on the file
+    if(!storage_file_seek(file, packet_position, true)) return 0;
 
     pcap_packet_header_t packet_header;
 
     // Read packet header
-    size_t bytes_read = storage_file_read(file, &packet_header, sizeof(packet_header));
-
-    // If we can't read a complete header, we're at EOF or error
-    if(bytes_read != sizeof(packet_header)) {
+    if(storage_file_read(file, &packet_header, sizeof(packet_header)) != sizeof(packet_header))
         return 0;
-    }
-
-    // Set the packet length
-    *packet_len = packet_header.orig_len;
 
     // Read the packet data
-    bytes_read += storage_file_read(file, packet, packet_header.orig_len);
+    if(storage_file_read(file, packet, packet_header.orig_len) != packet_header.orig_len) return 0;
 
     // Return the actual bytes read
-    return bytes_read;
+    return packet_header.orig_len;
 }
-
-// size_t pcap_get_specific_packet(){
-
-// }
 
 // Get the position in the pcap file
 uint32_t pcap_scan(File* file, const char* filename, uint64_t* positions) {
