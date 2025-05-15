@@ -25,7 +25,7 @@ bool app_scene_sniffer_on_event(void* context, SceneManagerEvent event) {
     if(event.type == SceneManagerEventTypeCustom) {
         switch(event.event) {
         case 1:
-            // scene_manager_next_scene(app->scene_manager, );
+            scene_manager_next_scene(app->scene_manager, app_scene_read_pcap_option);
             break;
 
         case 0xff:
@@ -181,6 +181,9 @@ int32_t sniffer_thread(void* context) {
 
     // Once the network is connected it will create the file for the pcap
     if(start) {
+        // Enable the chip in promiscuous mode
+        enable_promiscuous(ethernet);
+
         // Solve the path to not repeat or rewrite files
         solve_paths(app->storage, app->path);
 
@@ -198,6 +201,7 @@ int32_t sniffer_thread(void* context) {
         if(packet_len) {
             packet_counter++; // add more on the counter
             draw_count_packets(app, packet_counter); // Display count of packets
+            pcap_capture_add_packet(app->file, buffer, packet_len);
         }
 
         // If user pressed button ok it stops and show packets
@@ -212,6 +216,9 @@ int32_t sniffer_thread(void* context) {
 
     // Close the file if it started well
     if(start) {
+        // Disable promiscuous mode
+        disable_promiscuous(ethernet);
+
         // Close the file
         pcap_close(app->file);
     }

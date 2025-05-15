@@ -16,18 +16,10 @@ bool pcap_capture_sync(File* file);
 void pcap_close(File* file);
 
 // PCAP reading functions
-bool pcap_reader_init(File* file, const char* filename);
+size_t pcap_reader_init(File* file, const char* filename);
 
 size_t pcap_get_packet(File* file, uint8_t* packet, uint32_t* packet_len);
 
-bool pcap_seek_packet(File* file, uint32_t packet_number);
-
-size_t pcap_get_packet_by_index(
-    File* file,
-    uint8_t* packet,
-    uint32_t* packet_len,
-    uint32_t packet_index);
-
-uint32_t pcap_count_packets(File* file);
+uint32_t pcap_scan(File* file, const char* filename, uint64_t* positions);
 
 #endif

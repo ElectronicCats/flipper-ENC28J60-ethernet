@@ -130,12 +130,16 @@ void pcap_close(File* file) {
     }
 }
 
+/**
+ * From here the functions are to read de packets
+ */
+
 // Function to open pcap file and read the header
 // Returns true if file is valid PCAP, false otherwise
-bool pcap_reader_init(File* file, const char* filename) {
+size_t pcap_reader_init(File* file, const char* filename) {
     // Open file
     if(!storage_file_open(file, filename, FSAM_READ, FSOM_OPEN_EXISTING)) {
-        return false;
+        return 0;
     }
 
     pcap_global_header_t header;
@@ -144,10 +148,10 @@ bool pcap_reader_init(File* file, const char* filename) {
     // Check if we read the complete header and magic number is correct
     if(bytes_read != sizeof(header) || header.magic_number != 0xA1B2C3D4) {
         storage_file_close(file);
-        return false;
+        return 0;
     }
 
-    return true;
+    return bytes_read;
 }
 
 // Get the next packet from the pcap file
@@ -169,80 +173,82 @@ size_t pcap_get_packet(File* file, uint8_t* packet, uint32_t* packet_len) {
     *packet_len = packet_header.orig_len;
 
     // Read the packet data
-    bytes_read = storage_file_read(file, packet, packet_header.orig_len);
+    bytes_read += storage_file_read(file, packet, packet_header.orig_len);
 
     // Return the actual bytes read
     return bytes_read;
 }
 
-// Skip to a specific packet number (0-based index)
-// Returns true if successful, false if packet doesn't exist
-bool pcap_seek_packet(File* file, uint32_t packet_number) {
-    if(!file) return false;
+// size_t pcap_get_specific_packet(){
 
-    // Reset to beginning of file and skip header
-    if(!storage_file_seek(file, sizeof(pcap_global_header_t), false)) {
-        return false;
-    }
+// }
 
-    // Skip to the desired packet
-    for(uint32_t i = 0; i < packet_number; i++) {
-        pcap_packet_header_t header;
-        size_t bytes_read = storage_file_read(file, &header, sizeof(header));
+// Get the position in the pcap file
+uint32_t pcap_scan(File* file, const char* filename, uint64_t* positions) {
+    // Counter and positions
+    uint32_t counter = 0;
 
-        if(bytes_read != sizeof(header)) {
-            return false; // EOF or error
-        }
-
-        // Skip the packet data
-        if(!storage_file_seek(file, header.orig_len, true)) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-// Get packet by index (0-based)
-// Returns size of packet data read, 0 if error or packet doesn't exist
-size_t pcap_get_packet_by_index(
-    File* file,
-    uint8_t* packet,
-    uint32_t* packet_len,
-    uint32_t packet_index) {
-    if(!pcap_seek_packet(file, packet_index)) {
+    // Get the first position
+    if(!storage_file_open(file, filename, FSAM_READ, FSOM_OPEN_EXISTING)) {
         return 0;
     }
 
-    return pcap_get_packet(file, packet, packet_len);
-}
+    uint64_t file_size = storage_file_size(file);
 
-// Count total number of packets in the file
-uint32_t pcap_count_packets(File* file) {
-    if(!file) return 0;
+    printf("Size = %llu bytes", file_size);
 
-    uint32_t count = 0;
+    pcap_global_header_t header;
+    size_t bytes_read = storage_file_read(file, &header, sizeof(header));
 
-    // Save current position
-    uint64_t current_pos = storage_file_tell(file);
-
-    // Reset to after header
-    if(!storage_file_seek(file, sizeof(pcap_global_header_t), false)) {
+    // Check if we read the complete header and magic number is correct
+    if(bytes_read != sizeof(header) || header.magic_number != 0xA1B2C3D4) {
+        storage_file_close(file);
         return 0;
     }
 
-    // Count packets
-    pcap_packet_header_t header;
-    while(storage_file_read(file, &header, sizeof(header)) == sizeof(header)) {
-        count++;
-        // Skip packet data
-        if(!storage_file_seek(file, header.orig_len, true)) {
-            break;
+    uint64_t position = bytes_read;
+
+    positions[counter] = position;
+
+    counter++;
+
+    printf("Position[%lu] %llu\n", counter, position);
+
+    // Just for the packet
+    uint8_t packet[1518] = {0};
+
+    // For the packets
+    pcap_packet_header_t packet_header;
+
+    while(bytes_read > 0) {
+        bytes_read = storage_file_read(file, &packet_header, sizeof(packet_header));
+
+        bytes_read += storage_file_read(file, &packet, packet_header.orig_len);
+
+        position = position + bytes_read;
+
+        printf(
+            "=====================Position[%lu] %llu  %lu =======================================\n",
+            counter,
+            positions[counter - 1],
+            packet_header.orig_len);
+
+        for(uint32_t i = 0; i < packet_header.orig_len; i++) {
+            printf("%x\t", packet[i]);
         }
+
+        printf("\n");
+
+        if(position == file_size) break;
+
+        positions[counter] = position;
+
+        counter++;
     }
 
-    // Restore position
-    storage_file_seek(file, current_pos, false);
+    printf("===============================================================\n");
 
-    return count;
+    storage_file_close(file);
+
+    return counter;
 }
