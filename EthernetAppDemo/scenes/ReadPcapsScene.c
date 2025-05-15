@@ -8,8 +8,8 @@ void app_scene_read_pcap_on_enter(void* context) {
     App* app = (App*)context;
 
     // Temporary time
-    furi_string_reset(app->path);
-    furi_string_cat_printf(app->path, "/ext/apps_data/ethernet/files/file_14_05_2025_0.pcap");
+    // furi_string_reset(app->path);
+    // furi_string_cat_printf(app->path, "/ext/apps_data/ethernet/files/file_15_05_2025_1.pcap");
 
     // Allocate and start the thread
     app->thread = furi_thread_alloc_ex("TESTING", 10 * 1024, thread_read_pcaps, app);
@@ -53,14 +53,19 @@ int32_t thread_read_pcaps(void* context) {
     printf("%s\n", furi_string_get_cstr(app->path));
 
     uint32_t packet_count = 0;
-    uint64_t buffer[2000];
+    uint64_t packet_positions[2000];
 
-    packet_count = pcap_scan(app->file, furi_string_get_cstr(app->path), buffer);
+    packet_count = pcap_scan(app->file, furi_string_get_cstr(app->path), packet_positions);
 
     if(packet_count) {
+        printf("Packets: %lu\n", packet_count);
+
         // pcap_get_packet(app->file, buffer, &packet_len);
 
-        printf("Packets: %lu\n", packet_count);
+        printf("\n");
+        for(uint32_t i = 0; i < packet_count; i++) {
+            printf("Packet [%lu]: %llu \n", i, packet_positions[i]);
+        }
 
         // for(uint32_t i = 0; i < packet_len; i++) {
         //     printf("%02x\t", buffer[i]);
@@ -68,13 +73,6 @@ int32_t thread_read_pcaps(void* context) {
 
         printf("\n");
     }
-
-    // unsigned char bytes[] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x78, 0x8c, 0xb5, 0xb3,
-    //                          0xd7, 0x8c, 0x8,  0x6,  0x0,  0x1,  0x8,  0x0,  0x6,  0x4,
-    //                          0x0,  0x1,  0x78, 0x8c, 0xb5, 0xb3, 0xd7, 0x8c, 0xc0, 0xa8,
-    //                          0x0,  0x1,  0x0,  0x0,  0x0,  0x0,  0x0,  0x0,  0xc0, 0xa8,
-    //                          0x0,  0xc2, 0x0,  0x0,  0x0,  0x0,  0x0,  0x0,  0x0,  0x0,
-    //                          0x0,  0x0,  0x0,  0x0,  0x0,  0x0,  0x2,  0x1,  0x7b, 0xb2};
 
     return 0;
 }
