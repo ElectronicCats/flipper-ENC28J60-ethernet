@@ -44,7 +44,7 @@ typedef struct {
     Widget* widget;
     Submenu* submenu;
     VariableItemList* varList;
-    TextBox* textBox;
+    TextBox* text_box;
     ByteInput* input_byte_value;
     FileBrowser* file_browser;
     enc28j60_t* ethernet; // Instance for the enc28j60
