@@ -29,14 +29,14 @@ void bytes_to_uint32(uint8_t* bytes, uint32_t* result) {
 
 /**
  * This function extracts all packet information from Ethernet frames
- * 
+ *
  * It will set:
  *      - MAC source and destination
  *      - IP source and destination (if available)
  *      - Protocol type (ARP, TCP, UDP, etc.)
  *      - Port information (for TCP/UDP)
  *      - Additional protocol-specific information
- * 
+ *
  * Returns the size of the payload
  */
 uint16_t get_packet_information(

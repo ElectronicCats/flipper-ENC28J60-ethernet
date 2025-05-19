@@ -10,7 +10,8 @@ const uint32_t time_showing = 1000;
 
 // List for the menu options
 enum {
-    ARP_OPTION,
+    TESTING_OPTION,
+    SNIFFING_OPTION,
     SETTINGS_OPTION,
     ABOUT_US
 } main_menu_options;
@@ -35,8 +36,12 @@ void main_menu_options_callback(void* context, uint32_t index) {
     App* app = (App*)context;
 
     switch(index) {
-    case ARP_OPTION:
-        scene_manager_next_scene(app->scene_manager, app_scene_read_pcap_option);
+    case TESTING_OPTION:
+        scene_manager_next_scene(app->scene_manager, app_scene_testing_scene_option);
+        break;
+
+    case SNIFFING_OPTION:
+        scene_manager_next_scene(app->scene_manager, app_scene_sniffer_option);
         break;
 
     case SETTINGS_OPTION:
@@ -59,7 +64,8 @@ void app_scene_main_menu_on_enter(void* context) {
 
     submenu_reset(app->submenu);
     submenu_set_header(app->submenu, "ETHERNET FUNCTIONS");
-    submenu_add_item(app->submenu, "Option 1", ARP_OPTION, main_menu_options_callback, app);
+    submenu_add_item(app->submenu, "Option 1", TESTING_OPTION, main_menu_options_callback, app);
+    submenu_add_item(app->submenu, "Sniffer", SNIFFING_OPTION, main_menu_options_callback, app);
     submenu_add_item(app->submenu, "Settings", SETTINGS_OPTION, main_menu_options_callback, app);
     submenu_add_item(app->submenu, "About Us", ABOUT_US, main_menu_options_callback, app);
 
