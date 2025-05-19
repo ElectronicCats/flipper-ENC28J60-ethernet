@@ -8,7 +8,7 @@ void app_scene_sniffer_on_enter(void* context) {
     App* app = (App*)context;
 
     // Allocate and start the thread
-    app->thread = furi_thread_alloc_ex("TESTING", 10 * 1024, sniffer_thread, app);
+    app->thread = furi_thread_alloc_ex("Sniffer Therad", 10 * 1024, sniffer_thread, app);
     furi_thread_start(app->thread);
 
     // Reset the widget and switch view

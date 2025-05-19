@@ -25,8 +25,9 @@
 #include "modules/capture_module.h"
 #include "modules/analysis_module.h"
 
+// Version of the app
 #define APP_NAME    "ETHERNET APP"
-#define APP_VERSION "BETA"
+#define APP_VERSION "vBETA"
 
 // Path for the files
 #define PATHAPP    "apps_data/ethernet" // Path

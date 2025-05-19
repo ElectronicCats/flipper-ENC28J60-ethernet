@@ -1,4 +1,5 @@
 dist/*
+helper/*
 .vscode
 .clang-format
 .clangd

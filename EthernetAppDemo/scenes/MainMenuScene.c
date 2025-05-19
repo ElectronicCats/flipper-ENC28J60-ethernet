@@ -53,6 +53,10 @@ void main_menu_options_callback(void* context, uint32_t index) {
         scene_manager_next_scene(app->scene_manager, app_scene_settings_option);
         break;
 
+    case ABOUT_US:
+        scene_manager_next_scene(app->scene_manager, app_scene_about_us_option);
+        break;
+
     default:
         break;
     }
@@ -65,11 +69,14 @@ void app_scene_main_menu_on_enter(void* context) {
     // Variable used to show the EC logo once
     static bool is_logo_shown = false;
     if(!is_logo_shown) draw_start(app);
+
     is_logo_shown = true;
 
     submenu_reset(app->submenu);
     submenu_set_header(app->submenu, "ETHERNET FUNCTIONS");
-    submenu_add_item(app->submenu, "Option 1", TESTING_OPTION, main_menu_options_callback, app);
+
+    // submenu_add_item(app->submenu, "Option 1", TESTING_OPTION, main_menu_options_callback, app);
+
     submenu_add_item(app->submenu, "Sniffer", SNIFFING_OPTION, main_menu_options_callback, app);
     submenu_add_item(
         app->submenu, "Read Pcaps", READ_PCAPS_OPTION, main_menu_options_callback, app);
