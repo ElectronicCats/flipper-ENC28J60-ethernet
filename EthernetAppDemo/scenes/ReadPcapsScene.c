@@ -100,11 +100,7 @@ int32_t thread_read_pcaps(void* context) {
             else
                 counter--;
 
-            printf("Counter value: %lu\n", counter);
-
             write_once = true;
-
-            // furi_delay_ms(250);
         }
 
         if(!furi_hal_gpio_read(&gpio_button_right)) {
@@ -115,11 +111,7 @@ int32_t thread_read_pcaps(void* context) {
 
             if(counter >= packet_count - 1) counter = packet_count - 1;
 
-            printf("Counter value: %lu\n", counter);
-
             write_once = true;
-
-            // furi_delay_ms(250);
         }
 
         if(write_once) {
@@ -127,9 +119,10 @@ int32_t thread_read_pcaps(void* context) {
 
             furi_string_reset(app->text);
 
-            for(uint32_t i = 0; i < len; i++) {
-                furi_string_cat_printf(app->text, "%02x  ", buffer[i]);
-            }
+            furi_string_cat_printf(
+                app->text, "<== Packet %lu of %lu ==>\n", counter + 1, packet_count);
+
+            print_packet_info(app->text, buffer, len);
 
             view_dispatcher_send_custom_event(app->view_dispatcher, 1);
 

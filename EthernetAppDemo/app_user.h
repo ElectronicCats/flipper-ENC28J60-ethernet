@@ -23,6 +23,7 @@
 #include "modules/dhcp_protocol.h"
 #include "modules/tcp_module.h"
 #include "modules/capture_module.h"
+#include "modules/analysis_module.h"
 
 #define APP_NAME    "ETHERNET APP"
 #define APP_VERSION "BETA"
