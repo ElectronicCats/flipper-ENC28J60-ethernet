@@ -12,6 +12,9 @@ ADD_SCENE(app, sniffer, sniffer_option)
 ADD_SCENE(app, browser_pcaps, browser_pcaps_option)
 ADD_SCENE(app, read_pcap, read_pcap_option)
 
+// ARP Actions menu Scene
+ADD_SCENE(app, arp_actions_menu, arp_action_menu_option)
+
 // ARPSpoofing Scene
 ADD_SCENE(app, arp_spoofing, arp_spoofing_option)
 

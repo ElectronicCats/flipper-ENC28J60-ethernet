@@ -13,6 +13,7 @@ enum {
     TESTING_OPTION,
     SNIFFING_OPTION,
     READ_PCAPS_OPTION,
+    ARP_ACTIONS_OPTION,
     SETTINGS_OPTION,
     ABOUT_US
 } main_menu_options;
@@ -49,6 +50,10 @@ void main_menu_options_callback(void* context, uint32_t index) {
         scene_manager_next_scene(app->scene_manager, app_scene_browser_pcaps_option);
         break;
 
+    case ARP_ACTIONS_OPTION:
+        scene_manager_next_scene(app->scene_manager, app_scene_arp_action_menu_option);
+        break;
+
     case SETTINGS_OPTION:
         scene_manager_next_scene(app->scene_manager, app_scene_settings_option);
         break;
@@ -80,6 +85,9 @@ void app_scene_main_menu_on_enter(void* context) {
     submenu_add_item(app->submenu, "Sniffer", SNIFFING_OPTION, main_menu_options_callback, app);
     submenu_add_item(
         app->submenu, "Read Pcaps", READ_PCAPS_OPTION, main_menu_options_callback, app);
+
+    submenu_add_item(
+        app->submenu, "ARP Actions", ARP_ACTIONS_OPTION, main_menu_options_callback, app);
     submenu_add_item(app->submenu, "Settings", SETTINGS_OPTION, main_menu_options_callback, app);
     submenu_add_item(app->submenu, "About Us", ABOUT_US, main_menu_options_callback, app);
 
