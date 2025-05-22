@@ -23,3 +23,64 @@ void draw_network_not_connected(App* app) {
     widget_add_string_multiline_element(
         app->widget, 64, 60, AlignCenter, AlignBottom, FontPrimary, "Network\nNot Detected");
 }
+
+// Function to draw when is waiting for the IP of the DORA process
+void draw_waiting_for_ip(App* app) {
+    widget_reset(app->widget);
+    widget_add_string_element(
+        app->widget, 64, 32, AlignCenter, AlignCenter, FontPrimary, "Waiting for IP");
+}
+
+// Function to draw when a Ip is got it
+void draw_your_ip_is(App* app) {
+    widget_reset(app->widget);
+    widget_add_string_element(
+        app->widget, 64, 20, AlignCenter, AlignCenter, FontPrimary, "Your IP is: ");
+
+    furi_string_reset(app->text);
+
+    furi_string_cat_printf(
+        app->text,
+        "%u:%u:%u:%u",
+        app->ip_device[0],
+        app->ip_device[1],
+        app->ip_device[2],
+        app->ip_device[3]);
+
+    widget_add_string_element(
+        app->widget,
+        64,
+        40,
+        AlignCenter,
+        AlignCenter,
+        FontSecondary,
+        furi_string_get_cstr(app->text));
+}
+
+// Draw if you didnt got it the IP address
+void draw_ip_not_got_it(App* app) {
+    widget_reset(app->widget);
+    widget_add_string_element(
+        app->widget, 64, 15, AlignCenter, AlignCenter, FontPrimary, "IP didnt got it");
+    widget_add_string_element(
+        app->widget, 64, 30, AlignCenter, AlignCenter, FontSecondary, "IP by default: ");
+
+    furi_string_reset(app->text);
+
+    furi_string_cat_printf(
+        app->text,
+        "%u:%u:%u:%u",
+        app->ip_device[0],
+        app->ip_device[1],
+        app->ip_device[2],
+        app->ip_device[3]);
+
+    widget_add_string_element(
+        app->widget,
+        64,
+        40,
+        AlignCenter,
+        AlignCenter,
+        FontSecondary,
+        furi_string_get_cstr(app->text));
+}

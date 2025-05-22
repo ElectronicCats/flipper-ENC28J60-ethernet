@@ -64,39 +64,6 @@ void draw_waiting_start_attack(App* app) {
     widget_add_button_element(app->widget, GuiButtonTypeCenter, "Attack??", NULL, app);
 }
 
-// Function to draw when is waiting for the IP of the DORA process
-void draw_waiting_for_ip(App* app) {
-    widget_reset(app->widget);
-    widget_add_string_element(
-        app->widget, 64, 32, AlignCenter, AlignCenter, FontPrimary, "Waiting for IP");
-}
-
-// Function to draw when a Ip is got it
-void draw_your_ip_is(App* app) {
-    widget_reset(app->widget);
-    widget_add_string_element(
-        app->widget, 64, 20, AlignCenter, AlignCenter, FontPrimary, "Your IP is: ");
-
-    furi_string_reset(app->text);
-
-    furi_string_cat_printf(
-        app->text,
-        "%u:%u:%u:%u",
-        app->ip_device[0],
-        app->ip_device[1],
-        app->ip_device[2],
-        app->ip_device[3]);
-
-    widget_add_string_element(
-        app->widget,
-        64,
-        40,
-        AlignCenter,
-        AlignCenter,
-        FontSecondary,
-        furi_string_get_cstr(app->text));
-}
-
 // Function to draw when you are attacking
 void draw_arpspoofing_attacking(App* app, uint8_t frame) {
     widget_reset(app->widget);

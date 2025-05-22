@@ -166,7 +166,7 @@ bool process_dora(enc28j60_t* ethernet, uint8_t* static_ip, uint8_t* ip_router) 
 
     enable_broadcast(ethernet);
 
-    while(state != DHCP_OK && is_link_up(ethernet)) {
+    while(state != DHCP_OK && state != DHCP_FAIL && is_link_up(ethernet)) {
         switch(state) {
         // This state is to send the discover message
         case DHCP_STATE_INIT:
@@ -211,26 +211,29 @@ bool process_dora(enc28j60_t* ethernet, uint8_t* static_ip, uint8_t* ip_router) 
             }
             break;
 
-        // If the process fail it will stop and return a false
-        case DHCP_FAIL:
-            return false;
-            break;
+            // If the process fail it will stop and return a false
+            // case DHCP_FAIL:
+            //     return false;
+            //     break;
 
         default:
             break;
         }
 
-        if(furi_get_tick() > (current_time + 10000)) {
+        if(furi_get_tick() > (current_time + 1000)) {
             state = DHCP_FAIL;
+            ret = false;
         }
         furi_delay_ms(1);
     }
 
     disable_broadcast(ethernet);
 
-    memcpy(static_ip, myip, 4);
+    if(ret) {
+        memcpy(static_ip, myip, 4);
 
-    memcpy(ip_router, gateway, 4);
+        memcpy(ip_router, gateway, 4);
+    }
 
     return ret;
 }

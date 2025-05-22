@@ -76,3 +76,6 @@ typedef enum {
 void draw_in_development(App* app); // draws when something is on development
 void draw_device_no_connected(App* app); // draws when the device is not connected
 void draw_network_not_connected(App* app); // draws if the device is not connected to a network
+void draw_waiting_for_ip(App* app); // Draw when you're waiting for an IP
+void draw_your_ip_is(App* app); // Draw the IP when you got it
+void draw_ip_not_got_it(App* app); // Draw when get the ip failed

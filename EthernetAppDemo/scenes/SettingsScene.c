@@ -118,8 +118,11 @@ void callback_random_mac(void* context, uint32_t index) {
 
 // Callback to get the IP in the network
 void callback_get_ip(void* context, uint32_t index) {
-    UNUSED(context);
+    App* app = (App*)context;
+
     UNUSED(index);
+
+    scene_manager_next_scene(app->scene_manager, app_scene_get_ip_option);
 }
 
 // Set the address depending of the scene state

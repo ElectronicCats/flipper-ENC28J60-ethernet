@@ -28,6 +28,9 @@ ADD_SCENE(app, about_us, about_us_option)
 // Testing scene
 ADD_SCENE(app, testing_scene, testing_scene_option)
 
+// Get IP scene
+ADD_SCENE(app, get_ip_scene, get_ip_option)
+
 /**
  * These scenes are for the settings
  */
