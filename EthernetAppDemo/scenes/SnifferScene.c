@@ -69,7 +69,7 @@ void solve_paths(Storage* storage, FuriString* path) {
 
         furi_string_cat_printf(
             path,
-            "%s/file_%02u_%02u_%i_%i.pcap",
+            "%s/pcap_%02u_%02u_%i_%i.pcap",
             PATHPCAPS,
             datetime.day,
             datetime.month,
