@@ -32,4 +32,6 @@ icmp_header_t icmp_get_header(uint8_t* buffer);
 
 uint16_t icmp_calculate_checksum(icmp_header_t* header, uint8_t* data, uint16_t data_length);
 
+bool is_icmp(uint8_t* buffer);
+
 #endif // ICMP_H

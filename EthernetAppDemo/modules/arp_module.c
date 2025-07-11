@@ -183,3 +183,45 @@ void arp_scan_network(
 
     *list_count = counter;
 }
+
+/**
+ * Function to get the MAC address of specific IP address
+ */
+bool arp_get_specific_mac(enc28j60_t* ethernet, uint8_t* src_ip, uint8_t* dst_ip, uint8_t* mac_dst) {
+    uint16_t packet_len = 0;
+    uint8_t packet[500] = {0};
+
+    printf("estamos dentro\n");
+
+    bool ret = false;
+
+    // Set my MAC
+    memcpy(my_mac, ethernet->mac_address, 6);
+
+    // Set my IP
+    memcpy(my_ip, src_ip, 4);
+
+    // Set the ARP request
+    set_arp_request(packet, &packet_len, dst_ip);
+
+    // Send arp packet
+    send_packet(ethernet, packet, packet_len);
+
+    // enable_promiscuous(ethernet);
+
+    uint32_t last_time = furi_get_tick();
+
+    while(((furi_get_tick() - last_time) < 2000) && !ret) {
+        packet_len = receive_packet(ethernet, packet, 1500);
+        if(packet_len) {
+            if(is_arp(packet)) {
+                ret = get_arp_reply(dst_ip, mac_dst, packet, packet_len);
+            }
+        }
+
+        furi_delay_ms(1);
+    }
+    // disable_promiscuous(ethernet);
+
+    return ret;
+}

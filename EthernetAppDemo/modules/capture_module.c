@@ -190,8 +190,6 @@ uint32_t pcap_scan(File* file, const char* filename, uint64_t* positions) {
     // Get the total size of the file
     uint64_t file_size = storage_file_size(file);
 
-    printf("Size = %llu bytes", file_size);
-
     // This is for the pcap header field
     pcap_global_header_t header;
 

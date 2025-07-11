@@ -30,4 +30,7 @@ void arp_scan_network(
     uint8_t* list_count,
     uint8_t range);
 
+// Function to get the MAC address
+bool arp_get_specific_mac(enc28j60_t* ethernet, uint8_t* src_ip, uint8_t* dst_ip, uint8_t* mac_dst);
+
 #endif
