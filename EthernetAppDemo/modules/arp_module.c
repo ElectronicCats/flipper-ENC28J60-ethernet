@@ -191,8 +191,7 @@ bool arp_get_specific_mac(enc28j60_t* ethernet, uint8_t* src_ip, uint8_t* dst_ip
     uint16_t packet_len = 0;
     uint8_t packet[500] = {0};
 
-    printf("estamos dentro\n");
-
+    // Flag to return
     bool ret = false;
 
     // Set my MAC

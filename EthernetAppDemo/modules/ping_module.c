@@ -14,7 +14,15 @@ uint32_t get_flipper_timestamp() {
     return furi_get_tick();
 }
 
-// Función para crear packet de ping para Flipper Zero
+//  Function to compare IP
+bool compare_ip(uint8_t* ip_a, uint8_t* ip_b) {
+    for(uint8_t i = 0; i < 4; i++) {
+        if(ip_a[i] != ip_b[i]) return false;
+    }
+    return true;
+}
+
+// Function to create a ping packet
 uint16_t create_flipper_ping_packet(
     uint8_t* buffer,
     uint8_t* src_mac,
@@ -39,7 +47,12 @@ uint16_t create_flipper_ping_packet(
     // Need to set the time of the timestamp
     uint8_t ping_data[PING_DATA_SIZE] = {0};
     uint32_t timestamp = get_flipper_timestamp();
-    memcpy(ping_data, &timestamp, sizeof(timestamp));
+
+    // Set the format on big eldian
+    ping_data[0] = (uint8_t)timestamp >> 24 & 0xff;
+    ping_data[1] = (uint8_t)timestamp >> 16 & 0xff;
+    ping_data[2] = (uint8_t)timestamp >> 8 & 0xff;
+    ping_data[3] = (uint8_t)timestamp & 0xff;
 
     // Add the position
     position += sizeof(timestamp);
@@ -62,6 +75,14 @@ uint16_t create_flipper_ping_packet(
             ping_data[i] = i - position;
         }
     }
+
+    printf("Ping message \n");
+
+    for(uint8_t i = 0; i < 64; i++) {
+        printf("%02x ", ping_data[i]);
+    }
+
+    printf("\n");
 
     // set Ethernet header
     if(!set_ethernet_header(buffer, src_mac, dst_mac, 0x0800)) {
@@ -89,7 +110,71 @@ uint16_t create_flipper_ping_packet(
            PING_DATA_SIZE)) {
         return 0;
     }
+
+    // Set the payload
+    memcpy(
+        buffer + ETHERNET_HEADER_LEN + IP_HEADER_LEN + ICMP_HEADER_LEN, ping_data, PING_DATA_SIZE);
+
     return PACKET_SIZE;
+}
+
+// Function to get the ping packet
+bool is_the_ping_packet(uint8_t* packet, uint8_t* ip_ping) {
+    if(!packet || !ip_ping) return false;
+
+    if(!is_icmp(packet)) return false;
+
+    icmp_header_t icmp_header = icmp_get_header(packet);
+
+    if(icmp_header.type != ICMP_TYPE_ECHO_REPLY) return false;
+
+    ipv4_header_t ipv4_header = ipv4_get_header(packet);
+
+    uint8_t* ip_des = ipv4_header.source_ip;
+
+    return compare_ip(ip_ping, ip_des);
+}
+
+// Process to send and get the ping packets
+// This only reads if the packet comes from the IP indicated
+bool process_ping_response(
+    enc28j60_t* ethernet,
+    uint8_t* ping_packet,
+    uint16_t ping_packet_size,
+    uint8_t* ip_dest) {
+    if(!ethernet || !ping_packet || !ip_dest) return false;
+
+    // Value to return
+    bool ret = false;
+
+    // Send the ping packet
+    send_packet(ethernet, ping_packet, ping_packet_size);
+
+    printf("Message to send\n");
+
+    for(uint16_t i = 0; i < ping_packet_size; i++) {
+        printf("%02x ", ping_packet[i]);
+    }
+
+    printf("\n");
+
+    // Time to get the last time
+    uint32_t last_time = furi_get_tick();
+
+    // Generate packet to received
+    uint8_t packet_to_received[250] = {0}; // 250 bytes, the message is not to long
+
+    // Set in promiscous mode
+    enable_promiscuous(ethernet);
+    while(!ret && ((furi_get_tick() - last_time) < 1000)) {
+        if(receive_packet(ethernet, packet_to_received, 250)) {
+            ret = is_the_ping_packet(packet_to_received, ip_dest);
+        }
+        furi_delay_ms(1);
+    }
+    disable_promiscuous(ethernet);
+
+    return ret;
 }
 
 // bool process_ping_response(uint8_t* buffer, uint16_t packet_size, uint8_t* ip_dest) {

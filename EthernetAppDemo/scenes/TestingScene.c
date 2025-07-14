@@ -57,43 +57,72 @@ int32_t testing_thread(void* context) {
     App* app = (App*)context;
 
     // Ping to google
-    // uint8_t ip_ping[4] = {8, 8, 8, 8};
+    uint8_t ip_ping[4] = {8, 8, 8, 8};
 
-    // Message
-    // const char* ping_data = "hello from flipper";
+    // Message to send
+    char* ping_data = "hello from flipper";
 
-    // data len
-    // uint16_t data_len = strlen(ping_data);
+    // data lenght for the ping data
+    uint16_t data_len = strlen(ping_data);
 
     enc28j60_t* ethernet = app->ethernet;
-    // uint8_t packet_to_send[1500] = {0};
+    uint8_t packet_to_send[1500] = {0};
+    uint16_t packet_size = 0;
 
-    enc28j60_start(ethernet);
-
-    // Get time
-    uint32_t last_time = furi_get_tick();
+    bool is_connected = enc28j60_start(ethernet) != 0xff;
 
     // Variable to start the process
     bool start_ping = false;
 
-    // Get link up to the LAN
-    while(((furi_get_tick() - last_time) < 1000) && !start_ping) {
-        start_ping = is_link_up(ethernet);
-    }
-
     // Array to get the MAC for the GATEWAY
-    uint8_t mac_to_send[6] = {0};
+    uint8_t mac_to_send[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
 
     // IP of the gateway
     uint8_t ip_gate_way[4] = {192, 168, 0, 1};
 
+    // Get time
+    uint32_t last_time = furi_get_tick();
+
+    // Get link up to the LAN
+    while(((furi_get_tick() - last_time) < 1000) && !start_ping && is_connected) {
+        start_ping = is_link_up(ethernet);
+    }
+
     // Get the MAC gateway
-    if(!arp_get_specific_mac(ethernet, app->ip_device, ip_gate_way, mac_to_send) && start_ping) {
+    if(!arp_get_specific_mac(ethernet, app->ip_device, ip_gate_way, mac_to_send) && start_ping &&
+       is_connected) {
         start_ping = false;
     }
 
-    // Here is where gonna make the ping
+    // Set the message
+    if(start_ping && is_connected) {
+        packet_size = create_flipper_ping_packet(
+            packet_to_send,
+            app->mac_device,
+            mac_to_send,
+            app->ip_device,
+            ip_ping,
+            1,
+            1,
+            (uint8_t*)ping_data,
+            data_len);
 
-    UNUSED(app);
+        last_time = 0;
+    }
+
+    // Here is where gonna make the ping
+    while(start_ping && is_connected && furi_hal_gpio_read(&gpio_button_back)) {
+        if((furi_get_tick() - last_time) > 1000) {
+            if(process_ping_response(ethernet, packet_to_send, packet_size, ip_ping)) {
+                printf("Se hizo ping\n");
+            } else {
+                printf("No recibimos PING\n");
+            }
+            last_time = furi_get_tick();
+        }
+        furi_delay_ms(1);
+    }
+
+    // UNUSED(app);
     return 0;
 }

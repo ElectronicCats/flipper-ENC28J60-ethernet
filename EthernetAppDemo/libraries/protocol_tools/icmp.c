@@ -45,7 +45,7 @@ bool icmp_set_header(
     uint16_t sequence,
     uint8_t* data,
     uint16_t data_length) {
-    if(!buffer) {
+    if(!buffer || !data) {
         return false;
     }
 
