@@ -61,6 +61,8 @@ FuriHalSpiBusHandle* spi_alloc() {
     spi->miso = MISO;
     spi->mosi = MOSI;
     spi->sck = SCK;
+
+    furi_hal_spi_bus_handle_init(spi);
     return spi;
 }
 
@@ -87,5 +89,6 @@ bool spi_send_and_read(
 
 // Function to free Spi
 void spi_free(FuriHalSpiBusHandle* spi) {
+    furi_hal_spi_bus_handle_deinit(spi);
     free(spi);
 }
