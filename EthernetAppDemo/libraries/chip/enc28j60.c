@@ -413,7 +413,7 @@ static uint16_t read_Phy_byte(FuriHalSpiBusHandle* spi, const uint8_t address) {
 enc28j60_t* enc28j60_alloc(uint8_t* mac_address) {
     enc28j60_t* ethernet_enc = (enc28j60_t*)malloc(sizeof(enc28j60_t));
     ethernet_enc->spi = spi_alloc();
-    copy_mem(ethernet_enc->mac_address, mac_address, 6);
+    memcpy(ethernet_enc->mac_address, mac_address, 6);
     return ethernet_enc;
 }
 

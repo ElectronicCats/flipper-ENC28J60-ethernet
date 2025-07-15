@@ -4,7 +4,6 @@
 #include <furi.h>
 #include <furi_hal.h>
 
-#include "../protocol_tools/helper_mem.h"
 #include "Spi_lib.h"
 
 #define MAX_FRAMELEN 1500
