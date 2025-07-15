@@ -6,7 +6,7 @@
 
 #include "Spi_lib.h"
 
-#define MAX_FRAMELEN 1500
+#define MAX_FRAMELEN 1518
 
 #define RXSTART_INIT 0x0000
 #define RXSTOP_INIT  0x0BFF
@@ -21,6 +21,8 @@
 typedef struct {
     FuriHalSpiBusHandle* spi;
     uint8_t mac_address[6];
+    uint8_t tx_buffer[MAX_FRAMELEN];
+    uint8_t rx_buffer[MAX_FRAMELEN];
 } enc28j60_t;
 
 enc28j60_t* enc28j60_alloc(uint8_t* mac_address);

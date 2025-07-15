@@ -104,7 +104,7 @@ int32_t arpspoofing_thread(void* context) {
     App* app = (App*)context;
 
     enc28j60_t* ethernet = app->ethernet;
-    uint8_t buffer[1500] = {0};
+    uint8_t* buffer = ethernet->tx_buffer;
     uint16_t size = 0;
 
     uint32_t last_time = 0;

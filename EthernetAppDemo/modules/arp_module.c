@@ -136,7 +136,9 @@ void arp_scan_network(
     arp_set_my_mac_address(own_mac);
     arp_set_my_ip_address(own_ip);
 
-    uint8_t buffer[1000] = {0};
+    uint8_t* tx_buffer = ethernet->tx_buffer;
+    uint8_t* rx_buffer = ethernet->rx_buffer;
+
     uint16_t size = 1000;
 
     uint8_t start_list[4] = {0};
@@ -156,17 +158,17 @@ void arp_scan_network(
 
         memset(mac_to_get, 0, 6);
 
-        set_arp_request(buffer, &size, start_list);
+        set_arp_request(tx_buffer, &size, start_list);
 
-        send_packet(ethernet, buffer, size);
+        send_packet(ethernet, tx_buffer, size);
 
         uint32_t current_time = furi_get_tick();
 
         while(true) {
-            size = receive_packet(ethernet, buffer, 1500);
+            size = receive_packet(ethernet, rx_buffer, MAX_FRAMELEN);
 
-            if(is_arp(buffer)) {
-                if(get_arp_reply(start_list, mac_to_get, buffer, size)) {
+            if(is_arp(rx_buffer)) {
+                if(get_arp_reply(start_list, mac_to_get, rx_buffer, size)) {
                     memcpy(list[counter].ip, start_list, 4);
                     memcpy(list[counter].mac, mac_to_get, 6);
                     counter++;

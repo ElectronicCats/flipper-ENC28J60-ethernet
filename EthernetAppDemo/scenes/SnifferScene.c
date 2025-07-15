@@ -142,7 +142,7 @@ int32_t sniffer_thread(void* context) {
     bool show_packets = false;
     bool start = enc28j60_start(ethernet) != 0xff;
 
-    uint8_t buffer[1500] = {0};
+    uint8_t* buffer = ethernet->rx_buffer;
     uint16_t packet_len = 0;
     uint32_t packet_counter = 0;
 
@@ -196,7 +196,7 @@ int32_t sniffer_thread(void* context) {
 
     // Start sniffing packets
     while(start && furi_hal_gpio_read(&gpio_button_back)) {
-        packet_len = receive_packet(ethernet, buffer, 1518);
+        packet_len = receive_packet(ethernet, buffer, MAX_FRAMELEN);
 
         if(packet_len) {
             packet_counter++; // add more on the counter

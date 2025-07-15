@@ -1,43 +1,6 @@
 #include "enc28j60.h"
 
 /**
- * To debug the ENC28J60 with it logs
- * this works to know if there something wrong
- * or there something to debug
- */
-
-#define DEBUG_TAG_ENC28J60 "ENC28J60 LIBRARY"
-#define DEBUG_ENC28J60     true
-
-#define enc_info(format, ...) \
-    if(DEBUG_ENC28J60) FURI_LOG_I(DEBUG_TAG_ENC28J60, format, ##__VA_ARGS__)
-
-#define enc_exception(format, ...) \
-    if(DEBUG_ENC28J60) FURI_LOG_E(DEBUG_TAG_ENC28J60, format, ##__VA_ARGS__)
-
-#define enc_warning(format, ...) \
-    if(DEBUG_ENC28J60) FURI_LOG_W(DEBUG_TAG_ENC28J60, format, ##__VA_ARGS__)
-
-#define enc_debug(format, ...) \
-    if(DEBUG_ENC28J60) FURI_LOG_D(DEBUG_TAG_ENC28J60, format, ##__VA_ARGS__)
-
-/**
- * To debug the registers information
- */
-
-#define DEBUG_TAG_REGISTERS "ENC28J60 REGISTERS"
-#define DEBUG_REGISTERS     true
-
-#define reg_debug(format, ...) \
-    if(DEBUG_REGISTERS) FURI_LOG_I(DEBUG_TAG_REGISTERS, format, ##__VA_ARGS__)
-
-#define reg_exception(format, ...) \
-    if(DEBUG_REGISTERS) FURI_LOG_E(DEBUG_TAG_REGISTERS, format, ##__VA_ARGS__)
-
-#define reg_warning(format, ...) \
-    if(DEBUG_REGISTERS) FURI_LOG_W(DEBUG_TAG_REGISTERS, format, ##__VA_ARGS__)
-
-/**
  * To debug the message it lands
  */
 
