@@ -167,7 +167,12 @@ bool process_dora(enc28j60_t* ethernet, uint8_t* static_ip, uint8_t* ip_router) 
 
     enable_broadcast(ethernet);
 
-    while(state != DHCP_OK && state != DHCP_FAIL && is_link_up(ethernet)) {
+    while(!ret && is_link_up(ethernet)) {
+        if(furi_get_tick() > (current_time + 3000)) {
+            printf("FAIL\n");
+            break;
+        }
+
         switch(state) {
         // This state is to send the discover message
         case DHCP_STATE_INIT:
@@ -176,6 +181,8 @@ bool process_dora(enc28j60_t* ethernet, uint8_t* static_ip, uint8_t* ip_router) 
             memset(tx_buffer, 0, MAX_FRAMELEN);
 
             printf("SEND DHCP DISCOVER\n");
+
+            current_time = furi_get_tick();
 
             state = DHCP_STATE_WAITING;
             break;
@@ -188,6 +195,8 @@ bool process_dora(enc28j60_t* ethernet, uint8_t* static_ip, uint8_t* ip_router) 
 
             printf("SEND DHCP REQUEST\n");
 
+            current_time = furi_get_tick();
+
             state = DHCP_STATE_WAITING;
             break;
 
@@ -197,17 +206,21 @@ bool process_dora(enc28j60_t* ethernet, uint8_t* static_ip, uint8_t* ip_router) 
 
             // This part helps to know if it is dhcp offer
             if(is_dhcp(rx_buffer)) {
-                show_message(rx_buffer, length); // To show the message
-
                 if(deconstruct_dhcp_offer(rx_buffer)) {
                     state = DHCP_STATE_REQUEST; // set the state in request
                     memset(rx_buffer, 0, MAX_FRAMELEN);
+                    printf("SEND DHCP OFFER\n");
+
+                    current_time = furi_get_tick();
                 }
 
                 // This part helps to know if it is dhcp acknowledge
                 if(deconstruct_dhcp_ack(rx_buffer)) {
                     state = DHCP_OK; // state ok
+                    printf("SEND DHCP OK\n");
                     ret = true;
+
+                    current_time = furi_get_tick();
                 }
             }
             break;
@@ -221,11 +234,7 @@ bool process_dora(enc28j60_t* ethernet, uint8_t* static_ip, uint8_t* ip_router) 
             break;
         }
 
-        if(furi_get_tick() > (current_time + 1000)) {
-            state = DHCP_FAIL;
-            ret = false;
-        }
-        furi_delay_ms(1);
+        furi_delay_us(10);
     }
 
     disable_broadcast(ethernet);

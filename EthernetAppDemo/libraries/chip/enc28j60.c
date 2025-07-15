@@ -4,7 +4,7 @@
  * To debug the message it lands
  */
 
-#define DEBUG_MESSAGE false
+#define DEBUG_MESSAGE true
 
 void show_message(uint8_t* buffer, uint16_t len) {
     UNUSED(buffer);
@@ -20,6 +20,12 @@ void show_message(uint8_t* buffer, uint16_t len) {
     printf("\n");
 #endif
 }
+
+#define SHOW_PACKETS_RECEIVED 1
+
+#if SHOW_PACKETS_RECEIVED
+#include "../protocol_tools/debug_packets.h"
+#endif
 
 /**
  * Command, registers and mask for the ENC28J60
@@ -614,6 +620,11 @@ uint16_t receive_packet(enc28j60_t* instance, uint8_t* buffer, uint16_t size) {
 
         write_operation(spi, ENC28J60_BIT_FIELD_SET, ECON2, ECON2_PKTDEC);
     }
+
+#if SHOW_PACKETS_RECEIVED
+    analize_packet(buffer, len);
+#endif
+
     return len;
 }
 
