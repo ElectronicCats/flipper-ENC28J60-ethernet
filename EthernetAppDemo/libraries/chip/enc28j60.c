@@ -21,7 +21,7 @@ void show_message(uint8_t* buffer, uint16_t len) {
 #endif
 }
 
-#define SHOW_PACKETS_RECEIVED 1
+#define SHOW_PACKETS_RECEIVED 0
 
 #if SHOW_PACKETS_RECEIVED
 #include "../protocol_tools/debug_packets.h"
@@ -392,16 +392,22 @@ void free_enc28j60(enc28j60_t* instance) {
     free(instance);
 }
 
+void enc28j60_soft_reset(enc28j60_t* instance) {
+    FuriHalSpiBusHandle* spi = instance->spi;
+
+    if(!spi) return;
+
+    write_operation(spi, ENC28J60_SOFT_RESET, 0, ENC28J60_SOFT_RESET);
+
+    furi_delay_ms(2);
+}
+
 // Function to start
 uint8_t enc28j60_start(enc28j60_t* instance) {
     FuriHalSpiBusHandle* spi = instance->spi;
 
     // To know if the SPI is not initialized
     if(!spi) return 0xff;
-
-    write_operation(spi, ENC28J60_SOFT_RESET, 0, ENC28J60_SOFT_RESET);
-
-    furi_delay_ms(2);
 
     uint32_t prev_time = furi_get_tick();
 
@@ -465,7 +471,7 @@ bool is_the_network_connected(enc28j60_t* instance) {
 }
 
 // Send a Ethernet Packet
-/* void send_packet(enc28j60_t* instance, uint8_t* buffer, uint16_t len) {
+void send_packet(enc28j60_t* instance, uint8_t* buffer, uint16_t len) {
     uint8_t retry = 0;
 
     FuriHalSpiBusHandle* spi = instance->spi;
@@ -504,78 +510,6 @@ bool is_the_network_connected(enc28j60_t* instance) {
 
         if(!((read_register_byte(spi, EIR) & EIR_TXERIF) && (tsv[3] & 1 << 5)) || retry > 16) {
             break;
-        }
-
-        retry++;
-    }
-}
- */
-
-// Test Struct for this
-typedef struct {
-    uint8_t bytes[7];
-} transmit_status_vector;
-
-#if ETHERCARD_SEND_PIPELINING
-#define BREAKORCONTINUE \
-    retry = 0;          \
-    continue;
-#else
-#define BREAKORCONTINUE break;
-#endif
-
-// Send EtherPacket (Test)
-void send_packet(enc28j60_t* instance, uint8_t* buffer, uint16_t len) {
-    FuriHalSpiBusHandle* spi = instance->spi;
-    uint8_t retry = 0;
-
-#if ETHERCARD_SEND_PIPELINING
-    goto resume_last_transmission;
-#endif
-    while(1) {
-        write_operation(spi, ENC28J60_BIT_FIELD_SET, ECON1, ECON1_TXRST);
-        write_operation(spi, ENC28J60_BIT_FIELD_CLR, ECON1, ECON1_TXRST);
-        write_operation(spi, ENC28J60_BIT_FIELD_CLR, EIR, EIR_TXERIF | EIR_TXIF);
-
-        // prepare new transmission
-        if(retry == 0) {
-            write_register(spi, EWRPT, TXSTART_INIT);
-            write_register(spi, ETXND, TXSTART_INIT + len);
-            write_operation(spi, ENC28J60_WRITE_BUF_MEM, 0, 0x00);
-            write_buffer(spi, len, buffer);
-        }
-
-        // initiate transmission
-        write_operation(spi, ENC28J60_BIT_FIELD_SET, ECON1, ECON1_TXRTS);
-#if ETHERCARD_SEND_PIPELINING
-        if(retry == 0) return;
-    resume_last_transmission:
-#endif
-        uint16_t count = 0;
-        while((read_register_byte(spi, EIR) & (EIR_TXIF | EIR_TXERIF)) == 0 && ++count < 1000U)
-            ;
-
-        if(!(read_register_byte(spi, EIR) & EIR_TXERIF) && count < 1000U) {
-            // no error; start new transmission
-            BREAKORCONTINUE
-        }
-
-        // cancel previous transmission if stuck
-        write_operation(spi, ENC28J60_BIT_FIELD_CLR, ECON1, ECON1_TXRTS);
-
-#if ETHERCARD_RETRY_LATECOLLISIONS == 0
-        BREAKORCONTINUE
-#endif
-
-        transmit_status_vector tsv;
-        uint16_t etxnd = read_register(spi, ETXND);
-        write_register(spi, ERDPT, etxnd + 1);
-        read_buffer(spi, sizeof(transmit_status_vector), (uint8_t*)&tsv);
-
-        if(!((read_register_byte(spi, EIR) & EIR_TXERIF) &&
-             (tsv.bytes[3] & 1 << 5) /*tsv.transmitLateCollision*/) ||
-           retry > 16) {
-            BREAKORCONTINUE
         }
 
         retry++;
