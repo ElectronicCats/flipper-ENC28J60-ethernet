@@ -81,3 +81,4 @@ void draw_network_not_connected(App* app); // draws if the device is not connect
 void draw_waiting_for_ip(App* app); // Draw when you're waiting for an IP
 void draw_your_ip_is(App* app); // Draw the IP when you got it
 void draw_ip_not_got_it(App* app); // Draw when get the ip failed
+void draw_dora_failed(App* app); // Draw when the DORA process failed

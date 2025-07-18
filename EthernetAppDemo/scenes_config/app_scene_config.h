@@ -32,6 +32,13 @@ ADD_SCENE(app, testing_scene, testing_scene_option)
 ADD_SCENE(app, get_ip_scene, get_ip_option)
 
 /**
+ * Scene to set the IP in the ping Option
+ */
+ADD_SCENE(app, ping_menu_scene, ping_menu_option)
+ADD_SCENE(app, ping_set_ip_scene, ping_set_ip_option)
+ADD_SCENE(app, ping_scene, ping_option)
+
+/**
  * These scenes are for the settings
  */
 ADD_SCENE(app, settings, settings_option)

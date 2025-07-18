@@ -84,3 +84,16 @@ void draw_ip_not_got_it(App* app) {
         FontSecondary,
         furi_string_get_cstr(app->text));
 }
+
+void draw_dora_failed(App* app) {
+    furi_string_reset(app->text);
+    furi_string_cat_printf(app->text, "DORA PROCESS FAILED");
+    widget_add_string_element(
+        app->widget,
+        64,
+        32,
+        AlignCenter,
+        AlignCenter,
+        FontPrimary,
+        furi_string_get_cstr(app->text));
+}
