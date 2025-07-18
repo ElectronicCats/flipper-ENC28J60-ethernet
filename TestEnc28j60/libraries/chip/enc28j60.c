@@ -409,6 +409,8 @@ uint8_t enc28j60_start(enc28j60_t* instance) {
     // To know if the SPI is not initialized
     if(!spi) return 0xff;
 
+    enc28j60_soft_reset(instance); // Soft reset the ENC28J60
+
     uint32_t prev_time = furi_get_tick();
 
     while(!(read_operation(spi, ENC28J60_READ_CTRL_REG, ESTAT) & ESTAT_CLKRDY)) {

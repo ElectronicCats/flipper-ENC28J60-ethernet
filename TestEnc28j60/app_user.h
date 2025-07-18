@@ -13,9 +13,7 @@
 #include <testing_app_icons.h>
 
 #include "libraries/chip/enc28j60.h"
-#include "modules/arp_module.h"
 #include "modules/dhcp_protocol.h"
-#include "modules/ping_module.h"
 
 // Struct for the App
 typedef struct {

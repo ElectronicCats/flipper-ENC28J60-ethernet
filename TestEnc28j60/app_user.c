@@ -55,6 +55,16 @@ int32_t testing_app_app(void* p) {
     UNUSED(p);
 
     App* app = app_alloc();
-    UNUSED(app);
+
+    Gui* gui = furi_record_open(RECORD_GUI);
+
+    view_dispatcher_attach_to_gui(app->view_dispatcher, gui, ViewDispatcherTypeFullscreen);
+
+    scene_manager_next_scene(app->scene_manager, app_scene_test_addon_scene_option);
+
+    view_dispatcher_run(app->view_dispatcher);
+    furi_record_close(RECORD_GUI);
+
+    free_app(app);
     return 0;
 }
