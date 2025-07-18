@@ -128,6 +128,10 @@ void print_arp_info(uint8_t* buffer, uint16_t len) {
     // PROTOCOL LENGTH
     PRINTLN("> PROTOCOL lenght: %02x", arp_header.protocol_length);
 
+    // Operation code
+    PRINTLN(
+        "> OPERATION CODE: %02x%02x", arp_header.operation_code[0], arp_header.operation_code[1]);
+
     // MAC SRC
     PRINT("> MAC SRC: ");
     PRINT_MAC(arp_header.mac_source);
@@ -288,8 +292,10 @@ void analize_packet(uint8_t* buffer, uint16_t len) {
         print_arp_info(buffer, len);
         return;
     } else {
+#if DEBUG_UNKNWON
         PRINTLN("=================UNKNWON MESSAGE ==============================");
         print_payload(buffer + ETHERNET_HEADER_LEN, len - ETHERNET_HEADER_LEN);
+#endif
         return;
     }
 
@@ -302,8 +308,10 @@ void analize_packet(uint8_t* buffer, uint16_t len) {
         print_tcp_info(buffer, len);
         return;
     } else {
+#if DEBUG_UNKNWON
         PRINTLN("=================UNKNWON MESSAGE ==============================");
         print_payload(buffer + ETHERNET_HEADER_LEN, len - ETHERNET_HEADER_LEN);
+#endif
         return;
     }
 

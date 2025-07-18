@@ -21,7 +21,7 @@ void show_message(uint8_t* buffer, uint16_t len) {
 #endif
 }
 
-#define SHOW_PACKETS_RECEIVED 0
+#define SHOW_PACKETS_RECEIVED 1
 
 #if SHOW_PACKETS_RECEIVED
 #include "../protocol_tools/debug_packets.h"

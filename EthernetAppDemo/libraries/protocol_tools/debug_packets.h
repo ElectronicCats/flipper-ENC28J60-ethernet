@@ -4,7 +4,7 @@
 #include <furi.h>
 #include <furi_hal.h>
 
-#define DEBUG_ALL_PACKETS 1
+#define DEBUG_ALL_PACKETS 0
 
 #define PRINT_ALL_PAYLOAD
 
@@ -17,10 +17,10 @@
 #define DEBUG_TCP      1
 #define DEBUG_DHCP     1
 #else
-#define DEBUG_ETHERNET 0
+#define DEBUG_ETHERNET 1
 #define DEBUG_IPV4     0
 #define DEBUG_ICMP     0
-#define DEBUG_ARP      0
+#define DEBUG_ARP      1
 #define DEBUG_UDP      0
 #define DEBUG_TCP      0
 #define DEBUG_DHCP     0
@@ -53,6 +53,8 @@
 #if DEBUG_DHCP
 #define DEBUG_DHCP_PAYLOAD 0
 #endif
+
+#define DEBUG_UNKNWON 0
 
 void analize_packet(uint8_t* buffer, uint16_t len);
 void show_packet(uint8_t* buffer, uint16_t len);
