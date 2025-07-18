@@ -46,9 +46,14 @@ int32_t get_ip_thread(void* context) {
 
     enc28j60_t* ethernet = app->ethernet;
 
-    bool start = enc28j60_start(ethernet) != 0xff; // To know if the enc28j60 is connected
-
     bool ip_gotten = false;
+
+    bool start = app->enc28j60_connected;
+
+    if(!start) {
+        start = enc28j60_start(ethernet) != 0xff; // Start the enc28j60
+        app->enc28j60_connected = start; // Update the connection status
+    }
 
     if(!start) {
         draw_device_no_connected(app); // Display if the device is not connected

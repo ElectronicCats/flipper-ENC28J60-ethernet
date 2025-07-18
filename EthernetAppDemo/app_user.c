@@ -92,6 +92,10 @@ App* app_alloc() {
 
     make_paths(app);
 
+    enc28j60_soft_reset(app->ethernet); // Soft reset the enc28j60
+    app->enc28j60_connected = enc28j60_start(app->ethernet) !=
+                              0xff; // To know if the enc28j60 is connected
+
     return app;
 }
 

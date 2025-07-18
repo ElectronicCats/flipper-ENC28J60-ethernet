@@ -140,11 +140,17 @@ int32_t sniffer_thread(void* context) {
     enc28j60_t* ethernet = app->ethernet;
     // bool draw_once = true;
     bool show_packets = false;
-    bool start = enc28j60_start(ethernet) != 0xff;
 
     uint8_t* buffer = ethernet->rx_buffer;
     uint16_t packet_len = 0;
     uint32_t packet_counter = 0;
+
+    bool start = app->enc28j60_connected;
+
+    if(!start) {
+        start = enc28j60_start(ethernet) != 0xff; // Start the enc28j60
+        app->enc28j60_connected = start; // Update the connection status
+    }
 
     if(!start) {
         draw_device_no_connected(app); // Draw if the dvice is not connected
