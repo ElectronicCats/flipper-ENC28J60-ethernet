@@ -86,6 +86,7 @@ void draw_ip_not_got_it(App* app) {
 }
 
 void draw_dora_failed(App* app) {
+    widget_reset(app->widget);
     furi_string_reset(app->text);
     furi_string_cat_printf(app->text, "DORA PROCESS FAILED");
     widget_add_string_element(

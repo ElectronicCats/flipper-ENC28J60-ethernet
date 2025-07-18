@@ -248,8 +248,9 @@ int32_t ping_thread(void* context) {
     uint32_t last_time = furi_get_tick();
 
     // Change view to disconnected device
-    if(!start_ping || !is_connected) {
+    if(!is_connected) {
         view_dispatcher_send_custom_event(app->view_dispatcher, 0);
+        goto finalize;
     }
 
     // Get link up to the LAN
@@ -260,6 +261,7 @@ int32_t ping_thread(void* context) {
     // Change view to network not connected
     if(!start_ping) {
         view_dispatcher_send_custom_event(app->view_dispatcher, 1);
+        goto finalize;
     }
 
     // Do process Dora to get the IP gateway, and set our IP
@@ -268,6 +270,7 @@ int32_t ping_thread(void* context) {
     // If the process Dora failed, we will not continue
     if(!start_ping) {
         view_dispatcher_send_custom_event(app->view_dispatcher, 2);
+        goto finalize;
     }
 
     // Get the MAC gateway
@@ -305,6 +308,8 @@ int32_t ping_thread(void* context) {
         }
         furi_delay_ms(1);
     }
+
+finalize:
 
     return 0;
 }
