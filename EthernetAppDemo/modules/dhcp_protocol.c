@@ -159,54 +159,68 @@ bool process_dora(enc28j60_t* ethernet, uint8_t* static_ip, uint8_t* ip_router) 
 
     memcpy(MAC_ADDRESS, ethernet->mac_address, 6);
 
-    uint8_t buffer[1500] = {0};
+    uint8_t* tx_buffer = ethernet->tx_buffer;
+    uint8_t* rx_buffer = ethernet->rx_buffer;
     uint16_t length = 0;
 
     state_dora_t state = DHCP_STATE_INIT;
 
     enable_broadcast(ethernet);
 
-    while(state != DHCP_OK && state != DHCP_FAIL && is_link_up(ethernet)) {
+    while(!ret && is_link_up(ethernet)) {
+        if(furi_get_tick() > (current_time + 3000)) {
+            printf("FAIL\n");
+            break;
+        }
+
         switch(state) {
         // This state is to send the discover message
         case DHCP_STATE_INIT:
-            set_dhcp_discover_message(buffer, &length);
-            send_packet(ethernet, buffer, length);
-            memset(buffer, 0, 1500);
+            set_dhcp_discover_message(tx_buffer, &length);
+            send_packet(ethernet, tx_buffer, length);
+            memset(tx_buffer, 0, MAX_FRAMELEN);
 
             printf("SEND DHCP DISCOVER\n");
+
+            current_time = furi_get_tick();
 
             state = DHCP_STATE_WAITING;
             break;
 
         // This state is to send the request message
         case DHCP_STATE_REQUEST:
-            set_dhcp_request_message(buffer, &length);
-            send_packet(ethernet, buffer, length);
-            memset(buffer, 0, 1500);
+            set_dhcp_request_message(tx_buffer, &length);
+            send_packet(ethernet, tx_buffer, length);
+            memset(tx_buffer, 0, MAX_FRAMELEN);
 
             printf("SEND DHCP REQUEST\n");
+
+            current_time = furi_get_tick();
 
             state = DHCP_STATE_WAITING;
             break;
 
         // It will waiting for a dhcp message, any of offer or
         case DHCP_STATE_WAITING:
-            length = receive_packet(ethernet, buffer, 1500);
+            length = receive_packet(ethernet, rx_buffer, MAX_FRAMELEN);
 
             // This part helps to know if it is dhcp offer
-            if(is_dhcp(buffer)) {
-                show_message(buffer, length); // To show the message
-
-                if(deconstruct_dhcp_offer(buffer)) {
+            if(is_dhcp(rx_buffer)) {
+                if(deconstruct_dhcp_offer(rx_buffer)) {
                     state = DHCP_STATE_REQUEST; // set the state in request
-                    memset(buffer, 0, 1500);
+                    memset(rx_buffer, 0, MAX_FRAMELEN);
+                    printf("SEND DHCP OFFER\n");
+
+                    current_time = furi_get_tick();
                 }
 
                 // This part helps to know if it is dhcp acknowledge
-                if(deconstruct_dhcp_ack(buffer)) {
+                if(deconstruct_dhcp_ack(rx_buffer)) {
                     state = DHCP_OK; // state ok
+                    printf("SEND DHCP OK\n");
                     ret = true;
+
+                    current_time = furi_get_tick();
                 }
             }
             break;
@@ -220,11 +234,7 @@ bool process_dora(enc28j60_t* ethernet, uint8_t* static_ip, uint8_t* ip_router) 
             break;
         }
 
-        if(furi_get_tick() > (current_time + 1000)) {
-            state = DHCP_FAIL;
-            ret = false;
-        }
-        furi_delay_ms(1);
+        furi_delay_us(10);
     }
 
     disable_broadcast(ethernet);

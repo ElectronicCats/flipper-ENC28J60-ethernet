@@ -75,7 +75,7 @@ void app_scene_read_pcap_on_exit(void* context) {
 int32_t thread_read_pcaps(void* context) {
     App* app = (App*)context;
 
-    uint8_t buffer[1518];
+    uint8_t* buffer = app->ethernet->tx_buffer;
 
     uint32_t len = 0;
 

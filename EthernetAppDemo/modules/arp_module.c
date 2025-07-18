@@ -133,10 +133,14 @@ void arp_scan_network(
     uint8_t init_ip[4],
     uint8_t* list_count,
     uint8_t range) {
+    printf("ARP SCAN STARTED ==========================================\n");
+
     arp_set_my_mac_address(own_mac);
     arp_set_my_ip_address(own_ip);
 
-    uint8_t buffer[1000] = {0};
+    uint8_t* tx_buffer = ethernet->tx_buffer;
+    uint8_t* rx_buffer = ethernet->rx_buffer;
+
     uint16_t size = 1000;
 
     uint8_t start_list[4] = {0};
@@ -156,17 +160,29 @@ void arp_scan_network(
 
         memset(mac_to_get, 0, 6);
 
-        set_arp_request(buffer, &size, start_list);
+        set_arp_request(tx_buffer, &size, start_list);
 
-        send_packet(ethernet, buffer, size);
+        send_packet(ethernet, tx_buffer, size);
 
         uint32_t current_time = furi_get_tick();
 
         while(true) {
-            size = receive_packet(ethernet, buffer, 1500);
+            size = receive_packet(ethernet, rx_buffer, MAX_FRAMELEN);
 
-            if(is_arp(buffer)) {
-                if(get_arp_reply(start_list, mac_to_get, buffer, size)) {
+            if(is_arp(rx_buffer)) {
+                if(get_arp_reply(own_ip, mac_to_get, rx_buffer, size)) {
+                    printf(
+                        "==================\nIP: %u.%u.%u.%u MAC: %02x:%02x:%02x:%02x:%02x:%02x\n===================\n",
+                        start_list[0],
+                        start_list[1],
+                        start_list[2],
+                        start_list[3],
+                        mac_to_get[0],
+                        mac_to_get[1],
+                        mac_to_get[2],
+                        mac_to_get[3],
+                        mac_to_get[4],
+                        mac_to_get[5]);
                     memcpy(list[counter].ip, start_list, 4);
                     memcpy(list[counter].mac, mac_to_get, 6);
                     counter++;

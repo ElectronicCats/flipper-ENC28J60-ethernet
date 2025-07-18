@@ -162,7 +162,7 @@ bool process_ping_response(
     uint32_t last_time = furi_get_tick();
 
     // Generate packet to received
-    uint8_t packet_to_received[250] = {0}; // 250 bytes, the message is not to long
+    uint8_t* packet_to_received = ethernet->rx_buffer;
 
     // Set in promiscous mode
     enable_promiscuous(ethernet);

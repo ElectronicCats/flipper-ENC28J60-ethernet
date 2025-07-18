@@ -104,7 +104,7 @@ int32_t arpspoofing_thread(void* context) {
     App* app = (App*)context;
 
     enc28j60_t* ethernet = app->ethernet;
-    uint8_t buffer[1500] = {0};
+    uint8_t* buffer = ethernet->tx_buffer;
     uint16_t size = 0;
 
     uint32_t last_time = 0;
@@ -115,12 +115,18 @@ int32_t arpspoofing_thread(void* context) {
     view_dispatcher_switch_to_view(
         app->view_dispatcher, WidgetView); // Switch view for the view dispatcher
 
-    bool start = enc28j60_start(ethernet) != 0xff; // To know if the enc28j60 is connected
-    bool program_loop = start; // This variable will help for the loop
-
     bool attack = false; // variable for the attacking
 
     bool show_once = true; // To display a view once
+
+    bool start = app->enc28j60_connected;
+
+    if(!start) {
+        start = enc28j60_start(ethernet) != 0xff; // Start the enc28j60
+        app->enc28j60_connected = start; // Update the connection status
+    }
+
+    bool program_loop = start; // This variable will help for the loop
 
     if(!is_the_network_connected(ethernet) && start) {
         draw_network_not_connected(app);

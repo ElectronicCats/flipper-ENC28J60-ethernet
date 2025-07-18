@@ -66,7 +66,7 @@ int32_t testing_thread(void* context) {
     uint16_t data_len = strlen(ping_data);
 
     enc28j60_t* ethernet = app->ethernet;
-    uint8_t packet_to_send[1500] = {0};
+    uint8_t* packet_to_send = ethernet->tx_buffer;
     uint16_t packet_size = 0;
 
     bool is_connected = enc28j60_start(ethernet) != 0xff;
