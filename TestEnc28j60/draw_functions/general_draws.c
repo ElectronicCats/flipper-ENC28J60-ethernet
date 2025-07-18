@@ -32,20 +32,14 @@ void draw_waiting_for_ip(App* app) {
 }
 
 // Function to draw when a Ip is got it
-void draw_your_ip_is(App* app) {
+void draw_your_ip_is(App* app, uint8_t* ip) {
     widget_reset(app->widget);
     widget_add_string_element(
         app->widget, 64, 20, AlignCenter, AlignCenter, FontPrimary, "Your IP is: ");
 
     furi_string_reset(app->text);
 
-    furi_string_cat_printf(
-        app->text,
-        "%u:%u:%u:%u",
-        app->ip_device[0],
-        app->ip_device[1],
-        app->ip_device[2],
-        app->ip_device[3]);
+    furi_string_cat_printf(app->text, "%u:%u:%u:%u", ip[0], ip[1], ip[2], ip[3]);
 
     widget_add_string_element(
         app->widget,
@@ -58,7 +52,7 @@ void draw_your_ip_is(App* app) {
 }
 
 // Draw if you didnt got it the IP address
-void draw_ip_not_got_it(App* app) {
+void draw_ip_not_got_it(App* app, uint8_t* ip) {
     widget_reset(app->widget);
     widget_add_string_element(
         app->widget, 64, 15, AlignCenter, AlignCenter, FontPrimary, "IP didnt got it");
@@ -67,13 +61,7 @@ void draw_ip_not_got_it(App* app) {
 
     furi_string_reset(app->text);
 
-    furi_string_cat_printf(
-        app->text,
-        "%u:%u:%u:%u",
-        app->ip_device[0],
-        app->ip_device[1],
-        app->ip_device[2],
-        app->ip_device[3]);
+    furi_string_cat_printf(app->text, "%u:%u:%u:%u", ip[0], ip[1], ip[2], ip[3]);
 
     widget_add_string_element(
         app->widget,
