@@ -343,5 +343,16 @@ bool arp_reply_requested(enc28j60_t* ethernet, uint8_t* buffer, uint8_t* dst_ip)
 
     send_packet(ethernet, buffer_reply, ETHERNET_HEADER_LEN + ARP_LEN);
 
+    printf(
+        "ARP REPLY FROM: %02x:%02x:%02x:%02x:%02x:%02x\n",
+        my_mac[0],
+        my_mac[1],
+        my_mac[2],
+        my_mac[3],
+        my_mac[4],
+        my_mac[5]);
+
+    printf("ARP REPLY TO: %u.%u.%u.%u\n", my_ip[0], my_ip[1], my_ip[2], my_ip[3]);
+
     return true;
 }
