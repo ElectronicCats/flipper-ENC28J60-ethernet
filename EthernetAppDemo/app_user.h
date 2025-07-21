@@ -37,8 +37,6 @@
 
 // Struct for the App
 typedef struct {
-    uint8_t mac_device[6];
-    uint8_t ip_device[4];
     arp_list ip_list[255];
 
     bool enc28j60_connected; // To know if the enc28j60 is connected

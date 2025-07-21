@@ -51,12 +51,12 @@ void app_scene_settings_on_enter(void* context) {
     furi_string_cat_printf(
         app->text,
         "MAC [%02x:%02x:%02x:%02x:%02x:%02x]",
-        app->mac_device[0],
-        app->mac_device[1],
-        app->mac_device[2],
-        app->mac_device[3],
-        app->mac_device[4],
-        app->mac_device[5]);
+        app->ethernet->mac_address[0],
+        app->ethernet->mac_address[1],
+        app->ethernet->mac_address[2],
+        app->ethernet->mac_address[3],
+        app->ethernet->mac_address[4],
+        app->ethernet->mac_address[5]);
 
     // Add the Item to set the MAC address of the device
     submenu_add_item(
@@ -71,10 +71,10 @@ void app_scene_settings_on_enter(void* context) {
     furi_string_cat_printf(
         app->text,
         "IP [%u:%u:%u:%0u]",
-        app->ip_device[0],
-        app->ip_device[1],
-        app->ip_device[2],
-        app->ip_device[3]);
+        app->ethernet->ip_address[0],
+        app->ethernet->ip_address[1],
+        app->ethernet->ip_address[2],
+        app->ethernet->ip_address[3]);
 
     // Add the Item to set the IP address of the device
     submenu_add_item(
@@ -112,7 +112,7 @@ void callback_random_mac(void* context, uint32_t index) {
 
     UNUSED(index);
 
-    generate_random_mac(app->mac_device);
+    generate_random_mac(app->ethernet->mac_address);
     scene_manager_previous_scene(app->scene_manager);
 }
 
@@ -211,14 +211,24 @@ void settings_input_byte_address(void* context) {
 void mac_set_address_view(App* app) {
     byte_input_set_header_text(app->input_byte_value, "MAC ADDRESS");
     byte_input_set_result_callback(
-        app->input_byte_value, settings_input_byte_address, NULL, app, app->mac_device, 6);
+        app->input_byte_value,
+        settings_input_byte_address,
+        NULL,
+        app,
+        app->ethernet->mac_address,
+        6);
 }
 
 // Function to set the IP address
 void ip_set_address_view(App* app) {
     byte_input_set_header_text(app->input_byte_value, "IP ADDRESS");
     byte_input_set_result_callback(
-        app->input_byte_value, settings_input_byte_address, NULL, app, app->ip_device, 4);
+        app->input_byte_value,
+        settings_input_byte_address,
+        NULL,
+        app,
+        app->ethernet->ip_address,
+        4);
 }
 
 // Function on enter when the user needs to set the IP or the MAC address

@@ -21,11 +21,12 @@
 typedef struct {
     FuriHalSpiBusHandle* spi;
     uint8_t mac_address[6];
+    uint8_t ip_address[4];
     uint8_t tx_buffer[MAX_FRAMELEN];
     uint8_t rx_buffer[MAX_FRAMELEN];
 } enc28j60_t;
 
-enc28j60_t* enc28j60_alloc(uint8_t* mac_address);
+enc28j60_t* enc28j60_alloc(uint8_t* mac_address, uint8_t* ip_address);
 void free_enc28j60(enc28j60_t* instance);
 void enc28j60_soft_reset(enc28j60_t* instance);
 uint8_t enc28j60_start(enc28j60_t* instance);

@@ -82,13 +82,7 @@ App* app_alloc() {
     app->file = storage_file_alloc(app->storage);
 
     // Alloc the memory for the enc28j60 instance
-    app->ethernet = enc28j60_alloc(app->mac_device);
-
-    // Copy the MAC Address by default
-    memcpy(app->mac_device, MAC_INITIAL, 6);
-
-    // Copy the IP Address by default
-    memcpy(app->ip_device, IP_DEFAULT, 4);
+    app->ethernet = enc28j60_alloc(MAC_INITIAL, IP_DEFAULT);
 
     make_paths(app);
 

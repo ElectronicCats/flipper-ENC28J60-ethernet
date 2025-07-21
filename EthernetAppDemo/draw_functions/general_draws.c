@@ -42,10 +42,10 @@ void draw_your_ip_is(App* app) {
     furi_string_cat_printf(
         app->text,
         "%u:%u:%u:%u",
-        app->ip_device[0],
-        app->ip_device[1],
-        app->ip_device[2],
-        app->ip_device[3]);
+        app->ethernet->ip_address[0],
+        app->ethernet->ip_address[1],
+        app->ethernet->ip_address[2],
+        app->ethernet->ip_address[3]);
 
     widget_add_string_element(
         app->widget,
@@ -70,10 +70,10 @@ void draw_ip_not_got_it(App* app) {
     furi_string_cat_printf(
         app->text,
         "%u:%u:%u:%u",
-        app->ip_device[0],
-        app->ip_device[1],
-        app->ip_device[2],
-        app->ip_device[3]);
+        app->ethernet->ip_address[0],
+        app->ethernet->ip_address[1],
+        app->ethernet->ip_address[2],
+        app->ethernet->ip_address[3]);
 
     widget_add_string_element(
         app->widget,

@@ -265,7 +265,7 @@ int32_t ping_thread(void* context) {
     }
 
     // Do process Dora to get the IP gateway, and set our IP
-    start_ping = process_dora(ethernet, app->ip_device, ip_gate_way);
+    start_ping = process_dora(ethernet, app->ethernet->ip_address, ip_gate_way);
 
     // If the process Dora failed, we will not continue
     if(!start_ping) {
@@ -274,8 +274,8 @@ int32_t ping_thread(void* context) {
     }
 
     // Get the MAC gateway
-    if(!arp_get_specific_mac(ethernet, app->ip_device, ip_gate_way, mac_to_send) && start_ping &&
-       is_connected) {
+    if(!arp_get_specific_mac(ethernet, app->ethernet->ip_address, ip_gate_way, mac_to_send) &&
+       start_ping && is_connected) {
         start_ping = false;
     }
 
@@ -283,9 +283,9 @@ int32_t ping_thread(void* context) {
     if(start_ping && is_connected) {
         packet_size = create_flipper_ping_packet(
             packet_to_send,
-            app->mac_device,
+            app->ethernet->mac_address,
             mac_to_send,
-            app->ip_device,
+            app->ethernet->ip_address,
             ip_ping,
             1,
             1,

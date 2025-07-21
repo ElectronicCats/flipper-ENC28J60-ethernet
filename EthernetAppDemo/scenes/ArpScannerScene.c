@@ -225,7 +225,13 @@ int32_t arp_scanner_thread(void* context) {
 
     if(start) {
         arp_scan_network(
-            ethernet, app->ip_list, app->mac_device, app->ip_device, ip_start, &total_ip, count_ip);
+            ethernet,
+            app->ip_list,
+            app->ethernet->mac_address,
+            app->ethernet->ip_address,
+            ip_start,
+            &total_ip,
+            count_ip);
 
         submenu_reset(app->submenu);
         view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);

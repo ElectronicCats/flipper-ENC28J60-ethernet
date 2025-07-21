@@ -67,7 +67,8 @@ int32_t get_ip_thread(void* context) {
     if(start) {
         draw_waiting_for_ip(app);
         furi_delay_ms(10);
-        ip_gotten = process_dora(ethernet, app->ip_device, router_ip); // start the process DORA
+        ip_gotten =
+            process_dora(ethernet, app->ethernet->ip_address, router_ip); // start the process DORA
     }
 
     if(ip_gotten && start) {

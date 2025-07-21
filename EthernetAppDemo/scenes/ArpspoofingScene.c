@@ -149,7 +149,7 @@ int32_t arpspoofing_thread(void* context) {
             // Get the IP
             if(!furi_hal_gpio_read(&gpio_button_right)) {
                 draw_waiting_for_ip(app);
-                process_dora(ethernet, app->ip_device, gateway_ip);
+                process_dora(ethernet, app->ethernet->ip_address, gateway_ip);
                 break;
             }
 
@@ -164,7 +164,7 @@ int32_t arpspoofing_thread(void* context) {
     if(program_loop) {
         draw_your_ip_is(app);
         furi_delay_ms(1000);
-        set_arp_message_for_attack_all(buffer, app->mac_device, gateway_ip, &size);
+        set_arp_message_for_attack_all(buffer, app->ethernet->mac_address, gateway_ip, &size);
         last_time = furi_get_tick();
     }
 
