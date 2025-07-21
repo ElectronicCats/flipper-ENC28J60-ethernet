@@ -137,6 +137,7 @@ bool is_the_ping_packet(uint8_t* packet, uint8_t* ip_ping) {
 
 // Process to send and get the ping packets
 // This only reads if the packet comes from the IP indicated
+// Just send every 1000 ms
 bool process_ping_response(
     enc28j60_t* ethernet,
     uint8_t* ping_packet,
@@ -149,14 +150,6 @@ bool process_ping_response(
 
     // Send the ping packet
     send_packet(ethernet, ping_packet, ping_packet_size);
-
-    printf("Message to send\n");
-
-    for(uint16_t i = 0; i < ping_packet_size; i++) {
-        printf("%02x ", ping_packet[i]);
-    }
-
-    printf("\n");
 
     // Time to get the last time
     uint32_t last_time = furi_get_tick();

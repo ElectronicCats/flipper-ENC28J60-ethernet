@@ -17,9 +17,9 @@
 #define DEBUG_TCP      1
 #define DEBUG_DHCP     1
 #else
-#define DEBUG_ETHERNET 1
+#define DEBUG_ETHERNET 0
 #define DEBUG_IPV4     0
-#define DEBUG_ICMP     1
+#define DEBUG_ICMP     0
 #define DEBUG_ARP      0
 #define DEBUG_UDP      0
 #define DEBUG_TCP      0
@@ -39,7 +39,7 @@
 #endif
 
 #if DEBUG_ICMP
-#define DEBUG_ICMP_PAYLOAD 1
+#define DEBUG_ICMP_PAYLOAD 0
 #endif
 
 #if DEBUG_UDP

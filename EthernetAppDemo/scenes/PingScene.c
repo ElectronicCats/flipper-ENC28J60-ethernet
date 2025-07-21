@@ -299,7 +299,6 @@ int32_t ping_thread(void* context) {
     while(start_ping && is_connected && furi_hal_gpio_read(&gpio_button_back)) {
         if((furi_get_tick() - last_time) > 1000) {
             if(process_ping_response(ethernet, packet_to_send, packet_size, ip_ping)) {
-                printf("Se hizo ping\n");
                 ping_responses++;
             }
             messages_sent++;
