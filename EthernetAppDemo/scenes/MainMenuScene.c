@@ -80,6 +80,11 @@ void app_scene_main_menu_on_enter(void* context) {
     static bool is_logo_shown = false;
     if(!is_logo_shown) draw_start(app);
 
+    if(furi_thread_is_suspended(furi_thread_get_id(app->thread))) {
+        printf("Suspendido\n");
+        furi_thread_resume(furi_thread_get_id(app->thread));
+    }
+
     is_logo_shown = true;
 
     submenu_reset(app->submenu);
@@ -87,15 +92,15 @@ void app_scene_main_menu_on_enter(void* context) {
 
     // submenu_add_item(app->submenu, "Option 1", TESTING_OPTION, main_menu_options_callback, app);
 
-    // submenu_add_item(app->submenu, "Sniffer", SNIFFING_OPTION, main_menu_options_callback, app);
-    // submenu_add_item(
-    //     app->submenu, "Read Pcaps", READ_PCAPS_OPTION, main_menu_options_callback, app);
+    submenu_add_item(app->submenu, "Sniffer", SNIFFING_OPTION, main_menu_options_callback, app);
+    submenu_add_item(
+        app->submenu, "Read Pcaps", READ_PCAPS_OPTION, main_menu_options_callback, app);
     // submenu_add_item(
     //     app->submenu, "ARP Actions", ARP_ACTIONS_OPTION, main_menu_options_callback, app);
 
     // submenu_add_item(app->submenu, "Do Ping", PING_OPTION, main_menu_options_callback, app);
     submenu_add_item(app->submenu, "Settings", SETTINGS_OPTION, main_menu_options_callback, app);
-    // submenu_add_item(app->submenu, "About Us", ABOUT_US, main_menu_options_callback, app);
+    submenu_add_item(app->submenu, "About Us", ABOUT_US, main_menu_options_callback, app);
 
     submenu_set_selected_item(app->submenu, 0);
 

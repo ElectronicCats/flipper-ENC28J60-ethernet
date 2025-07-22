@@ -17,11 +17,13 @@ uint8_t gateway_ip_testing[4] = {192, 168, 0, 1};
 void app_scene_testing_scene_on_enter(void* context) {
     App* app = (App*)context;
 
-    // Allocate and start the thread
-    // app->thread = furi_thread_alloc_ex("TESTING", 10 * 1024, testing_thread, app);
-    // furi_thread_start(app->thread);
+    // Suspend thread
+    furi_thread_suspend(furi_thread_get_id(app->thread));
 
-    // furi_thread_flags_set(furi_thread_get_id(app->thread), flag_shake);
+    // Init other thread
+    app->thread_alternative =
+        furi_thread_alloc_ex("Sniffer Therad", 10 * 1024, testing_thread, app);
+    furi_thread_start(app->thread_alternative);
 
     // Reset the widget and switch view
     widget_reset(app->widget);
@@ -58,8 +60,8 @@ void app_scene_testing_scene_on_exit(void* context) {
     UNUSED(app);
 
     // Join and free the thread
-    // furi_thread_join(app->thread);
-    // furi_thread_free(app->thread);
+    furi_thread_join(app->thread_alternative);
+    furi_thread_free(app->thread_alternative);
 }
 
 /**
@@ -72,44 +74,18 @@ void app_scene_testing_scene_on_exit(void* context) {
 
 int32_t testing_thread(void* context) {
     App* app = (App*)context;
+    UNUSED(app);
 
-    printf("Testing thread started\n");
-
-    uint16_t lenght = 0;
-
-    bool start = process_dora(app->ethernet, app->ethernet->ip_address, gateway_ip_testing);
-
-    // bool do_ping = false;
-
-    if(start) {
-        printf("DORA process started successfully\n");
-        printf(
-            "Your IP is: %u.%u.%u.%u\n",
-            app->ethernet->ip_address[0],
-            app->ethernet->ip_address[1],
-            app->ethernet->ip_address[2],
-            app->ethernet->ip_address[3]);
-    } else {
-        printf("DORA process failed\n");
-    }
+    uint32_t timeout = furi_get_tick();
 
     while(furi_hal_gpio_read(&gpio_button_back)) {
-        lenght = receive_packet(app->ethernet, app->ethernet->rx_buffer, MAX_FRAMELEN);
-
-        // if(!furi_hal_gpio_read(&gpio_button_ok)) {
-        //     while(!furi_hal_gpio_read(&gpio_button_left))
-        //         furi_delay_ms(1);
-        // }
-        if(lenght) {
-            if(arp_reply_requested(
-                   app->ethernet, app->ethernet->rx_buffer, app->ethernet->ip_address)) {
-                printf("ARP reply requested\n");
-            }
+        if((furi_get_tick() - timeout) > 1000) {
+            printf("HOLA Desde Thread alternativo\n");
+            timeout = furi_get_tick();
         }
 
         furi_delay_ms(1); // Delay to avoid busy loop
     }
 
-    UNUSED(app);
     return 0;
 }

@@ -81,6 +81,9 @@ App* app_alloc() {
     // Alloc the file storage
     app->file = storage_file_alloc(app->storage);
 
+    // Alloc the mutex
+    // app->mutex = furi_mutex_alloc(FuriMutexTypeNormal);
+
     // Alloc the memory for the enc28j60 instance
     app->ethernet = enc28j60_alloc(MAC_INITIAL, IP_DEFAULT);
 
@@ -101,6 +104,8 @@ void app_free(App* app) {
 
     furi_thread_join(app->thread);
     furi_thread_free(app->thread);
+
+    // furi_mutex_free(app->mutex);
 
     //  Free all the views from the View Dispatcher
     view_dispatcher_remove_view(app->view_dispatcher, SubmenuView);

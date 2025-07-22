@@ -9,9 +9,15 @@ int32_t ethernet_thread(void* context) {
     UNUSED(app);
 
     uint32_t event = 0;
+    uint16_t packet_len = 0;
+
+    UNUSED(packet_len);
 
     enc28j60_t* ethernet = app->ethernet;
-    // uint8_t* buffer = ethernet->tx_buffer;
+    uint8_t* buffer = ethernet->tx_buffer;
+
+    // uint32_t timeout = furi_get_tick();
+    // uint32_t counter = 0;
 
     while(running) {
         furi_delay_ms(1);
@@ -22,12 +28,12 @@ int32_t ethernet_thread(void* context) {
 
         // First check if the app gonna stop
         if(event == flag_stop) {
-            running = false;
+            break;
         }
 
         // Check if the ethernet is link up
         if(is_link_up(ethernet)) {
-            // Pass by the moment
+            packet_len = receive_packet(ethernet, buffer, MAX_FRAMELEN);
         } else {
             if(event) view_dispatcher_send_custom_event(app->view_dispatcher, IS_NOT_LINK_UP);
             event = 0;
@@ -42,9 +48,13 @@ int32_t ethernet_thread(void* context) {
             }
         }
 
-        // Here I need to put this thread on pause
-        if(event == flag_sniffer) {
-        }
+        // If option is ARP ATTACK
+
+        // if((furi_get_tick() - timeout) > 1000) {
+        //     counter++;
+        //     printf("HOLA Desde Thread central contador: %lu\n", counter);
+        //     timeout = furi_get_tick();
+        // }
 
         // furi_thread_flags_clear(ALL_FLAGS);
     }

@@ -38,16 +38,14 @@
 // Create flags
 typedef enum {
     flag_stop = 1,
-    flag_sniffer,
     flag_arp_spoofing,
     flag_arp_scanner,
     flag_arp_ping,
     flag_dhcp_dora,
 } ethernet_app_flags_t;
 
-#define ALL_FLAGS                                                                      \
-    (flag_stop | flag_sniffer | flag_arp_spoofing | flag_arp_scanner | flag_arp_ping | \
-     flag_dhcp_dora)
+#define ALL_FLAGS \
+    (flag_stop | flag_arp_spoofing | flag_arp_scanner | flag_arp_ping | flag_dhcp_dora)
 
 #define MASK_FLAGS 0xfffffffe
 
@@ -85,8 +83,10 @@ typedef struct {
 
     FuriString* text; // String for general use
     FuriString* path; // String to get path from file browser
+
     FuriThread* thread; // For the threads
-    FuriThread* thread_sniffer; // For the threads
+    FuriThread* thread_alternative; // For the threads
+    // FuriMutex* mutex;
 } App;
 
 // Views in the App

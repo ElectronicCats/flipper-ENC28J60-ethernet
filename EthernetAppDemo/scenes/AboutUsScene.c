@@ -8,8 +8,8 @@ void app_scene_about_us_on_enter(void* context) {
     App* app = (App*)context;
 
     // Allocate and start the thread
-    app->thread = furi_thread_alloc_ex("About Us", 3 * 1024, about_us_thread, app);
-    furi_thread_start(app->thread);
+    app->thread_alternative = furi_thread_alloc_ex("About Us", 3 * 1024, about_us_thread, app);
+    furi_thread_start(app->thread_alternative);
 
     // Reset the widget and switch view
     widget_reset(app->widget);
@@ -33,8 +33,8 @@ void app_scene_about_us_on_exit(void* context) {
     UNUSED(app);
 
     // Join and free the thread
-    furi_thread_join(app->thread);
-    furi_thread_free(app->thread);
+    furi_thread_join(app->thread_alternative);
+    furi_thread_free(app->thread_alternative);
 }
 
 /**
