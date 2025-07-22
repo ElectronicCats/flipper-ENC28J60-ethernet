@@ -57,6 +57,8 @@ void app_scene_sniffer_on_exit(void* context) {
     // Join and free the thread
     furi_thread_join(app->thread_alternative);
     furi_thread_free(app->thread_alternative);
+
+    furi_thread_resume(furi_thread_get_id(app->thread));
 }
 
 /**

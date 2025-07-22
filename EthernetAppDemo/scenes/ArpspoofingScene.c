@@ -6,17 +6,15 @@
  * views for not use many scenes and avoid to define many
  */
 
-// The Gateway IP
-uint8_t gateway_ip[4] = {192, 168, 0, 1};
-
 // ArpSpoofing thread
 int32_t arpspoofing_thread(void* context);
 
 // ArpSpoofing on enter
 void app_scene_arp_spoofing_on_enter(void* context) {
     App* app = (App*)context;
-    app->thread = furi_thread_alloc_ex("ArpSpoofing", 10 * 1024, arpspoofing_thread, app);
-    furi_thread_start(app->thread);
+    app->thread_alternative =
+        furi_thread_alloc_ex("ArpSpoofing", 10 * 1024, arpspoofing_thread, app);
+    furi_thread_start(app->thread_alternative);
 }
 
 // ArpSpoofing on event
@@ -31,8 +29,8 @@ bool app_scene_arp_spoofing_on_event(void* context, SceneManagerEvent event) {
 // ArpSpoofing on exit
 void app_scene_arp_spoofing_on_exit(void* context) {
     App* app = (App*)context;
-    furi_thread_join(app->thread);
-    furi_thread_free(app->thread);
+    furi_thread_join(app->thread_alternative);
+    furi_thread_free(app->thread_alternative);
 }
 
 /**
@@ -104,7 +102,7 @@ int32_t arpspoofing_thread(void* context) {
     App* app = (App*)context;
 
     enc28j60_t* ethernet = app->ethernet;
-    uint8_t* buffer = ethernet->tx_buffer;
+    uint8_t buffer[MAX_FRAMELEN] = {0};
     uint16_t size = 0;
 
     uint32_t last_time = 0;
@@ -149,7 +147,7 @@ int32_t arpspoofing_thread(void* context) {
             // Get the IP
             if(!furi_hal_gpio_read(&gpio_button_right)) {
                 draw_waiting_for_ip(app);
-                process_dora(ethernet, app->ethernet->ip_address, gateway_ip);
+                process_dora(ethernet, app->ethernet->ip_address, app->ip_gateway);
                 break;
             }
 
@@ -164,7 +162,7 @@ int32_t arpspoofing_thread(void* context) {
     if(program_loop) {
         draw_your_ip_is(app);
         furi_delay_ms(1000);
-        set_arp_message_for_attack_all(buffer, app->ethernet->mac_address, gateway_ip, &size);
+        set_arp_message_for_attack_all(buffer, app->ethernet->mac_address, app->ip_gateway, &size);
         last_time = furi_get_tick();
     }
 

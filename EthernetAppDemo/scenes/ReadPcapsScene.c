@@ -19,12 +19,6 @@ void draw_could_not_be_read(App* app) {
 void app_scene_read_pcap_on_enter(void* context) {
     App* app = (App*)context;
 
-    // Suspend
-    if(!furi_thread_is_suspended(app->thread)) {
-        printf("debemos suspenderlo \n");
-        furi_thread_suspend(app->thread);
-    }
-
     // watch if the pcap function works
     packet_count = pcap_scan(app->file, furi_string_get_cstr(app->path), packet_positions);
 

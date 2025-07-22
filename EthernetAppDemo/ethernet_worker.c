@@ -48,8 +48,6 @@ int32_t ethernet_thread(void* context) {
             }
         }
 
-        // If option is ARP ATTACK
-
         // if((furi_get_tick() - timeout) > 1000) {
         //     counter++;
         //     printf("HOLA Desde Thread central contador: %lu\n", counter);
