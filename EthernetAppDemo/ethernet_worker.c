@@ -1,6 +1,7 @@
 #include "app_user.h"
 
-uint8_t ip_gateway_test[4] = {0};
+// Get Arp Request
+bool arp_requested = true;
 
 int32_t ethernet_thread(void* context) {
     App* app = (App*)context;
@@ -14,10 +15,7 @@ int32_t ethernet_thread(void* context) {
     UNUSED(packet_len);
 
     enc28j60_t* ethernet = app->ethernet;
-    uint8_t* buffer = ethernet->tx_buffer;
-
-    // uint32_t timeout = furi_get_tick();
-    // uint32_t counter = 0;
+    uint8_t* buffer = ethernet->rx_buffer;
 
     while(running) {
         furi_delay_ms(1);
@@ -39,8 +37,14 @@ int32_t ethernet_thread(void* context) {
             event = 0;
         }
 
+        if(packet_len && arp_reply_requested(ethernet, buffer, ethernet->ip_address)) {
+            // This do nothing but if the device received an ARP request it will answer
+            // By the moment is added but then it will get an enable/disable option
+        }
+
         // If the Option is DORA
         if(event == flag_dhcp_dora) {
+            view_dispatcher_send_custom_event(app->view_dispatcher, wait_ip_event);
             if(process_dora(ethernet, ethernet->ip_address, app->ip_gateway)) {
                 view_dispatcher_send_custom_event(app->view_dispatcher, ip_gotten_event);
             } else {
@@ -53,8 +57,6 @@ int32_t ethernet_thread(void* context) {
         //     printf("HOLA Desde Thread central contador: %lu\n", counter);
         //     timeout = furi_get_tick();
         // }
-
-        // furi_thread_flags_clear(ALL_FLAGS);
     }
 
     return 0;

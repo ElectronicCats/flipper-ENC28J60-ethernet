@@ -23,7 +23,6 @@ bool app_scene_get_ip_scene_on_event(void* context, SceneManagerEvent event) {
     if(event.type == SceneManagerEventTypeCustom) {
         switch(event.event) {
         case IS_NOT_LINK_UP:
-            printf("ETHERNET NO CONECTADO\n");
             draw_network_not_connected(app);
             break;
 
