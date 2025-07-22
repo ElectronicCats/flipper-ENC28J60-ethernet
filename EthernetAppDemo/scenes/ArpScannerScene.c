@@ -120,8 +120,11 @@ int32_t arp_scanner_thread(void* context);
 
 // Function to set the thread and the view
 void draw_the_arp_list(App* app) {
-    app->thread = furi_thread_alloc_ex("ARP SCANNER", 10 * 1024, arp_scanner_thread, app);
-    furi_thread_start(app->thread);
+    furi_thread_suspend(furi_thread_get_id(app->thread));
+
+    app->thread_alternative =
+        furi_thread_alloc_ex("ARP SCANNER", 10 * 1024, arp_scanner_thread, app);
+    furi_thread_start(app->thread_alternative);
 
     // Switch the view of the flipper
     widget_reset(app->widget);
@@ -130,8 +133,9 @@ void draw_the_arp_list(App* app) {
 
 // Function to draw to finished the thread
 void finished_arp_thread(App* app) {
-    furi_thread_join(app->thread);
-    furi_thread_free(app->thread);
+    furi_thread_join(app->thread_alternative);
+    furi_thread_free(app->thread_alternative);
+    furi_thread_resume(furi_thread_get_id(app->thread));
 }
 
 //  Callback for the Input
@@ -224,14 +228,7 @@ int32_t arp_scanner_thread(void* context) {
     }
 
     if(start) {
-        arp_scan_network(
-            ethernet,
-            app->ip_list,
-            app->ethernet->mac_address,
-            app->ethernet->ip_address,
-            ip_start,
-            &total_ip,
-            count_ip);
+        arp_scan_network(ethernet, app->ip_list, ip_start, &total_ip, count_ip);
 
         submenu_reset(app->submenu);
         view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);

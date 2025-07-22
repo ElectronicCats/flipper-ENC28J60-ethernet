@@ -24,8 +24,6 @@ void send_arp_spoofing(enc28j60_t* ethernet, uint8_t* buffer, uint16_t len);
 void arp_scan_network(
     enc28j60_t* ethernet,
     arp_list* list,
-    uint8_t* own_mac,
-    uint8_t* own_ip,
     uint8_t init_ip[4],
     uint8_t* list_count,
     uint8_t range);

@@ -33,8 +33,8 @@ void app_scene_arp_actions_menu_on_enter(void* context) {
 
     submenu_add_item(
         app->submenu, "ARP Spoofing", ARP_SPOOFING_OPTION, arp_actions_menu_callback, app);
-    // submenu_add_item(
-    //     app->submenu, "Arp Scanner", ARP_SCANNER_OPTION, arp_actions_menu_callback, app);
+    submenu_add_item(
+        app->submenu, "Arp Scanner", ARP_SCANNER_OPTION, arp_actions_menu_callback, app);
 
     submenu_set_selected_item(app->submenu, 0);
 
