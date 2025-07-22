@@ -29,6 +29,7 @@ typedef struct {
 enc28j60_t* enc28j60_alloc(uint8_t* mac_address, uint8_t* ip_address);
 void free_enc28j60(enc28j60_t* instance);
 void enc28j60_soft_reset(enc28j60_t* instance);
+void enc28j60_set_mac(enc28j60_t* instance);
 uint8_t enc28j60_start(enc28j60_t* instance);
 bool is_link_up(enc28j60_t* instance);
 bool is_the_network_connected(enc28j60_t* instance);

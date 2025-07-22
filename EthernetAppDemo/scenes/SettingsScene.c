@@ -113,6 +113,11 @@ void callback_random_mac(void* context, uint32_t index) {
     UNUSED(index);
 
     generate_random_mac(app->ethernet->mac_address);
+
+    furi_thread_suspend(app->thread);
+    enc28j60_set_mac(app->ethernet);
+    furi_thread_resume(app->thread);
+
     scene_manager_previous_scene(app->scene_manager);
 }
 
@@ -204,6 +209,16 @@ void app_scene_settings_options_menu_on_exit(void* context) {
 //  Callback for the Input
 void settings_input_byte_address(void* context) {
     App* app = (App*)context;
+
+    uint32_t state =
+        scene_manager_get_scene_state(app->scene_manager, app_scene_set_address_option);
+
+    if(state == MAC_OPTION_SETTING) {
+        furi_thread_suspend(app->thread);
+        enc28j60_set_mac(app->ethernet);
+        furi_thread_resume(app->thread);
+    }
+
     scene_manager_previous_scene(app->scene_manager);
 }
 
