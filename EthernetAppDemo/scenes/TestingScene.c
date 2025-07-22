@@ -21,6 +21,8 @@ void app_scene_testing_scene_on_enter(void* context) {
     // app->thread = furi_thread_alloc_ex("TESTING", 10 * 1024, testing_thread, app);
     // furi_thread_start(app->thread);
 
+    // furi_thread_flags_set(furi_thread_get_id(app->thread), flag_shake);
+
     // Reset the widget and switch view
     widget_reset(app->widget);
 
@@ -36,6 +38,16 @@ bool app_scene_testing_scene_on_event(void* context, SceneManagerEvent event) {
     App* app = (App*)context;
     UNUSED(app);
     UNUSED(event);
+
+    if(event.type == SceneManagerEventTypeCustom) {
+        printf(
+            "IP ESTATICA: %u.%u.%u.%u\n",
+            app->ethernet->ip_address[0],
+            app->ethernet->ip_address[1],
+            app->ethernet->ip_address[2],
+            app->ethernet->ip_address[3]);
+    }
+
     return consumed;
 }
 
