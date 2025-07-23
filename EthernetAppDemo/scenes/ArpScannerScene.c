@@ -7,8 +7,7 @@
 
 // Variables for the ARP Scanner
 uint8_t ip_start[4] = {192, 168, 0, 3}; // The IP address to start the scan
-uint8_t total_ip = 0; // The total number of IP addresses in the network
-uint8_t count_ip = 1; // The count of the IP addresses to scan
+uint8_t range_ip = 1; // The count of the IP addresses to scan
 
 /**
  * Menu To select the options and range of the Scanner
@@ -37,14 +36,14 @@ void change_value_callback(VariableItem* item) {
     if(value == 0) value = 255; // If the value is minor of 1
     if(value > 255) value = 1; // If the value is mayor of 255
 
-    count_ip = value;
+    range_ip = value;
 
     // Set the value in the Element
-    variable_item_set_current_value_index(item, count_ip);
+    variable_item_set_current_value_index(item, range_ip);
 
     // Set the text
     furi_string_reset(app->text);
-    furi_string_cat_printf(app->text, "%u", count_ip);
+    furi_string_cat_printf(app->text, "%u", range_ip);
 
     // Set the text in the element
     variable_item_set_current_value_text(item, furi_string_get_cstr(app->text));
@@ -80,11 +79,11 @@ void app_scene_arp_scanner_menu_on_enter(void* context) {
     // Add item to set the range of the scan
     item = variable_item_list_add(app->varList, "Set Range", 255, change_value_callback, app);
 
-    variable_item_set_current_value_index(item, count_ip); // Set the current value
+    variable_item_set_current_value_index(item, range_ip); // Set the current value
 
     furi_string_reset(app->text); // Reset the text
     furi_string_cat_printf(
-        app->text, "%u", count_ip); // Set the text with the total number of IP addresses
+        app->text, "%u", range_ip); // Set the text with the total number of IP addresses
 
     variable_item_set_current_value_text(
         item, furi_string_get_cstr(app->text)); // Set the varible item text
@@ -267,18 +266,25 @@ void app_scene_arp_ip_show_details_on_enter(void* context) {
         mac_showed[4],
         mac_showed[5]);
 
-    // Reset the text Box
-    text_box_reset(app->text_box);
+    // reset Widget
+    widget_reset(app->widget);
 
-    // Set the configuration for the text box
-    text_box_set_font(app->text_box, TextBoxFontText);
-    text_box_set_focus(app->text_box, TextBoxFocusStart);
+    // Set Header manually
+    widget_add_string_element(
+        app->widget, 64, 2, AlignCenter, AlignTop, FontPrimary, "IP ADDRESS DETAILS");
 
-    // Set the text on the text box
-    text_box_set_text(app->text_box, furi_string_get_cstr(app->text));
+    // Set Text for the detailes of the IP
+    widget_add_string_multiline_element(
+        app->widget,
+        10,
+        30,
+        AlignLeft,
+        AlignCenter,
+        FontSecondary,
+        furi_string_get_cstr(app->text));
 
-    // Switch to text box view
-    view_dispatcher_switch_to_view(app->view_dispatcher, TextBoxView);
+    // Switch to widget view
+    view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
 }
 
 // Function to get the ip list
@@ -323,14 +329,14 @@ int32_t arp_scanner_thread(void* context) {
     }
 
     if(start) {
-        arp_scan_network(ethernet, app->ip_list, ip_start, &total_ip, count_ip);
+        arp_scan_network(ethernet, app->ip_list, ip_start, &app->ip_counter, range_ip);
 
         submenu_reset(app->submenu);
         view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);
 
         submenu_set_header(app->submenu, "");
 
-        for(uint8_t i = 0; i < total_ip; i++) {
+        for(uint8_t i = 0; i < app->ip_counter; i++) {
             furi_string_reset(app->text);
             furi_string_cat_printf(
                 app->text,

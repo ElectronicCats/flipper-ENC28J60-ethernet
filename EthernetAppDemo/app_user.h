@@ -61,9 +61,10 @@ typedef enum {
 // Struct for the App
 typedef struct {
     arp_list ip_list[255];
-    uint8_t ip_gateway[4];
+    uint8_t ip_counter; // Variable for countrt of ip_list
+    uint8_t ip_gateway[4]; // Array to save the gateway ip
 
-    bool is_static_ip;
+    bool is_static_ip; // To know if the device has the static IP
     bool enc28j60_connected; // To know if the enc28j60 is connected
 
     SceneManager* scene_manager;
