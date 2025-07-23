@@ -257,16 +257,18 @@ void arp_scan_network(
         start_list[3]++;
     }
 
+    // Set time to get Address
     uint32_t last_time = furi_get_tick();
 
     // Part to received the arp messages
-    while((furi_get_tick() - last_time) < 2000) {
+    while((furi_get_tick() - last_time) < 1000) {
         packet_len = receive_packet(ethernet, rx_buffer, MAX_FRAMELEN);
 
         if(packet_len &&
            get_arp_reply(
                ethernet->ip_address, list[counter].ip, list[counter].mac, rx_buffer, packet_len)) {
             counter++;
+            last_time = furi_get_tick();
         }
         furi_delay_us(1);
     }

@@ -161,17 +161,28 @@ void set_ip_address(App* app) {
         app->view_dispatcher, InputByteView); // Switch to the input byte view
 }
 
+void show_current_arp_list(App* app) {
+    view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);
+}
+
 // function on enter for the arp scanner scene
 void app_scene_arp_scanner_on_enter(void* context) {
     App* app = (App*)context;
 
     switch(scene_manager_get_scene_state(app->scene_manager, app_scene_arp_scanner_option)) {
     case 0:
+        // If the scene is in state 0, starts the thread and show ip list
         draw_the_arp_list(app);
         break;
 
     case 1:
+        // Starts the set IP view (input byte view)
         set_ip_address(app);
+        break;
+
+    case 2:
+        // Show the IP list in this scene
+        show_current_arp_list(app);
         break;
 
     default:
@@ -192,6 +203,7 @@ bool app_scene_arp_scanner_on_event(void* context, SceneManagerEvent event) {
 void app_scene_arp_scanner_on_exit(void* context) {
     App* app = (App*)context;
 
+    // If scene is in state 0 it finished the
     switch(scene_manager_get_scene_state(app->scene_manager, app_scene_arp_scanner_option)) {
     case 0:
         finished_arp_thread(app);
@@ -200,6 +212,89 @@ void app_scene_arp_scanner_on_exit(void* context) {
     default:
         break;
     }
+}
+
+/**
+ * Callback for the options in the ip list
+ */
+
+void ip_list_callback(void* context, uint32_t index) {
+    App* app = (App*)context;
+
+    // Set the scene to get the index of the ip in the IP array list
+    scene_manager_set_scene_state(app->scene_manager, app_scene_arp_ip_show_details_option, index);
+
+    // Go to show details scene
+    scene_manager_next_scene(app->scene_manager, app_scene_arp_ip_show_details_option);
+}
+
+/**
+ * This scene is to show the MAC address from the IP
+ */
+
+// Function to get the IP list
+void app_scene_arp_ip_show_details_on_enter(void* context) {
+    App* app = (App*)context;
+
+    // Change state of the previous scene to only show the Submenu view
+    scene_manager_set_scene_state(app->scene_manager, app_scene_arp_scanner_option, 2);
+
+    // Get the index in the arp ip list
+    uint32_t index =
+        scene_manager_get_scene_state(app->scene_manager, app_scene_arp_ip_show_details_option);
+
+    // Reset furi string text
+    furi_string_reset(app->text);
+
+    // Point to the current ip indexed
+    uint8_t* ip_showed = app->ip_list[index].ip;
+
+    // Point to the current mac
+    uint8_t* mac_showed = app->ip_list[index].mac;
+
+    // Set the text to show IP address with it MAC address
+    furi_string_printf(
+        app->text,
+        "IP: %u.%u.%u.%u\nMAC: %02x:%02x:%02x:%02x:%02x:%02x",
+        ip_showed[0],
+        ip_showed[1],
+        ip_showed[2],
+        ip_showed[3],
+        mac_showed[0],
+        mac_showed[1],
+        mac_showed[2],
+        mac_showed[3],
+        mac_showed[4],
+        mac_showed[5]);
+
+    // Reset the text Box
+    text_box_reset(app->text_box);
+
+    // Set the configuration for the text box
+    text_box_set_font(app->text_box, TextBoxFontText);
+    text_box_set_focus(app->text_box, TextBoxFocusStart);
+
+    // Set the text on the text box
+    text_box_set_text(app->text_box, furi_string_get_cstr(app->text));
+
+    // Switch to text box view
+    view_dispatcher_switch_to_view(app->view_dispatcher, TextBoxView);
+}
+
+// Function to get the ip list
+bool app_scene_arp_ip_show_details_on_event(void* context, SceneManagerEvent event) {
+    bool consumed = false;
+    App* app = (App*)context;
+    UNUSED(app);
+    UNUSED(event);
+    return consumed;
+}
+
+// Function for the ip list
+void app_scene_arp_ip_show_details_on_exit(void* context) {
+    App* app = (App*)context;
+
+    UNUSED(app);
 }
 
 /**
@@ -244,7 +339,8 @@ int32_t arp_scanner_thread(void* context) {
                 app->ip_list[i].ip[1],
                 app->ip_list[i].ip[2],
                 app->ip_list[i].ip[3]);
-            submenu_add_item(app->submenu, furi_string_get_cstr(app->text), i, NULL, NULL);
+            submenu_add_item(
+                app->submenu, furi_string_get_cstr(app->text), i, ip_list_callback, app);
         }
     }
 
