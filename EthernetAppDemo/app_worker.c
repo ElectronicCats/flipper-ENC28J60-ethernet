@@ -51,12 +51,6 @@ int32_t ethernet_thread(void* context) {
                 view_dispatcher_send_custom_event(app->view_dispatcher, ip_no_gotten_event);
             }
         }
-
-        // if((furi_get_tick() - timeout) > 1000) {
-        //     counter++;
-        //     printf("HOLA Desde Thread central contador: %lu\n", counter);
-        //     timeout = furi_get_tick();
-        // }
     }
 
     return 0;
