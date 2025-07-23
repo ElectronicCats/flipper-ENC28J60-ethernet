@@ -316,6 +316,9 @@ bool arp_get_specific_mac(enc28j60_t* ethernet, uint8_t* src_ip, uint8_t* dst_ip
     return ret;
 }
 
+/**
+ * Function to know if there is a requested from other device and reply with the ip
+ */
 bool arp_reply_requested(enc28j60_t* ethernet, uint8_t* buffer, uint8_t* dst_ip) {
     if(!buffer || !dst_ip) return false;
 
@@ -346,4 +349,16 @@ bool arp_reply_requested(enc28j60_t* ethernet, uint8_t* buffer, uint8_t* dst_ip)
     printf("ARP REPLY TO: %u.%u.%u.%u\n", my_ip[0], my_ip[1], my_ip[2], my_ip[3]);
 
     return true;
+}
+
+/**
+ * Function to know if there's a IP duplicated in an arp_list struct
+ */
+uint8_t is_duplicated_ip(uint8_t* ip, arp_list* list, uint8_t total_list) {
+    uint8_t count_of_duplicated = 0;
+    for(uint8_t i = 0; i < total_list; i++) {
+        if(is_the_ip(list[i].ip, ip)) count_of_duplicated++;
+    }
+
+    return count_of_duplicated - 1;
 }

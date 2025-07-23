@@ -251,14 +251,22 @@ void app_scene_arp_ip_show_details_on_enter(void* context) {
     // Point to the current mac
     uint8_t* mac_showed = app->ip_list[index].mac;
 
+    // Get if the IP is duplicated
+    bool is_duplicated = is_duplicated_ip(ip_showed, app->ip_list, app->ip_counter);
+
     // Set the text to show IP address with it MAC address
     furi_string_printf(
+        app->text, "IP: %u.%u.%u.%u ", ip_showed[0], ip_showed[1], ip_showed[2], ip_showed[3]);
+
+    // add duplicated if the ip is
+    if(is_duplicated) {
+        furi_string_cat_printf(app->text, "\n(Duplicated)");
+    }
+
+    // Set MAC in the text
+    furi_string_cat_printf(
         app->text,
-        "IP: %u.%u.%u.%u\nMAC: %02x:%02x:%02x:%02x:%02x:%02x",
-        ip_showed[0],
-        ip_showed[1],
-        ip_showed[2],
-        ip_showed[3],
+        "\nMAC: %02x:%02x:%02x:%02x:%02x:%02x",
         mac_showed[0],
         mac_showed[1],
         mac_showed[2],
@@ -345,6 +353,11 @@ int32_t arp_scanner_thread(void* context) {
                 app->ip_list[i].ip[1],
                 app->ip_list[i].ip[2],
                 app->ip_list[i].ip[3]);
+
+            if(is_duplicated_ip(app->ip_list[i].ip, app->ip_list, app->ip_counter)) {
+                furi_string_cat_printf(app->text, " (D)");
+            }
+
             submenu_add_item(
                 app->submenu, furi_string_get_cstr(app->text), i, ip_list_callback, app);
         }
