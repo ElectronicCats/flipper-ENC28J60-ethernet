@@ -37,34 +37,18 @@ uint16_t create_flipper_ping_packet(
     if(!buffer || !src_mac || !src_ip || !dst_ip || !payload) return 0;
 
     // Check the size of payload
-    if(payload_len > 56) {
+    if(payload_len > 64) {
         return 0;
     }
 
     // Pingpacket position
     uint8_t position = 0;
 
-    // Need to set the time of the timestamp
+    // Array to set the payload
     uint8_t ping_data[PING_DATA_SIZE] = {0};
-    uint32_t timestamp = get_flipper_timestamp();
 
-    // Set the format on big eldian
-    ping_data[0] = (uint8_t)timestamp >> 24 & 0xff;
-    ping_data[1] = (uint8_t)timestamp >> 16 & 0xff;
-    ping_data[2] = (uint8_t)timestamp >> 8 & 0xff;
-    ping_data[3] = (uint8_t)timestamp & 0xff;
-
-    // Add the position
-    position += sizeof(timestamp);
-
-    // add padding for timestamp
-    memset(ping_data + position, 0, 4);
-
-    // move position
-    position += 4;
-
-    // add the payload
-    memcpy(ping_data + position, payload, payload_len);
+    // Copy the payload
+    memcpy(ping_data, payload, payload_len);
 
     // add position
     position += payload_len;
@@ -75,14 +59,6 @@ uint16_t create_flipper_ping_packet(
             ping_data[i] = i - position;
         }
     }
-
-    printf("Ping message \n");
-
-    for(uint8_t i = 0; i < 64; i++) {
-        printf("%02x ", ping_data[i]);
-    }
-
-    printf("\n");
 
     // set Ethernet header
     if(!set_ethernet_header(buffer, src_mac, dst_mac, 0x0800)) {
@@ -118,8 +94,54 @@ uint16_t create_flipper_ping_packet(
     return PACKET_SIZE;
 }
 
+// Create a ping packet reply
+uint16_t create_ping_packet_reply(
+    uint8_t* buffer,
+    uint8_t* src_mac,
+    uint8_t* dst_mac,
+    uint8_t* src_ip,
+    uint8_t* dst_ip,
+    uint16_t identifier,
+    uint16_t sequence,
+    uint8_t* payload,
+    uint16_t payload_len) {
+    // set Ethernet header
+    if(!set_ethernet_header(buffer, src_mac, dst_mac, 0x0800)) {
+        return 0;
+    }
+
+    // Set IPv4 header
+    if(!set_ipv4_header(
+           buffer + ETHERNET_HEADER_LEN,
+           1, // Protocolo ICMP
+           ICMP_HEADER_LEN + PING_DATA_SIZE,
+           src_ip,
+           dst_ip)) {
+        return 0;
+    }
+
+    // // Set the header ICMP
+    if(!icmp_set_header(
+           buffer + ETHERNET_HEADER_LEN + IP_HEADER_LEN,
+           ICMP_TYPE_ECHO_REPLY,
+           0, // code
+           identifier,
+           sequence,
+           payload,
+           payload_len)) {
+        return 0;
+    }
+
+    printf("Pasamos el IMCP set header\n");
+
+    // Set the payload
+    memcpy(buffer + ETHERNET_HEADER_LEN + IP_HEADER_LEN + ICMP_HEADER_LEN, payload, payload_len);
+
+    return payload_len + ETHERNET_HEADER_LEN + IP_HEADER_LEN + ICMP_HEADER_LEN;
+}
+
 // Function to get the ping packet
-bool is_the_ping_packet(uint8_t* packet, uint8_t* ip_ping) {
+bool ping_packet_replied(uint8_t* packet, uint8_t* ip_ping) {
     if(!packet || !ip_ping) return false;
 
     if(!is_icmp(packet)) return false;
@@ -135,82 +157,86 @@ bool is_the_ping_packet(uint8_t* packet, uint8_t* ip_ping) {
     return compare_ip(ip_ping, ip_des);
 }
 
-// Process to send and get the ping packets
-// This only reads if the packet comes from the IP indicated
-// Just send every 1000 ms
-bool process_ping_response(
-    enc28j60_t* ethernet,
-    uint8_t* ping_packet,
-    uint16_t ping_packet_size,
-    uint8_t* ip_dest) {
-    if(!ethernet || !ping_packet || !ip_dest) return false;
+bool ping_packet_requested(uint8_t* packet, uint8_t* own_ip) {
+    if(!packet || !own_ip) return false;
 
-    // Value to return
-    bool ret = false;
+    if(!is_icmp(packet)) return false;
 
-    // Send the ping packet
-    send_packet(ethernet, ping_packet, ping_packet_size);
+    icmp_header_t icmp_header = icmp_get_header(packet);
 
-    // Time to get the last time
-    uint32_t last_time = furi_get_tick();
+    if(icmp_header.type != ICMP_TYPE_ECHO_REQUEST) return false;
 
-    // Generate packet to received
-    uint8_t* packet_to_received = ethernet->rx_buffer;
+    ipv4_header_t ipv4_header = ipv4_get_header(packet);
 
-    // Set in promiscous mode
-    enable_promiscuous(ethernet);
-    while(!ret && ((furi_get_tick() - last_time) < 1000)) {
-        if(receive_packet(ethernet, packet_to_received, 250)) {
-            ret = is_the_ping_packet(packet_to_received, ip_dest);
-        }
-        furi_delay_ms(1);
-    }
-    disable_promiscuous(ethernet);
+    uint8_t* ip_des = ipv4_header.dest_ip;
 
-    return ret;
+    return compare_ip(own_ip, ip_des);
 }
 
-// bool process_ping_response(uint8_t* buffer, uint16_t packet_size, uint8_t* ip_dest) {
-//     // Verificar que es un packet ICMP
-//     if(!is_icmp(buffer)) {
-//         printf("Packet recibido no es ICMP\n");
-//         return false;
-//     }
+bool ping_reply_to_request(enc28j60_t* ethernet, uint8_t* packet, uint16_t size_of_packet) {
+    if(!ethernet || !packet) return false;
+    if(!ping_packet_requested(packet, ethernet->ip_address)) return false;
 
-//     ipv4_header_t ip_header = ipv4_get_header(buffer);
-//     icmp_header_t icmp_header = icmp_get_header(buffer);
+    // Get the ethernet header to solve the mac address
+    ethernet_header_t ethernet_header = ethernet_get_header(packet);
 
-//     // Verificar que es Echo Reply
-//     if(icmp_header.type != ICMP_TYPE_ECHO_REPLY) {
-//         printf("Packet ICMP no es Echo Reply (tipo: %d)\n", icmp_header.type);
-//         return false;
-//     }
+    // Get ipv4 header to solve the IP address
+    ipv4_header_t ip_header = ipv4_get_header(packet);
 
-//     // Extraer datos del ping
-//     uint8_t* ping_data = buffer + ETHERNET_HEADER_LEN + IP_HEADER_LEN + ICMP_HEADER_LEN;
-//     uint32_t sent_timestamp;
-//     memcpy(&sent_timestamp, ping_data, sizeof(sent_timestamp));
+    // Get icmp header
+    icmp_header_t icmp_header = icmp_get_header(packet);
 
-//     // Calcular tiempo de respuesta
-//     uint32_t current_time = get_flipper_timestamp();
-//     double_t rtt = (current_time - sent_timestamp) / 1000.0; // en milisegundos
+    // Get the mac address for the destination
+    uint8_t* mac_destination = ethernet_header.mac_source;
 
-//     // Extraer información
-//     uint16_t identifier = (icmp_header.identifier[0] << 8) | icmp_header.identifier[1];
-//     uint16_t sequence = (icmp_header.sequence[0] << 8) | icmp_header.sequence[1];
+    printf(
+        "MAC to reply: %02x:%02x:%02x:%02x:%02x:%02x\n",
+        mac_destination[0],
+        mac_destination[1],
+        mac_destination[2],
+        mac_destination[3],
+        mac_destination[4],
+        mac_destination[5]);
 
-//     // Mostrar información de la respuesta
-//     printf(
-//         "Reply from %d.%d.%d.%d: bytes=%d time=%.2fms TTL=%d seq=%d id=%d\n",
-//         ip_header.source_ip[0],
-//         ip_header.source_ip[1],
-//         ip_header.source_ip[2],
-//         ip_header.source_ip[3],
-//         packet_size - ETHERNET_HEADER_LEN - IP_HEADER_LEN - ICMP_HEADER_LEN,
-//         rtt,
-//         ip_header.ttl,
-//         sequence,
-//         identifier);
+    // Get the IP address for the destination
+    uint8_t* ip_to_send = ip_header.source_ip;
 
-//     return true;
-// }
+    printf(
+        "IP to reply:  %u.%u.%u.%u\n", ip_to_send[0], ip_to_send[1], ip_to_send[2], ip_to_send[3]);
+
+    // Get the ICMP identifier
+    uint16_t identifier = icmp_header.identifier[0] << 8 | icmp_header.identifier[1];
+
+    // Get the sequence
+    uint16_t sequence = icmp_header.sequence[0] << 8 | icmp_header.sequence[1];
+
+    // // Get data from packet
+    uint16_t data_size = size_of_packet - (ETHERNET_HEADER_LEN + IP_HEADER_LEN + ICMP_HEADER_LEN);
+    uint8_t data[] = {0};
+    memcpy(data, packet + ETHERNET_HEADER_LEN + IP_HEADER_LEN + ICMP_HEADER_LEN, data_size);
+
+    uint8_t packet_to_send[MAX_FRAMELEN] = {0};
+
+    // // Set packet reply
+    uint16_t len = create_ping_packet_reply(
+        packet_to_send,
+        ethernet->mac_address,
+        mac_destination,
+        ethernet->ip_address,
+        ip_to_send,
+        identifier,
+        sequence,
+        data,
+        data_size);
+
+    printf("Packet to send =======================================");
+    for(uint16_t i = 0; i < len; i++) {
+        printf("%02x ", packet_to_send[i]);
+    }
+    printf("\n");
+
+    // //Send packet
+    send_packet(ethernet, ethernet->tx_buffer, len);
+
+    return true;
+}

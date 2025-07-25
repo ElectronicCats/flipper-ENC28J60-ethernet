@@ -81,9 +81,6 @@ App* app_alloc() {
     // Alloc the file storage
     app->file = storage_file_alloc(app->storage);
 
-    // Alloc the mutex
-    // app->mutex = furi_mutex_alloc(FuriMutexTypeNormal);
-
     // Alloc the memory for the enc28j60 instance
     app->ethernet = enc28j60_alloc(MAC_INITIAL, IP_DEFAULT);
 
@@ -95,6 +92,8 @@ App* app_alloc() {
 
     app->thread = furi_thread_alloc_ex("Ethernet Thread", 10 * 1024, ethernet_thread, app);
     furi_thread_start(app->thread);
+
+    app->is_static_ip = false;
 
     return app;
 }

@@ -37,9 +37,14 @@ int32_t ethernet_thread(void* context) {
             event = 0;
         }
 
-        if(packet_len && arp_reply_requested(ethernet, buffer, ethernet->ip_address)) {
-            // This do nothing but if the device received an ARP request it will answer
-            // By the moment is added but then it will get an enable/disable option
+        if(packet_len) {
+            // When the message is an ARP request
+            arp_reply_requested(ethernet, buffer, ethernet->ip_address);
+
+            // When the message is an ICMP request or ping
+            ping_reply_to_request(ethernet, buffer, packet_len);
+
+            // printf("Salimos de nuevo\n");
         }
 
         // If the Option is DORA
@@ -47,6 +52,7 @@ int32_t ethernet_thread(void* context) {
             view_dispatcher_send_custom_event(app->view_dispatcher, wait_ip_event);
             if(process_dora(ethernet, ethernet->ip_address, app->ip_gateway)) {
                 view_dispatcher_send_custom_event(app->view_dispatcher, ip_gotten_event);
+                app->is_static_ip = true;
             } else {
                 view_dispatcher_send_custom_event(app->view_dispatcher, ip_no_gotten_event);
             }
