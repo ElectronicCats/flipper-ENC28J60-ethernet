@@ -39,14 +39,10 @@
 // Create flags
 typedef enum {
     flag_stop = 1,
-    flag_arp_spoofing,
-    flag_arp_scanner,
-    flag_do_ping,
     flag_dhcp_dora,
 } ethernet_app_flags_t;
 
-#define ALL_FLAGS \
-    (flag_stop | flag_arp_spoofing | flag_arp_scanner | flag_do_ping | flag_dhcp_dora)
+#define ALL_FLAGS (flag_stop | flag_dhcp_dora)
 
 #define MASK_FLAGS 0xfffffffe
 
