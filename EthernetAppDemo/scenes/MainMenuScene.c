@@ -86,19 +86,27 @@ void app_scene_main_menu_on_enter(void* context) {
 
     is_logo_shown = true;
 
+    // Reset Menu
     submenu_reset(app->submenu);
+
+    // header for the  submenu
     submenu_set_header(app->submenu, "ETHERNET FUNCTIONS");
 
     // submenu_add_item(app->submenu, "Option 1", TESTING_OPTION, main_menu_options_callback, app);
 
     submenu_add_item(app->submenu, "Sniffer", SNIFFING_OPTION, main_menu_options_callback, app);
+
     submenu_add_item(
         app->submenu, "Read Pcaps", READ_PCAPS_OPTION, main_menu_options_callback, app);
+
     submenu_add_item(
         app->submenu, "ARP Actions", ARP_ACTIONS_OPTION, main_menu_options_callback, app);
 
-    submenu_add_item(app->submenu, "Do Ping", PING_OPTION, main_menu_options_callback, app);
+    // By the moment the option for the Do ping will be commented because it still on development
+    // submenu_add_item(app->submenu, "Do Ping", PING_OPTION, main_menu_options_callback, app);
+
     submenu_add_item(app->submenu, "Settings", SETTINGS_OPTION, main_menu_options_callback, app);
+
     submenu_add_item(app->submenu, "About Us", ABOUT_US, main_menu_options_callback, app);
 
     submenu_set_selected_item(app->submenu, 0);

@@ -36,23 +36,6 @@ void app_scene_arp_spoofing_on_exit(void* context) {
 /**
  * Some views for the ArpSpoofing
  */
-
-// Function to draw if the user wants to set the IP
-void draw_ask_for_ip(App* app) {
-    widget_reset(app->widget);
-    widget_add_string_multiline_element(
-        app->widget,
-        64,
-        0,
-        AlignCenter,
-        AlignTop,
-        FontSecondary,
-        "Do you want to continue with\nthe same IP\nor\ndo you want to get\nit from the network?");
-
-    widget_add_button_element(app->widget, GuiButtonTypeLeft, "No", NULL, app);
-    widget_add_button_element(app->widget, GuiButtonTypeRight, "Yes", NULL, app);
-}
-
 // Function to draw for waiting to attack
 void draw_waiting_start_attack(App* app) {
     widget_reset(app->widget);

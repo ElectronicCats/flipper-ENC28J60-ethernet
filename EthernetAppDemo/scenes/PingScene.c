@@ -42,6 +42,7 @@ void app_scene_ping_menu_scene_on_enter(void* context) {
     // reset submenu and switch view
     submenu_reset(app->submenu);
 
+    submenu_set_header(app->submenu, "PING TO 8.8.8.8");
     submenu_add_item(app->submenu, "Ping", 0, menu_ping_options_callback, app);
 
     furi_string_reset(app->text);
@@ -49,8 +50,7 @@ void app_scene_ping_menu_scene_on_enter(void* context) {
     furi_string_cat_printf(
         app->text, "IP to do ping %u:%u:%u:%u", ip_ping[0], ip_ping[1], ip_ping[2], ip_ping[3]);
 
-    submenu_add_item(
-        app->submenu, furi_string_get_cstr(app->text), 1, menu_ping_options_callback, app);
+    submenu_add_item(app->submenu, furi_string_get_cstr(app->text), 1, NULL, app);
 
     view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);
 }
@@ -155,7 +155,7 @@ void app_scene_ping_scene_on_enter(void* context) {
     furi_thread_suspend(app->thread);
 
     // Allocate and start the thread
-    app->thread_alternative = furi_thread_alloc_ex("TESTING", 10 * 1024, ping_thread, app);
+    app->thread_alternative = furi_thread_alloc_ex("PING", 10 * 1024, ping_thread, app);
     furi_thread_start(app->thread_alternative);
 
     // Reset the widget and switch view
@@ -242,6 +242,9 @@ int32_t ping_thread(void* context) {
     messages_sent = 0;
     ping_responses = 0;
 
+    // sequence
+    uint16_t sequence = 1;
+
     // To know if the enc28j60 is connected
     if(!is_connected) {
         is_connected = enc28j60_start(ethernet) != 0xff; // Start the enc28j60
@@ -280,9 +283,12 @@ int32_t ping_thread(void* context) {
     }
 
     // Get the MAC gateway
-    if(!arp_get_specific_mac(ethernet, app->ethernet->ip_address, app->ip_gateway, mac_to_send) &&
+    if(!arp_get_specific_mac(
+           ethernet, app->ethernet->ip_address, app->ip_gateway, app->mac_gateway) &&
        start_ping && is_connected) {
         start_ping = false;
+    } else {
+        memcpy(mac_to_send, app->mac_gateway, 6);
     }
 
     // Here is where gonna make the ping
@@ -292,17 +298,19 @@ int32_t ping_thread(void* context) {
         if((furi_get_tick() - last_time_ping) > 1000) {
             packet_size = create_flipper_ping_packet(
                 packet_to_send,
-                app->ethernet->mac_address,
                 mac_to_send,
+                app->mac_gateway,
                 app->ethernet->ip_address,
                 ip_ping,
                 1,
-                1,
+                sequence,
                 (uint8_t*)ping_data,
                 data_len);
 
             send_packet(ethernet, packet_to_send, packet_size);
 
+            if(sequence == 0xffff) sequence = 0;
+            sequence++;
             messages_sent++;
             view_dispatcher_send_custom_event(app->view_dispatcher, 5); // Update the ping count
             last_time_ping = furi_get_tick();
@@ -311,6 +319,8 @@ int32_t ping_thread(void* context) {
         if(packet_receive_len) {
             if(ping_packet_replied(packet_to_receive, ip_ping)) {
                 ping_responses++;
+                view_dispatcher_send_custom_event(
+                    app->view_dispatcher, 5); // Update the ping count
             }
         }
     }
