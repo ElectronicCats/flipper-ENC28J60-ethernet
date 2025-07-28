@@ -87,20 +87,6 @@ void draw_text_one(App* app) {
     widget_add_button_element(app->widget, GuiButtonTypeLeft, "Prev", NULL, NULL);
 }
 
-void draw_text_two(App* app) {
-    widget_reset(app->widget);
-    widget_add_string_multiline_element(
-        app->widget,
-        64,
-        25,
-        AlignCenter,
-        AlignCenter,
-        FontPrimary,
-        "Enjoy Pwnterrey\nand drink water");
-    widget_add_button_element(app->widget, GuiButtonTypeRight, "Next", NULL, NULL);
-    widget_add_button_element(app->widget, GuiButtonTypeLeft, "Prev", NULL, NULL);
-}
-
 void draw_store(App* app) {
     widget_reset(app->widget);
     widget_add_icon_element(app->widget, 10, 5, &I_store);
@@ -115,6 +101,17 @@ void draw_github(App* app) {
     widget_add_icon_element(app->widget, 10, 5, &I_github);
     widget_add_string_multiline_element(
         app->widget, 85, 27, AlignCenter, AlignCenter, FontPrimary, "Repos in\n<--");
+    widget_add_button_element(app->widget, GuiButtonTypeRight, "Next", NULL, NULL);
+    widget_add_button_element(app->widget, GuiButtonTypeLeft, "Prev", NULL, NULL);
+}
+
+void draw_credits_to(App* app) {
+    widget_reset(app->widget);
+    widget_add_icon_element(app->widget, 10, 5, &I_credits_to);
+    widget_add_string_multiline_element(
+        app->widget, 86, 20, AlignCenter, AlignCenter, FontSecondary, "Created\nwith love\nby");
+    widget_add_string_multiline_element(
+        app->widget, 86, 45, AlignCenter, AlignCenter, FontPrimary, "Adonai Diaz");
     widget_add_button_element(app->widget, GuiButtonTypeLeft, "Prev", NULL, NULL);
 }
 
@@ -171,15 +168,15 @@ int32_t about_us_thread(void* context) {
                 break;
 
             case 3:
-                draw_text_two(app);
-                break;
-
-            case 4:
                 draw_store(app);
                 break;
 
-            case 5:
+            case 4:
                 draw_github(app);
+                break;
+
+            case 5:
+                draw_credits_to(app);
                 break;
 
             default:
