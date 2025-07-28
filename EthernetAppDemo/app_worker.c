@@ -43,8 +43,6 @@ int32_t ethernet_thread(void* context) {
 
             // When the message is an ICMP request or ping
             ping_reply_to_request(ethernet, buffer, packet_len);
-
-            // printf("Salimos de nuevo\n");
         }
 
         // If the Option is DORA

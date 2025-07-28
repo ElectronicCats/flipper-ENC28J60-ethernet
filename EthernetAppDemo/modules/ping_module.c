@@ -114,7 +114,7 @@ uint16_t create_ping_packet_reply(
     if(!set_ipv4_header(
            buffer + ETHERNET_HEADER_LEN,
            1, // Protocolo ICMP
-           ICMP_HEADER_LEN + PING_DATA_SIZE,
+           ICMP_HEADER_LEN + payload_len,
            src_ip,
            dst_ip)) {
         return 0;
@@ -131,8 +131,6 @@ uint16_t create_ping_packet_reply(
            payload_len)) {
         return 0;
     }
-
-    printf("Pasamos el IMCP set header\n");
 
     // Set the payload
     memcpy(buffer + ETHERNET_HEADER_LEN + IP_HEADER_LEN + ICMP_HEADER_LEN, payload, payload_len);
@@ -157,6 +155,7 @@ bool ping_packet_replied(uint8_t* packet, uint8_t* ip_ping) {
     return compare_ip(ip_ping, ip_des);
 }
 
+// Function to get the ping packet request
 bool ping_packet_requested(uint8_t* packet, uint8_t* own_ip) {
     if(!packet || !own_ip) return false;
 
@@ -173,6 +172,7 @@ bool ping_packet_requested(uint8_t* packet, uint8_t* own_ip) {
     return compare_ip(own_ip, ip_des);
 }
 
+// Function to reply a ping packet request to our ip
 bool ping_reply_to_request(enc28j60_t* ethernet, uint8_t* packet, uint16_t size_of_packet) {
     if(!ethernet || !packet) return false;
     if(!ping_packet_requested(packet, ethernet->ip_address)) return false;
@@ -189,20 +189,8 @@ bool ping_reply_to_request(enc28j60_t* ethernet, uint8_t* packet, uint16_t size_
     // Get the mac address for the destination
     uint8_t* mac_destination = ethernet_header.mac_source;
 
-    printf(
-        "MAC to reply: %02x:%02x:%02x:%02x:%02x:%02x\n",
-        mac_destination[0],
-        mac_destination[1],
-        mac_destination[2],
-        mac_destination[3],
-        mac_destination[4],
-        mac_destination[5]);
-
     // Get the IP address for the destination
     uint8_t* ip_to_send = ip_header.source_ip;
-
-    printf(
-        "IP to reply:  %u.%u.%u.%u\n", ip_to_send[0], ip_to_send[1], ip_to_send[2], ip_to_send[3]);
 
     // Get the ICMP identifier
     uint16_t identifier = icmp_header.identifier[0] << 8 | icmp_header.identifier[1];
@@ -210,33 +198,27 @@ bool ping_reply_to_request(enc28j60_t* ethernet, uint8_t* packet, uint16_t size_
     // Get the sequence
     uint16_t sequence = icmp_header.sequence[0] << 8 | icmp_header.sequence[1];
 
-    // // Get data from packet
+    // Get data from packet
     uint16_t data_size = size_of_packet - (ETHERNET_HEADER_LEN + IP_HEADER_LEN + ICMP_HEADER_LEN);
-    uint8_t data[] = {0};
-    memcpy(data, packet + ETHERNET_HEADER_LEN + IP_HEADER_LEN + ICMP_HEADER_LEN, data_size);
+    uint8_t* data_extra = (uint8_t*)calloc(data_size, sizeof(uint8_t));
+    memcpy(data_extra, packet + ETHERNET_HEADER_LEN + IP_HEADER_LEN + ICMP_HEADER_LEN, data_size);
 
-    uint8_t packet_to_send[MAX_FRAMELEN] = {0};
+    uint8_t packet_reply[MAX_FRAMELEN] = {0};
 
-    // // Set packet reply
     uint16_t len = create_ping_packet_reply(
-        packet_to_send,
+        packet_reply,
         ethernet->mac_address,
         mac_destination,
         ethernet->ip_address,
         ip_to_send,
         identifier,
         sequence,
-        data,
+        data_extra,
         data_size);
 
-    printf("Packet to send =======================================");
-    for(uint16_t i = 0; i < len; i++) {
-        printf("%02x ", packet_to_send[i]);
-    }
-    printf("\n");
+    send_packet(ethernet, packet_reply, len);
 
-    // //Send packet
-    send_packet(ethernet, ethernet->tx_buffer, len);
+    free(data_extra);
 
     return true;
 }
