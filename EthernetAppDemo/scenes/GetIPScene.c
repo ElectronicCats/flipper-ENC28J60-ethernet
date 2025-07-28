@@ -9,8 +9,18 @@ void app_scene_get_ip_scene_on_enter(void* context) {
     // Reset the widget and switch view
     widget_reset(app->widget);
 
+    // Start ethernet
+    if(!app->enc28j60_connected) {
+        enc28j60_soft_reset(app->ethernet);
+        app->enc28j60_connected = enc28j60_start(app->ethernet) != 0xff;
+    }
+
     // Send flag
-    furi_thread_flags_set(furi_thread_get_id(app->thread), flag_dhcp_dora);
+    if(app->enc28j60_connected) {
+        furi_thread_flags_set(furi_thread_get_id(app->thread), flag_dhcp_dora);
+    } else {
+        draw_device_no_connected(app);
+    }
 
     // Change view
     view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
