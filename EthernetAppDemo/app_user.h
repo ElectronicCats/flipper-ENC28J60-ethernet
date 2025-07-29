@@ -63,6 +63,7 @@ typedef struct {
     uint8_t mac_gateway[6]; // Array to save the mac_gateway
 
     uint8_t ip_helper[4];
+    uint8_t mac_helper[4];
 
     bool is_static_ip; // To know if the device has the static IP
     bool enc28j60_connected; // To know if the enc28j60 is connected

@@ -604,3 +604,15 @@ void disable_promiscuous(enc28j60_t* instance) {
     FuriHalSpiBusHandle* spi = instance->spi;
     write_register_byte(spi, ERXFCON, ERXFCON_UCEN | ERXFCON_CRCEN | ERXFCON_PMEN | ERXFCON_BCEN);
 }
+
+// To generate a random MAC
+void generate_random_mac(uint8_t* mac) {
+    // Generate random bytes for the MAC address
+    for(int i = 0; i < 6; i++) {
+        mac[i] = (uint8_t)furi_hal_random_get() & 0xFF;
+    }
+
+    // Set the locally administered bit (bit 1) and clear the multicast bit (bit 0)
+    // This ensures the MAC address is valid for local use and is unicast
+    mac[0] = (mac[0] & 0xFC) | 0x02;
+}

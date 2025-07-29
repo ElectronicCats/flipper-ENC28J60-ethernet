@@ -242,6 +242,7 @@ void ip_list_spoofing_callback(void* context, uint32_t index) {
 
     // copy the IP
     memcpy(app->ip_helper, app->ip_list[index].ip, 4);
+    memcpy(app->mac_helper, app->ip_list[index].mac, 6);
 
     // Return to the last view that is the spoofing
     scene_manager_previous_scene(app->scene_manager);

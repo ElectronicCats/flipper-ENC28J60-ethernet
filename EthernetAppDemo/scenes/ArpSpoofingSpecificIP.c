@@ -179,6 +179,73 @@ void app_scene_arp_spoofing_specific_ip_on_exit(void* context) {
 
 int32_t thread_for_spoofing_specific_ip(void* context) {
     App* app = (App*)context;
-    UNUSED(app);
+
+    enc28j60_t* ethernet = app->ethernet;
+
+    // frames to send
+    // uint8_t buffer_to_gateway[MAX_FRAMELEN] = {0}; // Frame to send to the gateway
+    // uint8_t buffer_to_ip[MAX_FRAMELEN] = {0}; // Frame to send to the specific IP
+
+    // Just an alternative IP
+    uint8_t ip_alternative[4] = {192, 168, 0, 1};
+
+    // for mac handle
+    uint8_t last_mac[6] = {0}; // To save the last mac
+
+    // Save last mac
+    memcpy(last_mac, ethernet->mac_address, 6);
+
+    // generate a random mac
+    generate_random_mac(ethernet->mac_address);
+
+    bool attack = false; // variable for the attacking
+
+    bool start = app->enc28j60_connected;
+
+    if(!start) {
+        start = enc28j60_start(ethernet) != 0xff; // Start the enc28j60
+        app->enc28j60_connected = start; // Update the connection status
+    }
+
+    bool program_loop = start; // This variable will help for the loop
+
+    if(!is_the_network_connected(ethernet) && start) {
+        // draw_network_not_connected(app);
+        printf("Network not connected\n");
+        program_loop = false;
+    }
+
+    // draw the waiting attack
+    if(program_loop) {
+        // Set the mac in the chip
+        enc28j60_set_mac(ethernet);
+
+        // Get the ip gateway and then it mac address
+        process_dora(ethernet, ip_alternative, app->ip_gateway);
+
+        // then get mac gateway
+        arp_get_specific_mac(ethernet, ip_alternative, app->ip_gateway, app->mac_gateway);
+    }
+
+    while(furi_hal_gpio_read(&gpio_button_back) && program_loop) {
+        // Waiting to read the gpio ok to attack or stop to attack
+        if(furi_hal_gpio_read(&gpio_button_ok)) {
+            attack = !attack;
+            furi_delay_ms(200);
+        }
+
+        // When the attacks start
+        if(attack) {
+        }
+
+        furi_delay_ms(1);
+    }
+
+    // If the device is not connected
+    if(!start) {
+        // draw_device_no_connected(app);
+        printf("Device not connected\n");
+    }
+
     return 0;
 }
