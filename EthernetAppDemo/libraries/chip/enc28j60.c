@@ -379,10 +379,11 @@ static uint16_t read_Phy_byte(FuriHalSpiBusHandle* spi, const uint8_t address) {
 }
 
 // Alloc memory for the enc28j60 struct
-enc28j60_t* enc28j60_alloc(uint8_t* mac_address) {
+enc28j60_t* enc28j60_alloc(uint8_t* mac_address, uint8_t* ip_address) {
     enc28j60_t* ethernet_enc = (enc28j60_t*)malloc(sizeof(enc28j60_t));
     ethernet_enc->spi = spi_alloc();
     memcpy(ethernet_enc->mac_address, mac_address, 6);
+    memcpy(ethernet_enc->ip_address, ip_address, 4);
     return ethernet_enc;
 }
 
@@ -392,6 +393,7 @@ void free_enc28j60(enc28j60_t* instance) {
     free(instance);
 }
 
+// Function to give a soft reset to the enc28j60
 void enc28j60_soft_reset(enc28j60_t* instance) {
     FuriHalSpiBusHandle* spi = instance->spi;
 
@@ -400,6 +402,17 @@ void enc28j60_soft_reset(enc28j60_t* instance) {
     write_operation(spi, ENC28J60_SOFT_RESET, 0, ENC28J60_SOFT_RESET);
 
     furi_delay_ms(2);
+}
+
+//  Set MAC Adress
+void enc28j60_set_mac(enc28j60_t* instance) {
+    FuriHalSpiBusHandle* spi = instance->spi;
+    write_register_byte(spi, MAADR5, instance->mac_address[0]);
+    write_register_byte(spi, MAADR4, instance->mac_address[1]);
+    write_register_byte(spi, MAADR3, instance->mac_address[2]);
+    write_register_byte(spi, MAADR2, instance->mac_address[3]);
+    write_register_byte(spi, MAADR1, instance->mac_address[4]);
+    write_register_byte(spi, MAADR0, instance->mac_address[5]);
 }
 
 // Function to start

@@ -24,6 +24,7 @@
 #include "modules/tcp_module.h"
 #include "modules/capture_module.h"
 #include "modules/analysis_module.h"
+#include "modules/ping_module.h"
 
 // Version of the app
 #define APP_NAME    "ETHERNET APP"
@@ -35,12 +36,33 @@
 
 #define PATHPCAPS PATHAPPEXT "/files" // Path to save pcaps
 
+// Create flags
+typedef enum {
+    flag_stop = 1,
+    flag_dhcp_dora,
+} ethernet_app_flags_t;
+
+#define ALL_FLAGS (flag_stop | flag_dhcp_dora)
+
+#define MASK_FLAGS 0xfffffffe
+
+#define IS_NOT_LINK_UP 0xff
+
+// For GET IP scene Events
+typedef enum {
+    wait_ip_event = 1,
+    ip_no_gotten_event,
+    ip_gotten_event,
+} get_ip_events;
+
 // Struct for the App
 typedef struct {
-    uint8_t mac_device[6];
-    uint8_t ip_device[4];
     arp_list ip_list[255];
+    uint8_t ip_counter; // Variable for countrt of ip_list
+    uint8_t ip_gateway[4]; // Array to save the gateway ip
+    uint8_t mac_gateway[6]; // Array to save the mac_gateway
 
+    bool is_static_ip; // To know if the device has the static IP
     bool enc28j60_connected; // To know if the enc28j60 is connected
 
     SceneManager* scene_manager;
@@ -60,7 +82,10 @@ typedef struct {
 
     FuriString* text; // String for general use
     FuriString* path; // String to get path from file browser
+
     FuriThread* thread; // For the threads
+    FuriThread* thread_alternative; // For the threads
+    // FuriMutex* mutex;
 } App;
 
 // Views in the App
@@ -82,3 +107,7 @@ void draw_waiting_for_ip(App* app); // Draw when you're waiting for an IP
 void draw_your_ip_is(App* app); // Draw the IP when you got it
 void draw_ip_not_got_it(App* app); // Draw when get the ip failed
 void draw_dora_failed(App* app); // Draw when the DORA process failed
+void draw_ask_for_ip(App* app); // Draw to ask a new IP
+
+// Thread
+int32_t ethernet_thread(void* context);

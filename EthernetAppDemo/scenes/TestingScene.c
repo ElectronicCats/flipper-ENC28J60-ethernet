@@ -14,16 +14,6 @@ int32_t testing_thread(void* context);
 void app_scene_testing_scene_on_enter(void* context) {
     App* app = (App*)context;
 
-    // Allocate and start the thread
-    app->thread = furi_thread_alloc_ex("TESTING", 10 * 1024, testing_thread, app);
-    furi_thread_start(app->thread);
-
-    // Reset the widget and switch view
-    widget_reset(app->widget);
-
-    // Draw the in development message
-    draw_in_development(app);
-
     view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
 }
 
@@ -40,9 +30,7 @@ bool app_scene_testing_scene_on_event(void* context, SceneManagerEvent event) {
 void app_scene_testing_scene_on_exit(void* context) {
     App* app = (App*)context;
 
-    // Join and free the thread
-    furi_thread_join(app->thread);
-    furi_thread_free(app->thread);
+    UNUSED(app);
 }
 
 /**
@@ -55,7 +43,18 @@ void app_scene_testing_scene_on_exit(void* context) {
 
 int32_t testing_thread(void* context) {
     App* app = (App*)context;
-
     UNUSED(app);
+
+    uint32_t timeout = furi_get_tick();
+
+    while(furi_hal_gpio_read(&gpio_button_back)) {
+        if((furi_get_tick() - timeout) > 1000) {
+            printf("HOLA Desde Thread alternativo\n");
+            timeout = furi_get_tick();
+        }
+
+        furi_delay_ms(1); // Delay to avoid busy loop
+    }
+
     return 0;
 }

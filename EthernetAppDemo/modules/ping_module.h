@@ -17,10 +17,10 @@ uint16_t create_flipper_ping_packet(
     uint8_t* payload,
     uint16_t payload_len);
 
-bool process_ping_response(
-    enc28j60_t* ethernet,
-    uint8_t* ping_packet,
-    uint16_t ping_packet_size,
-    uint8_t* ip_dest);
+bool ping_packet_replied(uint8_t* packet, uint8_t* ip_ping);
+
+bool ping_packet_requested(uint8_t* packet, uint8_t* own_ip);
+
+bool ping_reply_to_request(enc28j60_t* ethernet, uint8_t* packet, uint16_t size_of_packet);
 
 #endif

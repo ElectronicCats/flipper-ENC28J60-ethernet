@@ -42,6 +42,7 @@ void app_scene_ping_menu_scene_on_enter(void* context) {
     // reset submenu and switch view
     submenu_reset(app->submenu);
 
+    submenu_set_header(app->submenu, "PING TO 8.8.8.8");
     submenu_add_item(app->submenu, "Ping", 0, menu_ping_options_callback, app);
 
     furi_string_reset(app->text);
@@ -49,8 +50,7 @@ void app_scene_ping_menu_scene_on_enter(void* context) {
     furi_string_cat_printf(
         app->text, "IP to do ping %u:%u:%u:%u", ip_ping[0], ip_ping[1], ip_ping[2], ip_ping[3]);
 
-    submenu_add_item(
-        app->submenu, furi_string_get_cstr(app->text), 1, menu_ping_options_callback, app);
+    submenu_add_item(app->submenu, furi_string_get_cstr(app->text), 1, NULL, app);
 
     view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);
 }
@@ -152,9 +152,11 @@ void app_scene_ping_set_ip_scene_on_exit(void* context) {
 void app_scene_ping_scene_on_enter(void* context) {
     App* app = (App*)context;
 
+    furi_thread_suspend(app->thread);
+
     // Allocate and start the thread
-    app->thread = furi_thread_alloc_ex("TESTING", 10 * 1024, ping_thread, app);
-    furi_thread_start(app->thread);
+    app->thread_alternative = furi_thread_alloc_ex("PING", 10 * 1024, ping_thread, app);
+    furi_thread_start(app->thread_alternative);
 
     // Reset the widget and switch view
     widget_reset(app->widget);
@@ -202,8 +204,10 @@ void app_scene_ping_scene_on_exit(void* context) {
     App* app = (App*)context;
 
     // Join and free the thread
-    furi_thread_join(app->thread);
-    furi_thread_free(app->thread);
+    furi_thread_join(app->thread_alternative);
+    furi_thread_free(app->thread_alternative);
+
+    furi_thread_resume(app->thread);
 }
 
 /**
@@ -223,6 +227,9 @@ int32_t ping_thread(void* context) {
     uint8_t* packet_to_send = ethernet->tx_buffer;
     uint16_t packet_size = 0;
 
+    uint8_t* packet_to_receive = ethernet->rx_buffer;
+    uint16_t packet_receive_len = 0;
+
     bool is_connected = app->enc28j60_connected;
 
     // Variable to start the process
@@ -231,12 +238,12 @@ int32_t ping_thread(void* context) {
     // Array to get the MAC for the GATEWAY
     uint8_t mac_to_send[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
 
-    // IP of the gateway, default in a domestic network
-    uint8_t ip_gate_way[4] = {192, 168, 0, 1};
-
     // reset the counters
     messages_sent = 0;
     ping_responses = 0;
+
+    // sequence
+    uint16_t sequence = 1;
 
     // To know if the enc28j60 is connected
     if(!is_connected) {
@@ -245,7 +252,7 @@ int32_t ping_thread(void* context) {
     }
 
     // Get time
-    uint32_t last_time = furi_get_tick();
+    uint32_t last_time_ping = furi_get_tick();
 
     // Change view to disconnected device
     if(!is_connected) {
@@ -254,7 +261,7 @@ int32_t ping_thread(void* context) {
     }
 
     // Get link up to the LAN
-    while(((furi_get_tick() - last_time) < 1000) && !start_ping && is_connected) {
+    while(((furi_get_tick() - last_time_ping) < 1000) && !start_ping && is_connected) {
         start_ping = is_link_up(ethernet);
     }
 
@@ -264,8 +271,10 @@ int32_t ping_thread(void* context) {
         goto finalize;
     }
 
-    // Do process Dora to get the IP gateway, and set our IP
-    start_ping = process_dora(ethernet, app->ip_device, ip_gate_way);
+    // Do process Dora to get the IP gateway, and set our IP if we didnt have the IP
+    if(!app->is_static_ip) {
+        start_ping = process_dora(ethernet, app->ethernet->ip_address, app->ip_gateway);
+    }
 
     // If the process Dora failed, we will not continue
     if(!start_ping) {
@@ -274,39 +283,48 @@ int32_t ping_thread(void* context) {
     }
 
     // Get the MAC gateway
-    if(!arp_get_specific_mac(ethernet, app->ip_device, ip_gate_way, mac_to_send) && start_ping &&
-       is_connected) {
+    if(!arp_get_specific_mac(
+           ethernet, app->ethernet->ip_address, app->ip_gateway, app->mac_gateway) &&
+       start_ping && is_connected) {
         start_ping = false;
-    }
-
-    // Set the message
-    if(start_ping && is_connected) {
-        packet_size = create_flipper_ping_packet(
-            packet_to_send,
-            app->mac_device,
-            mac_to_send,
-            app->ip_device,
-            ip_ping,
-            1,
-            1,
-            (uint8_t*)ping_data,
-            data_len);
-
-        last_time = 0;
+    } else {
+        memcpy(mac_to_send, app->mac_gateway, 6);
     }
 
     // Here is where gonna make the ping
     while(start_ping && is_connected && furi_hal_gpio_read(&gpio_button_back)) {
-        if((furi_get_tick() - last_time) > 1000) {
-            if(process_ping_response(ethernet, packet_to_send, packet_size, ip_ping)) {
-                ping_responses++;
-            }
+        packet_receive_len = receive_packet(ethernet, packet_to_receive, MAX_FRAMELEN);
+
+        if((furi_get_tick() - last_time_ping) > 1000) {
+            packet_size = create_flipper_ping_packet(
+                packet_to_send,
+                mac_to_send,
+                app->mac_gateway,
+                app->ethernet->ip_address,
+                ip_ping,
+                1,
+                sequence,
+                (uint8_t*)ping_data,
+                data_len);
+
+            send_packet(ethernet, packet_to_send, packet_size);
+
+            if(sequence == 0xffff) sequence = 0;
+            sequence++;
             messages_sent++;
             view_dispatcher_send_custom_event(app->view_dispatcher, 5); // Update the ping count
-            last_time = furi_get_tick();
+            last_time_ping = furi_get_tick();
         }
-        furi_delay_ms(1);
+
+        if(packet_receive_len) {
+            if(ping_packet_replied(packet_to_receive, ip_ping)) {
+                ping_responses++;
+                view_dispatcher_send_custom_event(
+                    app->view_dispatcher, 5); // Update the ping count
+            }
+        }
     }
+    furi_delay_ms(1);
 
 finalize:
 

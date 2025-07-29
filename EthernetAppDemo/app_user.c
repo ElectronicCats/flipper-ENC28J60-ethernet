@@ -82,13 +82,7 @@ App* app_alloc() {
     app->file = storage_file_alloc(app->storage);
 
     // Alloc the memory for the enc28j60 instance
-    app->ethernet = enc28j60_alloc(app->mac_device);
-
-    // Copy the MAC Address by default
-    memcpy(app->mac_device, MAC_INITIAL, 6);
-
-    // Copy the IP Address by default
-    memcpy(app->ip_device, IP_DEFAULT, 4);
+    app->ethernet = enc28j60_alloc(MAC_INITIAL, IP_DEFAULT);
 
     make_paths(app);
 
@@ -96,10 +90,22 @@ App* app_alloc() {
     app->enc28j60_connected = enc28j60_start(app->ethernet) !=
                               0xff; // To know if the enc28j60 is connected
 
+    app->thread = furi_thread_alloc_ex("Ethernet Thread", 10 * 1024, ethernet_thread, app);
+    furi_thread_start(app->thread);
+
+    app->is_static_ip = false;
+
     return app;
 }
 
 void app_free(App* app) {
+    furi_thread_flags_set(furi_thread_get_id(app->thread), flag_stop);
+
+    furi_thread_join(app->thread);
+    furi_thread_free(app->thread);
+
+    // furi_mutex_free(app->mutex);
+
     //  Free all the views from the View Dispatcher
     view_dispatcher_remove_view(app->view_dispatcher, SubmenuView);
     view_dispatcher_remove_view(app->view_dispatcher, WidgetView);

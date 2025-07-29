@@ -24,13 +24,17 @@ void send_arp_spoofing(enc28j60_t* ethernet, uint8_t* buffer, uint16_t len);
 void arp_scan_network(
     enc28j60_t* ethernet,
     arp_list* list,
-    uint8_t* own_mac,
-    uint8_t* own_ip,
     uint8_t init_ip[4],
     uint8_t* list_count,
     uint8_t range);
 
 // Function to get the MAC address
 bool arp_get_specific_mac(enc28j60_t* ethernet, uint8_t* src_ip, uint8_t* dst_ip, uint8_t* mac_dst);
+
+// Function to reply a requested ARP
+bool arp_reply_requested(enc28j60_t* ethernet, uint8_t* buffer, uint8_t* dst_ip);
+
+// Check if there is a duplicated IP in the arp ip list
+uint8_t is_duplicated_ip(uint8_t* ip, arp_list* list, uint8_t total_list);
 
 #endif

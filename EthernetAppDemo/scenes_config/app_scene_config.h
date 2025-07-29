@@ -21,6 +21,7 @@ ADD_SCENE(app, arp_spoofing, arp_spoofing_option)
 // ARP scanner scene
 ADD_SCENE(app, arp_scanner_menu, arp_scanner_menu_option)
 ADD_SCENE(app, arp_scanner, arp_scanner_option)
+ADD_SCENE(app, arp_ip_show_details, arp_ip_show_details_option)
 
 // About US scene
 ADD_SCENE(app, about_us, about_us_option)
