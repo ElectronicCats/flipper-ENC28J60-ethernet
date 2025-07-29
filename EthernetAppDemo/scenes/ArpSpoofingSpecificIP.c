@@ -9,16 +9,15 @@ void arp_spoofing_menu_to_ip_callback(void* context, uint32_t index) {
 
     switch(index) {
     case 0:
-        /* code */
+    case 2:
+        scene_manager_set_scene_state(
+            app->scene_manager, app_scene_arp_spoofing_specific_ip_option, index);
+        scene_manager_next_scene(app->scene_manager, app_scene_arp_spoofing_specific_ip_option);
         break;
 
     case 1:
         scene_manager_set_scene_state(app->scene_manager, app_scene_arp_scanner_menu_option, 2);
         scene_manager_next_scene(app->scene_manager, app_scene_arp_scanner_menu_option);
-        break;
-
-    case 2:
-        /* code */
         break;
 
     default:
@@ -72,4 +71,114 @@ void app_scene_arp_spoofing_specific_ip_menu_on_exit(void* context) {
     App* app = (App*)context;
 
     UNUSED(app);
+}
+
+/**
+ * Scene for the spoofing IP
+ */
+
+// Thread for worker
+int32_t thread_for_spoofing_specific_ip(void* context);
+
+// Callback to set the IP manually
+void set_ip_to_spoof_manually(void* context) {
+    App* app = (App*)context;
+    scene_manager_previous_scene(app->scene_manager);
+}
+
+// to set the ip
+void set_ip_to_spoof(App* app) {
+    // Set the header text
+    byte_input_set_header_text(app->input_byte_value, "Set IP Address");
+
+    byte_input_set_result_callback(
+        app->input_byte_value,
+        set_ip_to_spoof_manually,
+        NULL,
+        app,
+        app->ip_helper,
+        4); // Set the callback for the input IP address
+
+    view_dispatcher_switch_to_view(
+        app->view_dispatcher, InputByteView); // Switch to the input byte view
+}
+
+// Set the spoofing and the scene and start the alternative thread
+void spoofing_specific_ip(App* app) {
+    furi_thread_suspend(furi_thread_get_id(app->thread));
+
+    // Start the other thread
+    app->thread_alternative = furi_thread_alloc_ex(
+        "ARP SPOOF SPECIFIC IP", 10 * 1024, thread_for_spoofing_specific_ip, app);
+    furi_thread_start(app->thread_alternative);
+
+    // Switch the view of the flipper
+    widget_reset(app->widget);
+
+    // By the moment in development
+    draw_in_development(app);
+
+    // switch to widget
+    view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
+}
+
+// When the thread is exit, resume the other thread
+void finish_spoofing_specific_ip_thread(App* app) {
+    furi_thread_join(app->thread_alternative);
+    furi_thread_free(app->thread_alternative);
+    furi_thread_resume(furi_thread_get_id(app->thread));
+}
+
+// Scene on enter for spoofing
+void app_scene_arp_spoofing_specific_ip_on_enter(void* context) {
+    App* app = (App*)context;
+
+    switch(scene_manager_get_scene_state(
+        app->scene_manager, app_scene_arp_spoofing_specific_ip_option)) {
+    case 0:
+        spoofing_specific_ip(app);
+        break;
+
+    case 2:
+        // Set the ip manually
+        set_ip_to_spoof(app);
+        break;
+
+    default:
+        break;
+    }
+}
+
+// Function for the spoofing scene on event
+bool app_scene_arp_spoofing_specific_ip_on_event(void* context, SceneManagerEvent event) {
+    bool consumed = false;
+    App* app = (App*)context;
+    UNUSED(app);
+    UNUSED(event);
+    return consumed;
+}
+
+// Function for the arp spoofing scene on exit
+void app_scene_arp_spoofing_specific_ip_on_exit(void* context) {
+    App* app = (App*)context;
+
+    switch(scene_manager_get_scene_state(
+        app->scene_manager, app_scene_arp_spoofing_specific_ip_option)) {
+    case 0:
+        finish_spoofing_specific_ip_thread(app);
+        break;
+
+    default:
+        break;
+    }
+}
+
+/**
+ * Thread for the arp spoofing specific IP
+ */
+
+int32_t thread_for_spoofing_specific_ip(void* context) {
+    App* app = (App*)context;
+    UNUSED(app);
+    return 0;
 }

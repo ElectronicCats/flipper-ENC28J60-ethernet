@@ -20,7 +20,7 @@ ADD_SCENE(app, arp_spoofing, arp_spoofing_option)
 
 // ArpSpoofing a specific IP
 ADD_SCENE(app, arp_spoofing_specific_ip_menu, arp_spoofing_specific_ip_menu_option)
-// ADD_SCENE(app, arp_spoofing_specific_ip, arp_spoofing_specific_ip_option)
+ADD_SCENE(app, arp_spoofing_specific_ip, arp_spoofing_specific_ip_option)
 
 // ARP scanner scene
 ADD_SCENE(app, arp_scanner_menu, arp_scanner_menu_option)
