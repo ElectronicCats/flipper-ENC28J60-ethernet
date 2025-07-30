@@ -21,6 +21,11 @@ void variable_list_enter_callback(void* context, uint32_t index) {
         return;
     }
 
+    if(index == 0 &&
+       scene_manager_get_scene_state(app->scene_manager, app_scene_arp_scanner_menu_option) == 2) {
+        index = 3;
+    }
+
     // Set the state of the scene to the index
     scene_manager_set_scene_state(app->scene_manager, app_scene_arp_scanner_option, index);
 
@@ -160,6 +165,7 @@ void set_ip_address(App* app) {
         app->view_dispatcher, InputByteView); // Switch to the input byte view
 }
 
+// Function to show the list of IP
 void show_current_arp_list(App* app) {
     view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);
 }
@@ -170,6 +176,7 @@ void app_scene_arp_scanner_on_enter(void* context) {
 
     switch(scene_manager_get_scene_state(app->scene_manager, app_scene_arp_scanner_option)) {
     case 0:
+    case 3:
         // If the scene is in state 0, starts the thread and show ip list
         draw_the_arp_list(app);
         break;
@@ -205,6 +212,7 @@ void app_scene_arp_scanner_on_exit(void* context) {
     // If scene is in state 0 it finished the
     switch(scene_manager_get_scene_state(app->scene_manager, app_scene_arp_scanner_option)) {
     case 0:
+    case 3:
         finished_arp_thread(app);
         break;
 
@@ -217,6 +225,7 @@ void app_scene_arp_scanner_on_exit(void* context) {
  * Callback for the options in the ip list
  */
 
+// For only arp scanner
 void ip_list_callback(void* context, uint32_t index) {
     App* app = (App*)context;
 
@@ -225,6 +234,18 @@ void ip_list_callback(void* context, uint32_t index) {
 
     // Go to show details scene
     scene_manager_next_scene(app->scene_manager, app_scene_arp_ip_show_details_option);
+}
+
+// For the arp spoofing
+void ip_list_spoofing_callback(void* context, uint32_t index) {
+    App* app = (App*)context;
+
+    // copy the IP
+    memcpy(app->ip_helper, app->ip_list[index].ip, 4);
+    memcpy(app->mac_helper, app->ip_list[index].mac, 6);
+
+    // Return to the last view that is the spoofing
+    scene_manager_previous_scene(app->scene_manager);
 }
 
 /**
@@ -322,6 +343,9 @@ int32_t arp_scanner_thread(void* context) {
 
     bool start = app->enc28j60_connected;
 
+    uint32_t selection =
+        scene_manager_get_scene_state(app->scene_manager, app_scene_arp_scanner_option);
+
     if(!start) {
         start = enc28j60_start(ethernet) != 0xff; // Start the enc28j60
         app->enc28j60_connected = start; // Update the connection status
@@ -342,7 +366,7 @@ int32_t arp_scanner_thread(void* context) {
         submenu_reset(app->submenu);
         view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);
 
-        submenu_set_header(app->submenu, "");
+        submenu_set_header(app->submenu, "IP LIST");
 
         for(uint8_t i = 0; i < app->ip_counter; i++) {
             furi_string_reset(app->text);
@@ -357,9 +381,17 @@ int32_t arp_scanner_thread(void* context) {
             if(is_duplicated_ip(app->ip_list[i].ip, app->ip_list, app->ip_counter)) {
                 furi_string_cat_printf(app->text, " (D)");
             }
-
-            submenu_add_item(
-                app->submenu, furi_string_get_cstr(app->text), i, ip_list_callback, app);
+            if(selection == 0) {
+                submenu_add_item(
+                    app->submenu, furi_string_get_cstr(app->text), i, ip_list_callback, app);
+            } else if(selection == 3) {
+                submenu_add_item(
+                    app->submenu,
+                    furi_string_get_cstr(app->text),
+                    i,
+                    ip_list_spoofing_callback,
+                    app);
+            }
         }
     }
 

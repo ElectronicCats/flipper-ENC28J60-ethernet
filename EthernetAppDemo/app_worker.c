@@ -48,7 +48,7 @@ int32_t ethernet_thread(void* context) {
         // If the Option is DORA
         if(event == flag_dhcp_dora) {
             view_dispatcher_send_custom_event(app->view_dispatcher, wait_ip_event);
-            if(process_dora(ethernet, ethernet->ip_address, app->ip_gateway)) {
+            if(flipper_process_dora(ethernet, ethernet->ip_address, app->ip_gateway)) {
                 view_dispatcher_send_custom_event(app->view_dispatcher, ip_gotten_event);
                 app->is_static_ip = true;
             } else {

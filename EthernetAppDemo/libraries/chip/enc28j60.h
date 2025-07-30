@@ -41,6 +41,7 @@ void enable_multicast(enc28j60_t* instance);
 void disable_multicast(enc28j60_t* instance);
 void enable_promiscuous(enc28j60_t* instance);
 void disable_promiscuous(enc28j60_t* instance);
+void generate_random_mac(uint8_t* mac);
 
 // To debugg
 void show_message(uint8_t* buffer, uint16_t len);
