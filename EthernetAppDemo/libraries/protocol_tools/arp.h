@@ -18,7 +18,7 @@ typedef struct {
     uint8_t ip_destiny[6];
 } arp_header_t;
 
-bool arp_set_header_ipv4(
+bool arp_set_header(
     uint8_t* buffer,
     uint8_t* MAC_SRC,
     uint8_t* MAC_DES,

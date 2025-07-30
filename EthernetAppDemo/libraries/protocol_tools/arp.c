@@ -2,7 +2,7 @@
 #include "ethernet_protocol.h"
 
 // Function to set the arp header with ipv4 protocol
-bool arp_set_header_ipv4(
+bool arp_set_header(
     uint8_t* buffer,
     uint8_t* MAC_SRC,
     uint8_t* MAC_DES,
