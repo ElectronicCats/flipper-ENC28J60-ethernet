@@ -273,7 +273,7 @@ int32_t ping_thread(void* context) {
 
     // Do process Dora to get the IP gateway, and set our IP if we didnt have the IP
     if(!app->is_static_ip) {
-        start_ping = process_dora(ethernet, app->ethernet->ip_address, app->ip_gateway);
+        start_ping = flipper_process_dora(ethernet, app->ethernet->ip_address, app->ip_gateway);
     }
 
     // If the process Dora failed, we will not continue

@@ -280,7 +280,7 @@ int32_t thread_for_spoofing_specific_ip(void* context) {
         enc28j60_set_mac(ethernet);
 
         // Get the ip gateway and then it mac address
-        if(!process_dora(ethernet, ip_alternative, app->ip_gateway)) {
+        if(!flipper_process_dora(ethernet, ip_alternative, app->ip_gateway)) {
             draw_dora_failed(app);
             goto finalize_arp_spoofing_ip;
         }

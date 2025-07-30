@@ -150,7 +150,7 @@ bool deconstruct_dhcp_ack(uint8_t* buffer) {
 }
 
 // Function to start the DORA process and get the ip and the gateway ip
-bool process_dora(enc28j60_t* ethernet, uint8_t* static_ip, uint8_t* ip_router) {
+bool flipper_process_dora(enc28j60_t* ethernet, uint8_t* static_ip, uint8_t* ip_router) {
     uint32_t current_time = furi_get_tick();
 
     bool ret = false;

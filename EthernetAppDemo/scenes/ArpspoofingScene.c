@@ -130,7 +130,7 @@ int32_t arpspoofing_thread(void* context) {
             // Get the IP
             if(!furi_hal_gpio_read(&gpio_button_right)) {
                 draw_waiting_for_ip(app);
-                process_dora(ethernet, app->ethernet->ip_address, app->ip_gateway);
+                flipper_process_dora(ethernet, app->ethernet->ip_address, app->ip_gateway);
                 break;
             }
 
