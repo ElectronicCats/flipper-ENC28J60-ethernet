@@ -279,8 +279,19 @@ int32_t thread_for_spoofing_specific_ip(void* context) {
         // Set the mac in the chip
         enc28j60_set_mac(ethernet);
 
+        // Set host name with random number id
+        uint32_t number_altern = furi_hal_random_get();
+        uint8_t number = number_altern;
+        printf("Number %u\n", number);
+        printf("Number %lu\n", number_altern);
+        furi_string_reset(app->text);
+        furi_string_printf(app->text, "DEVICE%02x", number);
+
+        printf("NAME HOST %s\n", furi_string_get_cstr(app->text));
+
         // Get the ip gateway and then it mac address
-        if(!flipper_process_dora(ethernet, ip_alternative, app->ip_gateway)) {
+        if(!flipper_process_dora_with_host_name(
+               ethernet, ip_alternative, app->ip_gateway, furi_string_get_cstr(app->text))) {
             draw_dora_failed(app);
             goto finalize_arp_spoofing_ip;
         }
@@ -375,7 +386,18 @@ int32_t thread_for_spoofing_specific_ip(void* context) {
             if((furi_get_tick() - time_out) > 200) {
                 send_packet(ethernet, buffer_to_ip, size_one);
                 send_packet(ethernet, buffer_to_gateway, size_two);
-
+                printf(
+                    "Attack to: %u.%u.%u.%u with mac %02x:%02x:%02x:%02x:%02x:%02x\n",
+                    ip_device_to_disconnect[0],
+                    ip_device_to_disconnect[1],
+                    ip_device_to_disconnect[2],
+                    ip_device_to_disconnect[3],
+                    mac_device_to_disconnect[0],
+                    mac_device_to_disconnect[1],
+                    mac_device_to_disconnect[2],
+                    mac_device_to_disconnect[3],
+                    mac_device_to_disconnect[4],
+                    mac_device_to_disconnect[5]);
                 time_out = furi_get_tick();
             }
         }

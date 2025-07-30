@@ -257,3 +257,154 @@ void get_mac_server(uint8_t* MAC_SERVER) {
 void get_gateway_ip(uint8_t* ip_gateway) {
     memcpy(ip_gateway, gateway, 4);
 }
+
+/**
+ * Test
+*/
+
+// Function to set a Discover Message
+void set_dhcp_discover_message_with_host_name(uint8_t* buffer, uint16_t* length, const char* host) {
+    if(buffer == NULL || length == NULL) return;
+
+    uint16_t dhcp_len = 0;
+
+    dhcp_message_t dhcp_message =
+        dhcp_message_discover(MAC_ADDRESS, xid, (uint8_t*)host, &dhcp_len);
+
+    set_ethernet_header(buffer, MAC_ADDRESS, MAC_BROADCAST, 0x800);
+
+    set_ipv4_header(
+        buffer + ETHERNET_HEADER_LEN, 0x11, dhcp_len + UDP_HEADER_LEN, source_ip, destination_ip);
+
+    set_udp_header(
+        buffer + ETHERNET_HEADER_LEN + IP_HEADER_LEN, 0x44, 0x43, dhcp_len + UDP_HEADER_LEN);
+
+    memcpy(buffer + ETHERNET_HEADER_LEN + IP_HEADER_LEN + UDP_HEADER_LEN, &dhcp_message, dhcp_len);
+
+    *length = dhcp_len + ETHERNET_HEADER_LEN + IP_HEADER_LEN + UDP_HEADER_LEN;
+}
+
+// Function to set the dhcp message request
+void set_dhcp_request_message_with_host_name(uint8_t* buffer, uint16_t* length, const char* host) {
+    if(buffer == NULL || length == NULL) return;
+
+    uint16_t dhcp_len = 0;
+
+    dhcp_message_t dhcp_message =
+        dhcp_message_request(MAC_ADDRESS, xid, ip_client, ip_server, (uint8_t*)host, &dhcp_len);
+
+    set_ethernet_header(buffer, MAC_ADDRESS, MAC_BROADCAST, 0x800);
+
+    set_ipv4_header(
+        buffer + ETHERNET_HEADER_LEN, 0x11, dhcp_len + UDP_HEADER_LEN, source_ip, destination_ip);
+
+    set_udp_header(
+        buffer + ETHERNET_HEADER_LEN + IP_HEADER_LEN, 0x44, 0x43, dhcp_len + UDP_HEADER_LEN);
+
+    memcpy(buffer + ETHERNET_HEADER_LEN + IP_HEADER_LEN + UDP_HEADER_LEN, &dhcp_message, dhcp_len);
+
+    *length = dhcp_len + ETHERNET_HEADER_LEN + IP_HEADER_LEN + UDP_HEADER_LEN;
+}
+
+// Function to start the DORA process and get the ip and the gateway ip
+bool flipper_process_dora_with_host_name(
+    enc28j60_t* ethernet,
+    uint8_t* static_ip,
+    uint8_t* ip_router,
+    const char* host) {
+    uint32_t current_time = furi_get_tick();
+
+    bool ret = false;
+
+    xid = furi_hal_random_get();
+
+    memcpy(MAC_ADDRESS, ethernet->mac_address, 6);
+
+    uint8_t* tx_buffer = ethernet->tx_buffer;
+    uint8_t* rx_buffer = ethernet->rx_buffer;
+    uint16_t length = 0;
+
+    state_dora_t state = DHCP_STATE_INIT;
+
+    enable_broadcast(ethernet);
+
+    while(!ret && is_link_up(ethernet)) {
+        if(furi_get_tick() > (current_time + 3000)) {
+            printf("FAIL\n");
+            break;
+        }
+
+        switch(state) {
+        // This state is to send the discover message
+        case DHCP_STATE_INIT:
+            set_dhcp_discover_message_with_host_name(tx_buffer, &length, host);
+            send_packet(ethernet, tx_buffer, length);
+            memset(tx_buffer, 0, MAX_FRAMELEN);
+
+            printf("SEND DHCP DISCOVER\n");
+
+            current_time = furi_get_tick();
+
+            state = DHCP_STATE_WAITING;
+            break;
+
+        // This state is to send the request message
+        case DHCP_STATE_REQUEST:
+            set_dhcp_request_message_with_host_name(tx_buffer, &length, host);
+            send_packet(ethernet, tx_buffer, length);
+            memset(tx_buffer, 0, MAX_FRAMELEN);
+
+            printf("SEND DHCP REQUEST\n");
+
+            current_time = furi_get_tick();
+
+            state = DHCP_STATE_WAITING;
+            break;
+
+        // It will waiting for a dhcp message, any of offer or
+        case DHCP_STATE_WAITING:
+            length = receive_packet(ethernet, rx_buffer, MAX_FRAMELEN);
+
+            // This part helps to know if it is dhcp offer
+            if(is_dhcp(rx_buffer)) {
+                if(deconstruct_dhcp_offer(rx_buffer)) {
+                    state = DHCP_STATE_REQUEST; // set the state in request
+                    memset(rx_buffer, 0, MAX_FRAMELEN);
+                    printf("SEND DHCP OFFER\n");
+
+                    current_time = furi_get_tick();
+                }
+
+                // This part helps to know if it is dhcp acknowledge
+                if(deconstruct_dhcp_ack(rx_buffer)) {
+                    state = DHCP_OK; // state ok
+                    printf("SEND DHCP OK\n");
+                    ret = true;
+
+                    current_time = furi_get_tick();
+                }
+            }
+            break;
+
+            // If the process fail it will stop and return a false
+            // case DHCP_FAIL:
+            //     return false;
+            //     break;
+
+        default:
+            break;
+        }
+
+        furi_delay_us(1);
+    }
+
+    disable_broadcast(ethernet);
+
+    if(ret) {
+        memcpy(static_ip, myip, 4);
+
+        memcpy(ip_router, gateway, 4);
+    }
+
+    return ret;
+}
