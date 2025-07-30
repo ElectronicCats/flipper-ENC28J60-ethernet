@@ -93,6 +93,8 @@ App* app_alloc() {
     app->thread = furi_thread_alloc_ex("Ethernet Thread", 10 * 1024, ethernet_thread, app);
     furi_thread_start(app->thread);
 
+    memcpy(app->ip_helper, IP_DEFAULT, 4);
+
     app->is_static_ip = false;
 
     return app;

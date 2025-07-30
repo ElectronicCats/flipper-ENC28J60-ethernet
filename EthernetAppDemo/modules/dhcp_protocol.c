@@ -234,7 +234,7 @@ bool process_dora(enc28j60_t* ethernet, uint8_t* static_ip, uint8_t* ip_router) 
             break;
         }
 
-        furi_delay_us(10);
+        furi_delay_us(1);
     }
 
     disable_broadcast(ethernet);

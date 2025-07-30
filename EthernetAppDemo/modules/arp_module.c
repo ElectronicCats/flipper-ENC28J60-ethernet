@@ -326,7 +326,7 @@ bool arp_get_specific_mac(enc28j60_t* ethernet, uint8_t* src_ip, uint8_t* dst_ip
             }
         }
 
-        furi_delay_ms(1);
+        furi_delay_us(1);
     }
     // disable_promiscuous(ethernet);
 

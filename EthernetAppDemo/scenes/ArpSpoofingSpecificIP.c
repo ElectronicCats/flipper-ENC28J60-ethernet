@@ -115,9 +115,6 @@ void spoofing_specific_ip(App* app) {
     // Switch the view of the flipper
     widget_reset(app->widget);
 
-    // By the moment in development
-    draw_in_development(app);
-
     // switch to widget
     view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
 }
@@ -174,6 +171,55 @@ void app_scene_arp_spoofing_specific_ip_on_exit(void* context) {
 }
 
 /**
+ * Views or functions to show the IP address
+ */
+
+// Function to draw if getting the MAC from IP failed
+void draw_process_failed(App* app) {
+    widget_reset(app->widget);
+    widget_add_string_multiline_element(
+        app->widget, 64, 32, AlignCenter, AlignCenter, FontPrimary, "Failed getting MAC");
+}
+
+// Function to display the view to attack an IP
+void draw_ip_to_attack(App* app, uint8_t* ip) {
+    widget_reset(app->widget);
+
+    // Set the IP in the text
+    furi_string_reset(app->text);
+    furi_string_printf(app->text, "%u.%u.%u.%u", ip[0], ip[1], ip[2], ip[3]);
+
+    // Set the string element to display the IP address to attack
+    widget_add_string_element(
+        app->widget, 64, 5, AlignCenter, AlignCenter, FontPrimary, furi_string_get_cstr(app->text));
+
+    // Display image
+    widget_add_icon_element(app->widget, 46, 20, &I_device_to_attacked);
+
+    // Add button element for view
+    widget_add_button_element(app->widget, GuiButtonTypeCenter, "Attack", NULL, NULL);
+}
+
+// Function to display the view the IP attacked
+void draw_ip_attacked(App* app, uint8_t* ip) {
+    widget_reset(app->widget);
+
+    // Set the IP in the text
+    furi_string_reset(app->text);
+    furi_string_printf(app->text, "%u.%u.%u.%u", ip[0], ip[1], ip[2], ip[3]);
+
+    // Set the string element to display the IP address to attack
+    widget_add_string_element(
+        app->widget, 64, 5, AlignCenter, AlignCenter, FontPrimary, furi_string_get_cstr(app->text));
+
+    // Display image
+    widget_add_icon_element(app->widget, 46, 20, &I_device_attacked);
+
+    // Add button element for view
+    widget_add_button_element(app->widget, GuiButtonTypeCenter, "Stop Attack", NULL, NULL);
+}
+
+/**
  * Thread for the arp spoofing specific IP
  */
 
@@ -199,18 +245,14 @@ int32_t thread_for_spoofing_specific_ip(void* context) {
     // for mac handle
     uint8_t last_mac[6] = {0}; // To save the last mac
 
-    // Save last mac
-    memcpy(last_mac, ethernet->mac_address, 6);
-
-    // generate a random mac
-    generate_random_mac(ethernet->mac_address);
-
     // Variable for time
     uint32_t time_out = 0;
-    UNUSED(time_out);
 
     // Variable to start the attack or stop it
     bool attack = false;
+
+    // Variable to control the attacks views
+    bool display_once = true;
 
     // To know if the enc28j60 is connected
     bool start = app->enc28j60_connected;
@@ -223,57 +265,73 @@ int32_t thread_for_spoofing_specific_ip(void* context) {
     bool program_loop = start; // This variable will help for the loop
 
     if(!is_the_network_connected(ethernet) && start) {
-        // draw_network_not_connected(app);
-        printf("Network not connected\n");
+        draw_network_not_connected(app);
         program_loop = false;
     }
 
-    // draw the waiting attack
     if(program_loop) {
+        // Save last mac
+        memcpy(last_mac, ethernet->mac_address, 6);
+
+        // generate a random mac
+        generate_random_mac(ethernet->mac_address);
+
         // Set the mac in the chip
         enc28j60_set_mac(ethernet);
 
         // Get the ip gateway and then it mac address
-        process_dora(ethernet, ip_alternative, app->ip_gateway);
+        if(!process_dora(ethernet, ip_alternative, app->ip_gateway)) {
+            draw_dora_failed(app);
+            goto finalize_arp_spoofing_ip;
+        }
+    }
 
+    // draw the waiting attack
+    if(program_loop) {
         // then get mac gateway
-        arp_get_specific_mac(ethernet, ip_alternative, app->ip_gateway, app->mac_gateway);
+        if(!arp_get_specific_mac(ethernet, ip_alternative, app->ip_gateway, app->mac_gateway)) {
+            draw_process_failed(app);
+            goto finalize_arp_spoofing_ip;
+        }
 
         // get the mac of the device
-        arp_get_specific_mac(
-            ethernet, ip_alternative, ip_device_to_disconnect, mac_device_to_disconnect);
+        if(!arp_get_specific_mac(
+               ethernet, ip_alternative, ip_device_to_disconnect, mac_device_to_disconnect)) {
+            draw_process_failed(app);
+            goto finalize_arp_spoofing_ip;
+        }
 
-        // print the MAC gateway
-        printf(
-            "IP GATEWAY %u.%u.%u.%u\n",
-            app->ip_gateway[0],
-            app->ip_gateway[1],
-            app->ip_gateway[2],
-            app->ip_gateway[3]);
-        printf(
-            "MAC GATEWAY %02x:%02x:%02x:%02x:%02x:%02x\n",
-            app->mac_gateway[0],
-            app->mac_gateway[1],
-            app->mac_gateway[2],
-            app->mac_gateway[3],
-            app->mac_gateway[4],
-            app->mac_gateway[5]);
+        // // print the MAC gateway
+        // printf(
+        //     "IP GATEWAY %u.%u.%u.%u\n",
+        //     app->ip_gateway[0],
+        //     app->ip_gateway[1],
+        //     app->ip_gateway[2],
+        //     app->ip_gateway[3]);
+        // printf(
+        //     "MAC GATEWAY %02x:%02x:%02x:%02x:%02x:%02x\n",
+        //     app->mac_gateway[0],
+        //     app->mac_gateway[1],
+        //     app->mac_gateway[2],
+        //     app->mac_gateway[3],
+        //     app->mac_gateway[4],
+        //     app->mac_gateway[5]);
 
-        // print the MAC gateway
-        printf(
-            "IP DEVICE %u.%u.%u.%u\n",
-            ip_device_to_disconnect[0],
-            ip_device_to_disconnect[1],
-            ip_device_to_disconnect[2],
-            ip_device_to_disconnect[3]);
-        printf(
-            "MAC DEVICE %02x:%02x:%02x:%02x:%02x:%02x\n",
-            mac_device_to_disconnect[0],
-            mac_device_to_disconnect[1],
-            mac_device_to_disconnect[2],
-            mac_device_to_disconnect[3],
-            mac_device_to_disconnect[4],
-            mac_device_to_disconnect[5]);
+        // // print the MAC gateway
+        // printf(
+        //     "IP DEVICE %u.%u.%u.%u\n",
+        //     ip_device_to_disconnect[0],
+        //     ip_device_to_disconnect[1],
+        //     ip_device_to_disconnect[2],
+        //     ip_device_to_disconnect[3]);
+        // printf(
+        //     "MAC DEVICE %02x:%02x:%02x:%02x:%02x:%02x\n",
+        //     mac_device_to_disconnect[0],
+        //     mac_device_to_disconnect[1],
+        //     mac_device_to_disconnect[2],
+        //     mac_device_to_disconnect[3],
+        //     mac_device_to_disconnect[4],
+        //     mac_device_to_disconnect[5]);
 
         // Set the frames or messages to send
         // 1. Reply to the Gateway
@@ -293,29 +351,23 @@ int32_t thread_for_spoofing_specific_ip(void* context) {
             ip_device_to_disconnect,
             mac_device_to_disconnect,
             &size_two);
-
-        // Get the current time
-        time_out = furi_get_tick();
-
-        // Show the messages
-        printf("================== Reply to Gateway =================\n");
-        for(uint16_t i = 0; i < size_one; i++) {
-            printf("%02x ", buffer_to_gateway[i]);
-        }
-        printf("\n");
-
-        printf("================== Reply to Device =================\n");
-        for(uint16_t i = 0; i < size_two; i++) {
-            printf("%02x ", buffer_to_ip[i]);
-        }
-        printf("\n");
     }
 
     while(furi_hal_gpio_read(&gpio_button_back) && program_loop) {
         // Waiting to read the gpio ok to attack or stop to attack
         if(furi_hal_gpio_read(&gpio_button_ok)) {
             attack = !attack;
+
+            display_once = true;
+
             furi_delay_ms(200);
+        }
+
+        if(display_once) {
+            if(attack) draw_ip_attacked(app, ip_device_to_disconnect);
+            if(!attack) draw_ip_to_attack(app, ip_device_to_disconnect);
+
+            display_once = false;
         }
 
         // When the attacks start
@@ -324,8 +376,6 @@ int32_t thread_for_spoofing_specific_ip(void* context) {
                 send_packet(ethernet, buffer_to_ip, size_one);
                 send_packet(ethernet, buffer_to_gateway, size_two);
 
-                printf("GOT ATTACKED\n");
-
                 time_out = furi_get_tick();
             }
         }
@@ -333,16 +383,11 @@ int32_t thread_for_spoofing_specific_ip(void* context) {
         furi_delay_ms(1);
     }
 
+finalize_arp_spoofing_ip:
+
     if(start) {
         memcpy(ethernet->mac_address, last_mac, 6);
-
         enc28j60_set_mac(ethernet);
-    }
-
-    // If the device is not connected
-    if(!start) {
-        // draw_device_no_connected(app);
-        printf("Device not connected\n");
     }
 
     return 0;
