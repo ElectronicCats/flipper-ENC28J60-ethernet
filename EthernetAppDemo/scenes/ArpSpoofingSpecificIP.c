@@ -333,6 +333,12 @@ int32_t thread_for_spoofing_specific_ip(void* context) {
         furi_delay_ms(1);
     }
 
+    if(start) {
+        memcpy(ethernet->mac_address, last_mac, 6);
+
+        enc28j60_set_mac(ethernet);
+    }
+
     // If the device is not connected
     if(!start) {
         // draw_device_no_connected(app);
