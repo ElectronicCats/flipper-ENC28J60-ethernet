@@ -17,6 +17,8 @@
  */
 
 typedef struct ip_assigner_t ip_assigner_t;
+typedef void (*ip_assigner_callback_t)(void* context);
+
 /**
  * Functions to work with this
  */
@@ -30,3 +32,5 @@ View* ip_assigner_get_view(ip_assigner_t* instance);
 void ip_assigner_set_header(ip_assigner_t* instance, const char* text);
 
 void ip_assigner_set_ip_array(ip_assigner_t* instance, uint8_t* ip_array);
+
+void ip_assigner_callback(ip_assigner_t* instance, ip_assigner_callback_t callback, void* context);

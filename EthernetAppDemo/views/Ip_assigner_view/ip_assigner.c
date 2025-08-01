@@ -1,5 +1,6 @@
 #include "ip_assigner.h"
 #include "ethernet_app_icons.h"
+#include "gui/elements.h"
 
 struct ip_assigner_t {
     View* view;
@@ -8,6 +9,7 @@ struct ip_assigner_t {
 // struct for the model
 typedef struct {
     uint8_t selector_position;
+    ip_assigner_callback_t callback;
     FuriString* header;
     void* context;
     uint8_t* ip_array;
@@ -95,7 +97,7 @@ static void my_draw_callback(Canvas* canvas, void* _model) {
 
     // Position of the rectangles
     uint8_t cell_pos_x = 2;
-    uint8_t cell_pos_y = 30;
+    uint8_t cell_pos_y = 25;
 
     // Draw positions
     canvas_draw_icon(canvas, cell_pos_x, cell_pos_y, &I_Ip_Selector_Template);
@@ -175,6 +177,12 @@ static void my_draw_callback(Canvas* canvas, void* _model) {
         // Draw an icon
         draw_my_box(canvas, selector_position_x, selector_position_y);
     }
+
+    // set the font
+    canvas_set_font(canvas, FontSecondary);
+
+    // Add element
+    elements_button_center(canvas, "Set");
 }
 
 // This function works for the inpust on the view
@@ -268,4 +276,35 @@ void ip_assigner_set_ip_array(ip_assigner_t* instance, uint8_t* ip_array) {
     furi_assert(instance);
     with_view_model(
         instance->view, ip_assigner_model * model, { model->ip_array = ip_array; }, true);
+}
+
+/**
+ * Set the callback
+ */
+void ip_assigner_callback(ip_assigner_t* instance, ip_assigner_callback_t callback, void* context) {
+    with_view_model(
+        instance->view,
+        ip_assigner_model * model,
+        {
+            model->callback = callback;
+            model->context = context;
+        },
+        true);
+}
+
+/**
+ * Reset 
+ */
+void ip_assigner_reset(ip_assigner_t* instance) {
+    with_view_model(
+        instance->view,
+        ip_assigner_model * model,
+        {
+            furi_string_reset(model->header);
+            model->ip_array = NULL;
+            model->context = NULL;
+            model->callback = 0;
+            model->selector_position = 0;
+        },
+        true);
 }
