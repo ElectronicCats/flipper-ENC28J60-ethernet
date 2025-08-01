@@ -78,7 +78,7 @@ static void draw_my_box(Canvas* canvas, uint8_t pos_x, uint8_t pos_y) {
 }
 
 // This function Works to draw the hello world (by the moment)
-static void my_draw_callback(Canvas* canvas, void* _model) {
+static void ip_assignament_draw_callback(Canvas* canvas, void* _model) {
     furi_assert(_model);
 
     ip_assigner_model* model = (ip_assigner_model*)_model;
@@ -219,8 +219,6 @@ static bool input_callback(InputEvent* input_event, void* context) {
                 {
                     model->selector_position++;
                     if(model->selector_position > 11) model->selector_position = 0;
-
-                    printf("Model Position = %u\n", model->selector_position);
                 },
                 true);
             break;
@@ -231,10 +229,10 @@ static bool input_callback(InputEvent* input_event, void* context) {
                 instance->view,
                 ip_assigner_model * model,
                 {
-                    model->selector_position--;
-                    if(model->selector_position > 11) model->selector_position = 0;
-
-                    printf("Model Position = %u\n", model->selector_position);
+                    if(model->selector_position == 0)
+                        model->selector_position = 11;
+                    else
+                        model->selector_position--;
                 },
                 true);
             break;
@@ -262,12 +260,10 @@ static bool input_callback(InputEvent* input_event, void* context) {
                 ip_assigner_model * model,
                 {
                     if(model->ip_array != NULL) {
-                        // Get the selection and add one
-                        model->digits_array[model->selector_position]--;
-
-                        // Set the condition to not be more than two digits
-                        if(model->digits_array[model->selector_position] > 9)
-                            model->digits_array[model->selector_position] = 0;
+                        if(model->digits_array[model->selector_position] == 0)
+                            model->digits_array[model->selector_position] = 9;
+                        else
+                            model->digits_array[model->selector_position]--;
                     }
                 },
                 true);
@@ -294,7 +290,7 @@ ip_assigner_t* ip_assigner_alloc() {
     view_set_orientation(view, ViewOrientationHorizontal);
 
     // Set the draw callback for the view
-    view_set_draw_callback(view, my_draw_callback);
+    view_set_draw_callback(view, ip_assignament_draw_callback);
 
     // Set input events, to get buttons events
     view_set_input_callback(view, input_callback);
