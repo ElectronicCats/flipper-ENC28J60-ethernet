@@ -16,10 +16,7 @@
  * Struct for the View
  */
 
-typedef struct {
-    View* view;
-} ip_assigner_t;
-
+typedef struct ip_assigner_t ip_assigner_t;
 /**
  * Functions to work with this
  */
@@ -29,3 +26,7 @@ ip_assigner_t* ip_assigner_alloc();
 void ip_assigner_free(ip_assigner_t* instance);
 
 View* ip_assigner_get_view(ip_assigner_t* instance);
+
+void ip_assigner_set_header(ip_assigner_t* instance, const char* text);
+
+void ip_assigner_set_ip_array(ip_assigner_t* instance, uint8_t* ip_array);

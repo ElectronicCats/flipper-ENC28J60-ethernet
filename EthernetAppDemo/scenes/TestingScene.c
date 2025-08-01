@@ -14,6 +14,10 @@ int32_t testing_thread(void* context);
 void app_scene_testing_scene_on_enter(void* context) {
     App* app = (App*)context;
 
+    ip_assigner_set_header(app->ip_assigner, "Hola Hola");
+
+    ip_assigner_set_ip_array(app->ip_assigner, app->ethernet->ip_address);
+
     view_dispatcher_switch_to_view(app->view_dispatcher, IpAssignerView);
 }
 
