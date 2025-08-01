@@ -86,7 +86,7 @@ static void ip_assignament_draw_callback(Canvas* canvas, void* _model) {
     if(!furi_string_empty(model->header)) {
         // Draw header
         canvas_set_font(canvas, FontPrimary);
-        canvas_draw_str(canvas, 10, 10, furi_string_get_cstr(model->header));
+        canvas_draw_str(canvas, 10, 15, furi_string_get_cstr(model->header));
     }
 
     // Position of the rectangles
@@ -105,7 +105,7 @@ static void ip_assignament_draw_callback(Canvas* canvas, void* _model) {
     uint8_t cell_one_third_digit = cell_one_second_digit + 9;
 
     // First digit position of the second three numbers
-    uint8_t cell_two_first_digit = cell_pos_x + 34;
+    uint8_t cell_two_first_digit = cell_pos_x + 35;
     uint8_t cell_two_second_digit = cell_two_first_digit + 9;
     uint8_t cell_two_third_digit = cell_two_second_digit + 9;
 
@@ -115,7 +115,7 @@ static void ip_assignament_draw_callback(Canvas* canvas, void* _model) {
     uint8_t cell_three_third_digit = cell_three_second_digit + 9;
 
     // First digit position of the second three numbers
-    uint8_t cell_fourth_first_digit = cell_pos_x + 98;
+    uint8_t cell_fourth_first_digit = cell_pos_x + 97;
     uint8_t cell_fourth_second_digit = cell_fourth_first_digit + 9;
     uint8_t cell_fourth_third_digit = cell_fourth_second_digit + 9;
 
@@ -188,8 +188,13 @@ static void ip_assignament_draw_callback(Canvas* canvas, void* _model) {
             pos_y_digit_numbers,
             numbers_icons[model->digits_array[11]]);
 
+        // Solve the offset
+        uint8_t offset_position = (model->selector_position % 3) * 8 +
+                                  model->selector_position % 3 +
+                                  (model->selector_position / 3) * 31;
+
         // Selector position
-        uint8_t selector_position_x = cell_pos_x + 2;
+        uint8_t selector_position_x = offset_position + cell_pos_x + 2;
         uint8_t selector_position_y = cell_pos_y - 2;
 
         // Draw an icon
