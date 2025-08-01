@@ -72,6 +72,10 @@ App* app_alloc() {
     view_dispatcher_add_view(
         app->view_dispatcher, FileBrowserView, file_browser_get_view(app->file_browser));
 
+    app->ip_assigner = ip_assigner_alloc();
+    view_dispatcher_add_view(
+        app->view_dispatcher, IpAssignerView, ip_assigner_get_view(app->ip_assigner));
+
     app->text = furi_string_alloc();
 
     // Init the storage
@@ -90,8 +94,8 @@ App* app_alloc() {
     app->enc28j60_connected = enc28j60_start(app->ethernet) !=
                               0xff; // To know if the enc28j60 is connected
 
-    app->thread = furi_thread_alloc_ex("Ethernet Thread", 10 * 1024, ethernet_thread, app);
-    furi_thread_start(app->thread);
+    // app->thread = furi_thread_alloc_ex("Ethernet Thread", 10 * 1024, ethernet_thread, app);
+    // furi_thread_start(app->thread);
 
     memcpy(app->ip_helper, IP_DEFAULT, 4);
 
@@ -101,12 +105,10 @@ App* app_alloc() {
 }
 
 void app_free(App* app) {
-    furi_thread_flags_set(furi_thread_get_id(app->thread), flag_stop);
+    // furi_thread_flags_set(furi_thread_get_id(app->thread), flag_stop);
 
-    furi_thread_join(app->thread);
-    furi_thread_free(app->thread);
-
-    // furi_mutex_free(app->mutex);
+    // furi_thread_join(app->thread);
+    // furi_thread_free(app->thread);
 
     //  Free all the views from the View Dispatcher
     view_dispatcher_remove_view(app->view_dispatcher, SubmenuView);
@@ -115,6 +117,7 @@ void app_free(App* app) {
     view_dispatcher_remove_view(app->view_dispatcher, VarListView);
     view_dispatcher_remove_view(app->view_dispatcher, InputByteView);
     view_dispatcher_remove_view(app->view_dispatcher, FileBrowserView);
+    view_dispatcher_remove_view(app->view_dispatcher, IpAssignerView);
 
     // Free memory of Scene Manager and View Dispatcher
     scene_manager_free(app->scene_manager);
@@ -126,6 +129,7 @@ void app_free(App* app) {
     text_box_free(app->text_box);
     byte_input_free(app->input_byte_value);
     file_browser_free(app->file_browser);
+    ip_assigner_free(app->ip_assigner);
 
     // Free memory of ENC
     free_enc28j60(app->ethernet);
@@ -153,7 +157,7 @@ int app_main(void* p) {
 
     view_dispatcher_attach_to_gui(app->view_dispatcher, gui, ViewDispatcherTypeFullscreen);
 
-    scene_manager_next_scene(app->scene_manager, app_scene_main_menu_option);
+    scene_manager_next_scene(app->scene_manager, app_scene_testing_scene_option);
 
     view_dispatcher_run(app->view_dispatcher);
     furi_record_close(RECORD_GUI);
