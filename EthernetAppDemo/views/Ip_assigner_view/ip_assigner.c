@@ -10,6 +10,7 @@ struct ip_assigner_t {
 typedef struct {
     uint8_t selector_position;
     ip_assigner_callback_t callback;
+    uint8_t digits_array[12];
     FuriString* header;
     void* context;
     uint8_t* ip_array;
@@ -35,13 +36,6 @@ static uint8_t get_num(uint8_t number, uint8_t digit_pos) {
         number = number / 10;
     }
     return number % 10;
-}
-
-// Get the digits for the any Ip number
-static void get_digits(uint8_t number, uint8_t* digits) {
-    digits[0] = get_num(number, 2); // get the first digit
-    digits[1] = get_num(number, 1); // get the second digit
-    digits[2] = get_num(number, 0); // get the third digit
 }
 
 // Draw the box of the selector
@@ -126,49 +120,73 @@ static void my_draw_callback(Canvas* canvas, void* _model) {
     uint8_t cell_fourth_third_digit = cell_fourth_second_digit + 9;
 
     if(model->ip_array != NULL) {
-        // Get numbers
-        uint8_t first_cell[3] = {0};
-        uint8_t second_cell[3] = {0};
-        uint8_t third_cell[3] = {0};
-        uint8_t fourth_cell[3] = {0};
-
-        // Set digits
-        get_digits(model->ip_array[0], first_cell);
-        get_digits(model->ip_array[1], second_cell);
-        get_digits(model->ip_array[2], third_cell);
-        get_digits(model->ip_array[3], fourth_cell);
-
         // Draw the position numbers
         canvas_draw_icon(
-            canvas, cell_one_first_digit, pos_y_digit_numbers, numbers_icons[first_cell[0]]);
+            canvas,
+            cell_one_first_digit,
+            pos_y_digit_numbers,
+            numbers_icons[model->digits_array[0]]);
         canvas_draw_icon(
-            canvas, cell_one_second_digit, pos_y_digit_numbers, numbers_icons[first_cell[1]]);
+            canvas,
+            cell_one_second_digit,
+            pos_y_digit_numbers,
+            numbers_icons[model->digits_array[1]]);
         canvas_draw_icon(
-            canvas, cell_one_third_digit, pos_y_digit_numbers, numbers_icons[first_cell[2]]);
+            canvas,
+            cell_one_third_digit,
+            pos_y_digit_numbers,
+            numbers_icons[model->digits_array[2]]);
 
         // Draw position
         canvas_draw_icon(
-            canvas, cell_two_first_digit, pos_y_digit_numbers, numbers_icons[second_cell[0]]);
+            canvas,
+            cell_two_first_digit,
+            pos_y_digit_numbers,
+            numbers_icons[model->digits_array[3]]);
         canvas_draw_icon(
-            canvas, cell_two_second_digit, pos_y_digit_numbers, numbers_icons[second_cell[1]]);
+            canvas,
+            cell_two_second_digit,
+            pos_y_digit_numbers,
+            numbers_icons[model->digits_array[4]]);
         canvas_draw_icon(
-            canvas, cell_two_third_digit, pos_y_digit_numbers, numbers_icons[second_cell[2]]);
+            canvas,
+            cell_two_third_digit,
+            pos_y_digit_numbers,
+            numbers_icons[model->digits_array[5]]);
 
         // Draw position
         canvas_draw_icon(
-            canvas, cell_three_first_digit, pos_y_digit_numbers, numbers_icons[third_cell[0]]);
+            canvas,
+            cell_three_first_digit,
+            pos_y_digit_numbers,
+            numbers_icons[model->digits_array[6]]);
         canvas_draw_icon(
-            canvas, cell_three_second_digit, pos_y_digit_numbers, numbers_icons[third_cell[1]]);
+            canvas,
+            cell_three_second_digit,
+            pos_y_digit_numbers,
+            numbers_icons[model->digits_array[7]]);
         canvas_draw_icon(
-            canvas, cell_three_third_digit, pos_y_digit_numbers, numbers_icons[third_cell[2]]);
+            canvas,
+            cell_three_third_digit,
+            pos_y_digit_numbers,
+            numbers_icons[model->digits_array[8]]);
 
         // Draw position
         canvas_draw_icon(
-            canvas, cell_fourth_first_digit, pos_y_digit_numbers, numbers_icons[fourth_cell[0]]);
+            canvas,
+            cell_fourth_first_digit,
+            pos_y_digit_numbers,
+            numbers_icons[model->digits_array[9]]);
         canvas_draw_icon(
-            canvas, cell_fourth_second_digit, pos_y_digit_numbers, numbers_icons[fourth_cell[1]]);
+            canvas,
+            cell_fourth_second_digit,
+            pos_y_digit_numbers,
+            numbers_icons[model->digits_array[10]]);
         canvas_draw_icon(
-            canvas, cell_fourth_third_digit, pos_y_digit_numbers, numbers_icons[fourth_cell[2]]);
+            canvas,
+            cell_fourth_third_digit,
+            pos_y_digit_numbers,
+            numbers_icons[model->digits_array[11]]);
 
         // Selector position
         uint8_t selector_position_x = cell_pos_x + 2;
@@ -188,13 +206,83 @@ static void my_draw_callback(Canvas* canvas, void* _model) {
 // This function works for the inpust on the view
 static bool input_callback(InputEvent* input_event, void* context) {
     furi_assert(context);
-    UNUSED(context);
-    UNUSED(input_event);
+
+    ip_assigner_t* instance = (ip_assigner_t*)context;
+
+    if(input_event->type == InputTypeRelease || input_event->type == InputTypeRepeat) {
+        switch(input_event->key) {
+        // Update the selector and add more
+        case InputKeyRight:
+            with_view_model(
+                instance->view,
+                ip_assigner_model * model,
+                {
+                    model->selector_position++;
+                    if(model->selector_position > 11) model->selector_position = 0;
+
+                    printf("Model Position = %u\n", model->selector_position);
+                },
+                true);
+            break;
+
+        // Update the selector and less one
+        case InputKeyLeft:
+            with_view_model(
+                instance->view,
+                ip_assigner_model * model,
+                {
+                    model->selector_position--;
+                    if(model->selector_position > 11) model->selector_position = 0;
+
+                    printf("Model Position = %u\n", model->selector_position);
+                },
+                true);
+            break;
+
+        case InputKeyUp:
+            with_view_model(
+                instance->view,
+                ip_assigner_model * model,
+                {
+                    if(model->ip_array != NULL) {
+                        // Get the selection and add one
+                        model->digits_array[model->selector_position]++;
+
+                        // Set the condition to not be more than two digits
+                        if(model->digits_array[model->selector_position] > 9)
+                            model->digits_array[model->selector_position] = 0;
+                    }
+                },
+                true);
+            break;
+
+        case InputKeyDown:
+            with_view_model(
+                instance->view,
+                ip_assigner_model * model,
+                {
+                    if(model->ip_array != NULL) {
+                        // Get the selection and add one
+                        model->digits_array[model->selector_position]--;
+
+                        // Set the condition to not be more than two digits
+                        if(model->digits_array[model->selector_position] > 9)
+                            model->digits_array[model->selector_position] = 0;
+                    }
+                },
+                true);
+            break;
+
+        default:
+            break;
+        }
+    }
+
     return false;
 }
 
 /**
- * Function to alloc the ip assigner 
+ * Function to alloc the ip assigner
  */
 ip_assigner_t* ip_assigner_alloc() {
     ip_assigner_t* instance = (ip_assigner_t*)malloc(sizeof(ip_assigner_t));
@@ -221,6 +309,7 @@ ip_assigner_t* ip_assigner_alloc() {
         {
             model->selector_position = 0;
             model->header = furi_string_alloc();
+            memset(model->digits_array, 0, 12);
         },
         true);
 
@@ -234,7 +323,7 @@ ip_assigner_t* ip_assigner_alloc() {
 }
 
 /**
- * Function to free the IP assigner 
+ * Function to free the IP assigner
  */
 void ip_assigner_free(ip_assigner_t* instance) {
     with_view_model(
@@ -275,7 +364,21 @@ void ip_assigner_set_header(ip_assigner_t* instance, const char* text) {
 void ip_assigner_set_ip_array(ip_assigner_t* instance, uint8_t* ip_array) {
     furi_assert(instance);
     with_view_model(
-        instance->view, ip_assigner_model * model, { model->ip_array = ip_array; }, true);
+        instance->view,
+        ip_assigner_model * model,
+        {
+            model->ip_array = ip_array;
+            uint8_t pivot = 3;
+
+            for(uint8_t i = 0; i < 12; i++) {
+                uint8_t pos = i / 3;
+                pivot--;
+                model->digits_array[i] = get_num(model->ip_array[pos], pivot);
+
+                if(pivot == 0) pivot = 3;
+            }
+        },
+        true);
 }
 
 /**
@@ -293,7 +396,7 @@ void ip_assigner_callback(ip_assigner_t* instance, ip_assigner_callback_t callba
 }
 
 /**
- * Reset 
+ * Reset
  */
 void ip_assigner_reset(ip_assigner_t* instance) {
     with_view_model(
@@ -305,6 +408,8 @@ void ip_assigner_reset(ip_assigner_t* instance) {
             model->context = NULL;
             model->callback = 0;
             model->selector_position = 0;
+
+            memset(model->digits_array, 0, 12);
         },
         true);
 }

@@ -3,7 +3,7 @@
 /**
  * This files works to include a new view for the IP assignament
  * This is to set the values on decimal and not in hexadecimal
- * 
+ *
  */
 
 #include <furi.h>
