@@ -38,6 +38,29 @@ static uint8_t get_num(uint8_t number, uint8_t digit_pos) {
     return number % 10;
 }
 
+// Function to save or store data
+static void update_ip_data(uint8_t* ip_array, uint8_t* digits_array) {
+    ip_array[0] = 0;
+    ip_array[0] += digits_array[0] * 100; // digit 3 of the 3 in the first element in the array
+    ip_array[0] += digits_array[1] * 10; // digit 2 of the 3 in the first element in the array
+    ip_array[0] += digits_array[2]; // digit 1 of the 3 in the first element in the array
+
+    ip_array[1] = 0;
+    ip_array[1] += digits_array[3] * 100; // digit 3 of the 3 in the first element in the array
+    ip_array[1] += digits_array[4] * 10; // digit 2 of the 3 in the first element in the array
+    ip_array[1] += digits_array[5]; // digit 1 of the 3 in the first element in the array
+
+    ip_array[2] = 0;
+    ip_array[2] += digits_array[6] * 100; // digit 3 of the 3 in the first element in the array
+    ip_array[2] += digits_array[7] * 10; // digit 2 of the 3 in the first element in the array
+    ip_array[2] += digits_array[8]; // digit 1 of the 3 in the first element in the array
+
+    ip_array[3] = 0;
+    ip_array[3] += digits_array[9] * 100; // digit 3 of the 3 in the first element in the array
+    ip_array[3] += digits_array[10] * 10; // digit 2 of the 3 in the first element in the array
+    ip_array[3] += digits_array[11]; // digit 1 of the 3 in the first element in the array
+}
+
 // Draw the box of the selector
 static void draw_my_box(Canvas* canvas, uint8_t pos_x, uint8_t pos_y) {
     // Draw Top side
@@ -208,6 +231,128 @@ static void ip_assignament_draw_callback(Canvas* canvas, void* _model) {
     elements_button_center(canvas, "Set");
 }
 
+// Functiom to solve position and add values in the array at the sum
+static void validate_num_in_sum(ip_assigner_model* model) {
+    // Add when the position is in third position for example
+    // in the position 0, 3, 6, 9 positions
+    if(model->selector_position % 3 == 0) {
+        if(model->digits_array[model->selector_position] == 2) {
+            model->digits_array[model->selector_position] =
+                0; // If the value was 2 now it will be 2
+        } else {
+            model->digits_array[model->selector_position]++;
+        }
+
+        // If after add, the value is 2, we have some conditions
+        if(model->digits_array[model->selector_position] == 2) {
+            // To know if the number is more than 255
+            if(model->digits_array[model->selector_position + 1] >= 5 &&
+               model->digits_array[model->selector_position + 2] > 5) {
+                model->digits_array[model->selector_position + 1] = 5;
+                model->digits_array[model->selector_position + 2] = 5;
+            }
+
+            // To know if the number is more than 25x
+            if(model->digits_array[model->selector_position + 1] > 5)
+                model->digits_array[model->selector_position + 1] = 5;
+        }
+    }
+
+    // Add when the value is in the second position
+    // For example in the 1, 4, 7, 10 positions
+    if(model->selector_position % 3 == 1) {
+        if(model->digits_array[model->selector_position - 1] == 2 &&
+           model->digits_array[model->selector_position] == 4 &&
+           model->digits_array[model->selector_position + 1] > 5) {
+            model->digits_array[model->selector_position]++;
+            model->digits_array[model->selector_position + 1] = 5;
+        } else if(
+            model->digits_array[model->selector_position - 1] == 2 &&
+            model->digits_array[model->selector_position] == 5) {
+            model->digits_array[model->selector_position] = 0;
+        } else if(model->digits_array[model->selector_position] == 9) {
+            model->digits_array[model->selector_position] = 0;
+        } else {
+            model->digits_array[model->selector_position]++;
+        }
+    }
+
+    // Add when the value is in the third position
+    // For example in the 2, 5, 8, 11 positions
+    if(model->selector_position % 3 == 2) {
+        if(model->digits_array[model->selector_position - 2] == 2 &&
+           model->digits_array[model->selector_position - 1] == 5 &&
+           model->digits_array[model->selector_position] == 5) {
+            model->digits_array[model->selector_position] = 0;
+        } else if(model->digits_array[model->selector_position] == 9) {
+            model->digits_array[model->selector_position] = 0;
+        } else {
+            model->digits_array[model->selector_position]++;
+        }
+    }
+
+    // Update values
+    update_ip_data(model->ip_array, model->digits_array);
+}
+
+// Functiom to solve position and add values in the array at the substraction
+static void validate_num_in_subtraction(ip_assigner_model* model) {
+    // Add when the position is in third position for example
+    // in the position 0, 3, 6, 9 positions
+    if(model->selector_position % 3 == 0) {
+        if(model->digits_array[model->selector_position] == 0) {
+            // The next value needs to be 2
+            model->digits_array[model->selector_position] = 2;
+
+            // Condition if values are higher than 8 bit
+            if(model->digits_array[model->selector_position + 1] > 5 &&
+               model->digits_array[model->selector_position + 2] > 5) {
+                model->digits_array[model->selector_position + 1] = 5;
+                model->digits_array[model->selector_position + 2] = 5;
+            } else if(model->digits_array[model->selector_position + 1] > 5) {
+                model->digits_array[model->selector_position + 1] = 5;
+            }
+        } else {
+            model->digits_array[model->selector_position]--;
+        }
+    }
+
+    // Add when the position is in third position for example
+    // in the position 1, 4, 7, 10 positions
+    if(model->selector_position % 3 == 1) {
+        if(model->digits_array[model->selector_position - 1] == 2 &&
+           model->digits_array[model->selector_position] == 0) {
+            model->digits_array[model->selector_position] = 5;
+
+            // If the first digit is higher
+            if(model->digits_array[model->selector_position + 1] > 5) {
+                model->digits_array[model->selector_position + 1] = 5;
+            }
+        } else if(model->digits_array[model->selector_position] == 0) {
+            model->digits_array[model->selector_position] = 9;
+        } else {
+            model->digits_array[model->selector_position]--;
+        }
+    }
+
+    // Add when the position is in third position for example
+    // in the position 2, 5, 8, 11 positions
+    if(model->selector_position % 3 == 2) {
+        if(model->digits_array[model->selector_position - 2] == 2 &&
+           model->digits_array[model->selector_position - 1] == 5 &&
+           model->digits_array[model->selector_position] == 0) {
+            model->digits_array[model->selector_position] = 5;
+        } else if(model->digits_array[model->selector_position] == 0) {
+            model->digits_array[model->selector_position] = 9;
+        } else {
+            model->digits_array[model->selector_position]--;
+        }
+    }
+
+    // Update values
+    update_ip_data(model->ip_array, model->digits_array);
+}
+
 // This function works for the inpust on the view
 static bool input_callback(InputEvent* input_event, void* context) {
     furi_assert(context);
@@ -248,12 +393,7 @@ static bool input_callback(InputEvent* input_event, void* context) {
                 ip_assigner_model * model,
                 {
                     if(model->ip_array != NULL) {
-                        // Get the selection and add one
-                        model->digits_array[model->selector_position]++;
-
-                        // Set the condition to not be more than two digits
-                        if(model->digits_array[model->selector_position] > 9)
-                            model->digits_array[model->selector_position] = 0;
+                        validate_num_in_sum(model);
                     }
                 },
                 true);
@@ -265,10 +405,7 @@ static bool input_callback(InputEvent* input_event, void* context) {
                 ip_assigner_model * model,
                 {
                     if(model->ip_array != NULL) {
-                        if(model->digits_array[model->selector_position] == 0)
-                            model->digits_array[model->selector_position] = 9;
-                        else
-                            model->digits_array[model->selector_position]--;
+                        validate_num_in_subtraction(model);
                     }
                 },
                 true);
