@@ -34,3 +34,5 @@ void ip_assigner_set_header(ip_assigner_t* instance, const char* text);
 void ip_assigner_set_ip_array(ip_assigner_t* instance, uint8_t* ip_array);
 
 void ip_assigner_callback(ip_assigner_t* instance, ip_assigner_callback_t callback, void* context);
+
+void ip_assigner_reset(ip_assigner_t* instance);

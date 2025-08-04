@@ -411,6 +411,18 @@ static bool input_callback(InputEvent* input_event, void* context) {
                 true);
             break;
 
+        case InputKeyOk:
+            with_view_model(
+                instance->view,
+                ip_assigner_model * model,
+                {
+                    if(model->callback != 0) {
+                        model->callback(model->context);
+                    }
+                },
+                true);
+            break;
+
         default:
             break;
         }
