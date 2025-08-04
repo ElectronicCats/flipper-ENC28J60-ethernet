@@ -150,19 +150,13 @@ void settings_start_ip_address(void* context) {
 
 // Function to set the IP address
 void set_ip_address(App* app) {
-    // Set the header text
-    byte_input_set_header_text(app->input_byte_value, "Set IP Address");
-
-    byte_input_set_result_callback(
-        app->input_byte_value,
-        settings_start_ip_address,
-        NULL,
-        app,
-        ip_start,
-        4); // Set the callback for the input IP address
+    ip_assigner_reset(app->ip_assigner);
+    ip_assigner_set_header(app->ip_assigner, "Set Ip Address");
+    ip_assigner_callback(app->ip_assigner, settings_start_ip_address, app);
+    ip_assigner_set_ip_array(app->ip_assigner, ip_start);
 
     view_dispatcher_switch_to_view(
-        app->view_dispatcher, InputByteView); // Switch to the input byte view
+        app->view_dispatcher, IpAssignerView); // Switch to the input byte view
 }
 
 // Function to show the list of IP

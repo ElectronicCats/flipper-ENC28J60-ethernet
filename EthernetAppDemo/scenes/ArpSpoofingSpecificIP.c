@@ -88,19 +88,13 @@ void set_ip_to_spoof_manually(void* context) {
 
 // to set the ip to spoof
 void set_ip_to_spoof(App* app) {
-    // Set the header text
-    byte_input_set_header_text(app->input_byte_value, "Set IP Address");
-
-    byte_input_set_result_callback(
-        app->input_byte_value,
-        set_ip_to_spoof_manually,
-        NULL,
-        app,
-        app->ip_helper,
-        4); // Set the callback for the input IP address
+    ip_assigner_reset(app->ip_assigner);
+    ip_assigner_set_header(app->ip_assigner, "Set Ip Address to Spoof");
+    ip_assigner_callback(app->ip_assigner, set_ip_to_spoof_manually, app);
+    ip_assigner_set_ip_array(app->ip_assigner, app->ip_helper);
 
     view_dispatcher_switch_to_view(
-        app->view_dispatcher, InputByteView); // Switch to the input byte view
+        app->view_dispatcher, IpAssignerView); // Switch to the input byte view
 }
 
 // Set the spoofing and the scene and start the alternative thread
@@ -282,12 +276,9 @@ int32_t thread_for_spoofing_specific_ip(void* context) {
         // Set host name with random number id
         uint32_t number_altern = furi_hal_random_get();
         uint8_t number = number_altern;
-        printf("Number %u\n", number);
-        printf("Number %lu\n", number_altern);
+
         furi_string_reset(app->text);
         furi_string_printf(app->text, "DEVICE%02x", number);
-
-        printf("NAME HOST %s\n", furi_string_get_cstr(app->text));
 
         // Get the ip gateway and then it mac address
         if(!flipper_process_dora_with_host_name(
@@ -311,38 +302,6 @@ int32_t thread_for_spoofing_specific_ip(void* context) {
             draw_process_failed(app);
             goto finalize_arp_spoofing_ip;
         }
-
-        // // print the MAC gateway
-        // printf(
-        //     "IP GATEWAY %u.%u.%u.%u\n",
-        //     app->ip_gateway[0],
-        //     app->ip_gateway[1],
-        //     app->ip_gateway[2],
-        //     app->ip_gateway[3]);
-        // printf(
-        //     "MAC GATEWAY %02x:%02x:%02x:%02x:%02x:%02x\n",
-        //     app->mac_gateway[0],
-        //     app->mac_gateway[1],
-        //     app->mac_gateway[2],
-        //     app->mac_gateway[3],
-        //     app->mac_gateway[4],
-        //     app->mac_gateway[5]);
-
-        // // print the MAC gateway
-        // printf(
-        //     "IP DEVICE %u.%u.%u.%u\n",
-        //     ip_device_to_disconnect[0],
-        //     ip_device_to_disconnect[1],
-        //     ip_device_to_disconnect[2],
-        //     ip_device_to_disconnect[3]);
-        // printf(
-        //     "MAC DEVICE %02x:%02x:%02x:%02x:%02x:%02x\n",
-        //     mac_device_to_disconnect[0],
-        //     mac_device_to_disconnect[1],
-        //     mac_device_to_disconnect[2],
-        //     mac_device_to_disconnect[3],
-        //     mac_device_to_disconnect[4],
-        //     mac_device_to_disconnect[5]);
 
         // Set the frames or messages to send
         // 1. Reply to the Gateway
@@ -386,18 +345,6 @@ int32_t thread_for_spoofing_specific_ip(void* context) {
             if((furi_get_tick() - time_out) > 200) {
                 send_packet(ethernet, buffer_to_ip, size_one);
                 send_packet(ethernet, buffer_to_gateway, size_two);
-                printf(
-                    "Attack to: %u.%u.%u.%u with mac %02x:%02x:%02x:%02x:%02x:%02x\n",
-                    ip_device_to_disconnect[0],
-                    ip_device_to_disconnect[1],
-                    ip_device_to_disconnect[2],
-                    ip_device_to_disconnect[3],
-                    mac_device_to_disconnect[0],
-                    mac_device_to_disconnect[1],
-                    mac_device_to_disconnect[2],
-                    mac_device_to_disconnect[3],
-                    mac_device_to_disconnect[4],
-                    mac_device_to_disconnect[5]);
                 time_out = furi_get_tick();
             }
         }
