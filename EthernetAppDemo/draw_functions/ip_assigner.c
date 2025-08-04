@@ -478,6 +478,7 @@ ip_assigner_t* ip_assigner_alloc() {
 void ip_assigner_free(ip_assigner_t* instance) {
     with_view_model(
         instance->view, ip_assigner_model * model, { furi_string_free(model->header); }, true);
+    view_free_model(instance->view);
     view_free(instance->view);
     free(instance);
 }
