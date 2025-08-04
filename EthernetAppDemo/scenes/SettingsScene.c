@@ -221,18 +221,17 @@ void mac_set_address_view(App* app) {
         app,
         app->ethernet->mac_address,
         6);
+    view_dispatcher_switch_to_view(app->view_dispatcher, InputByteView);
 }
 
 // Function to set the IP address
 void ip_set_address_view(App* app) {
-    byte_input_set_header_text(app->input_byte_value, "IP ADDRESS");
-    byte_input_set_result_callback(
-        app->input_byte_value,
-        settings_input_byte_address,
-        NULL,
-        app,
-        app->ethernet->ip_address,
-        4);
+    ip_assigner_reset(app->ip_assigner);
+    ip_assigner_callback(app->ip_assigner, settings_input_byte_address, app);
+    ip_assigner_set_header(app->ip_assigner, "Set IP to Flipper");
+    ip_assigner_set_ip_array(app->ip_assigner, app->ethernet->ip_address);
+
+    view_dispatcher_switch_to_view(app->view_dispatcher, IpAssignerView);
 }
 
 // Function on enter when the user needs to set the IP or the MAC address
@@ -244,7 +243,6 @@ void app_scene_set_address_on_enter(void* context) {
 
     if(state == MAC_OPTION_SETTING) mac_set_address_view(app);
     if(state == IP_OPTION_SETTING) ip_set_address_view(app);
-    view_dispatcher_switch_to_view(app->view_dispatcher, InputByteView);
 }
 
 // Function on event when the user needs to set the IP or the MAC address
