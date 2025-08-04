@@ -15,6 +15,7 @@
 #include <gui/view_dispatcher.h>
 #include <storage/storage.h>
 
+#include "draw_functions/ip_assigner.h"
 #include "scenes_config/app_scene_functions.h"
 #include "ethernet_app_icons.h"
 
@@ -25,9 +26,6 @@
 #include "modules/capture_module.h"
 #include "modules/analysis_module.h"
 #include "modules/ping_module.h"
-
-// Test to create the view assigner
-#include "views/Ip_assigner_view/ip_assigner.h"
 
 // Version of the app
 #define APP_NAME    "ETHERNET APP"
