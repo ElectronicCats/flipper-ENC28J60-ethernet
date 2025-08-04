@@ -72,6 +72,10 @@ App* app_alloc() {
     view_dispatcher_add_view(
         app->view_dispatcher, FileBrowserView, file_browser_get_view(app->file_browser));
 
+    app->ip_assigner = ip_assigner_alloc();
+    view_dispatcher_add_view(
+        app->view_dispatcher, IpAssignerView, ip_assigner_get_view(app->ip_assigner));
+
     app->text = furi_string_alloc();
 
     // Init the storage
@@ -106,8 +110,6 @@ void app_free(App* app) {
     furi_thread_join(app->thread);
     furi_thread_free(app->thread);
 
-    // furi_mutex_free(app->mutex);
-
     //  Free all the views from the View Dispatcher
     view_dispatcher_remove_view(app->view_dispatcher, SubmenuView);
     view_dispatcher_remove_view(app->view_dispatcher, WidgetView);
@@ -115,6 +117,7 @@ void app_free(App* app) {
     view_dispatcher_remove_view(app->view_dispatcher, VarListView);
     view_dispatcher_remove_view(app->view_dispatcher, InputByteView);
     view_dispatcher_remove_view(app->view_dispatcher, FileBrowserView);
+    view_dispatcher_remove_view(app->view_dispatcher, IpAssignerView);
 
     // Free memory of Scene Manager and View Dispatcher
     scene_manager_free(app->scene_manager);
@@ -126,6 +129,7 @@ void app_free(App* app) {
     text_box_free(app->text_box);
     byte_input_free(app->input_byte_value);
     file_browser_free(app->file_browser);
+    ip_assigner_free(app->ip_assigner);
 
     // Free memory of ENC
     free_enc28j60(app->ethernet);

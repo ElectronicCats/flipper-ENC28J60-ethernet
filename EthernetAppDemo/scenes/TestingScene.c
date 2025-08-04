@@ -14,7 +14,11 @@ int32_t testing_thread(void* context);
 void app_scene_testing_scene_on_enter(void* context) {
     App* app = (App*)context;
 
-    view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
+    ip_assigner_set_header(app->ip_assigner, "Hola Hola");
+
+    ip_assigner_set_ip_array(app->ip_assigner, app->ethernet->ip_address);
+
+    view_dispatcher_switch_to_view(app->view_dispatcher, IpAssignerView);
 }
 
 // Function for the testing scene on event
@@ -44,17 +48,5 @@ void app_scene_testing_scene_on_exit(void* context) {
 int32_t testing_thread(void* context) {
     App* app = (App*)context;
     UNUSED(app);
-
-    uint32_t timeout = furi_get_tick();
-
-    while(furi_hal_gpio_read(&gpio_button_back)) {
-        if((furi_get_tick() - timeout) > 1000) {
-            printf("HOLA Desde Thread alternativo\n");
-            timeout = furi_get_tick();
-        }
-
-        furi_delay_ms(1); // Delay to avoid busy loop
-    }
-
     return 0;
 }

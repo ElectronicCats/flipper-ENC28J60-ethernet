@@ -26,6 +26,9 @@
 #include "modules/analysis_module.h"
 #include "modules/ping_module.h"
 
+// Test to create the view assigner
+#include "views/Ip_assigner_view/ip_assigner.h"
+
 // Version of the app
 #define APP_NAME    "ETHERNET APP"
 #define APP_VERSION "vBETA"
@@ -76,6 +79,8 @@ typedef struct {
     TextBox* text_box;
     ByteInput* input_byte_value;
     FileBrowser* file_browser;
+    ip_assigner_t* ip_assigner;
+
     enc28j60_t* ethernet; // Instance for the enc28j60
 
     Storage* storage; // Set the storage
@@ -88,7 +93,6 @@ typedef struct {
 
     FuriThread* thread; // For the threads
     FuriThread* thread_alternative; // For the threads
-    // FuriMutex* mutex;
 } App;
 
 // Views in the App
@@ -100,6 +104,7 @@ typedef enum {
     DialogInfoView,
     InputByteView,
     FileBrowserView,
+    IpAssignerView
 } scenesViews;
 
 // This functions works only to draw repetitive views in widgets
