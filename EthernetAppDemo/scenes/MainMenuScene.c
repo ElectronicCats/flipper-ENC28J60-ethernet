@@ -10,10 +10,10 @@ const uint32_t time_showing = 1000;
 
 // List for the menu options
 enum {
-    TESTING_OPTION,
     SNIFFING_OPTION,
     READ_PCAPS_OPTION,
     ARP_ACTIONS_OPTION,
+    TESTING_OPTION,
     PING_OPTION,
     SETTINGS_OPTION,
     ABOUT_US
@@ -100,11 +100,11 @@ void app_scene_main_menu_on_enter(void* context) {
     submenu_add_item(
         app->submenu, "Read Pcaps", READ_PCAPS_OPTION, main_menu_options_callback, app);
 
+    submenu_add_item(app->submenu, "...", TESTING_OPTION, main_menu_options_callback, app);
+
     submenu_add_item(app->submenu, "Settings", SETTINGS_OPTION, main_menu_options_callback, app);
 
     submenu_add_item(app->submenu, "About Us", ABOUT_US, main_menu_options_callback, app);
-
-    submenu_set_selected_item(app->submenu, 0);
 
     view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);
 }
