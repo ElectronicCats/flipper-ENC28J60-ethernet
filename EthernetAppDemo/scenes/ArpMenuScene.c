@@ -48,7 +48,7 @@ void app_scene_arp_actions_menu_on_enter(void* context) {
         app);
 
     submenu_add_item(
-        app->submenu, "ARP Spoofing all", ARP_SPOOFING_OPTION, arp_actions_menu_callback, app);
+        app->submenu, "Arp Spoofing all", ARP_SPOOFING_OPTION, arp_actions_menu_callback, app);
 
     // Set the menu of ARP scanner in state 0
     scene_manager_set_scene_state(app->scene_manager, app_scene_arp_scanner_menu_option, 0);
