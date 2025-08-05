@@ -66,13 +66,9 @@ void draw_license_view(App* app) {
         app->widget, 65, 20, AlignCenter, AlignCenter, FontPrimary, "MIT LICENSE");
     widget_add_string_element(
         app->widget, 65, 35, AlignCenter, AlignCenter, FontSecondary, "Copyright(c) 2025");
-    widget_add_button_element(app->widget, GuiButtonTypeRight, "Next", NULL, NULL);
     widget_add_button_element(app->widget, GuiButtonTypeLeft, "Prev", NULL, NULL);
 }
 
-// ========================================================
-// Temporaly displays
-// ========================================================
 void draw_text_one(App* app) {
     widget_reset(app->widget);
     widget_add_string_multiline_element(
@@ -82,7 +78,7 @@ void draw_text_one(App* app) {
         AlignCenter,
         AlignCenter,
         FontSecondary,
-        "Hi! We are\nElectronic Cats Team\nEnjoy this beta version");
+        "Hi! We are\nElectronic Cats Team\nEnjoy the\nEthernet App");
     widget_add_button_element(app->widget, GuiButtonTypeRight, "Next", NULL, NULL);
     widget_add_button_element(app->widget, GuiButtonTypeLeft, "Prev", NULL, NULL);
 }
@@ -100,7 +96,7 @@ void draw_github(App* app) {
     widget_reset(app->widget);
     widget_add_icon_element(app->widget, 10, 5, &I_github);
     widget_add_string_multiline_element(
-        app->widget, 85, 27, AlignCenter, AlignCenter, FontPrimary, "Repos in\n<--");
+        app->widget, 85, 27, AlignCenter, AlignCenter, FontPrimary, "Repo in\n<--");
     widget_add_button_element(app->widget, GuiButtonTypeRight, "Next", NULL, NULL);
     widget_add_button_element(app->widget, GuiButtonTypeLeft, "Prev", NULL, NULL);
 }
@@ -112,18 +108,15 @@ void draw_credits_to(App* app) {
         app->widget, 86, 20, AlignCenter, AlignCenter, FontSecondary, "Created\nwith love\nby");
     widget_add_string_multiline_element(
         app->widget, 86, 45, AlignCenter, AlignCenter, FontPrimary, "Adonai Diaz");
+    widget_add_button_element(app->widget, GuiButtonTypeRight, "Next", NULL, NULL);
     widget_add_button_element(app->widget, GuiButtonTypeLeft, "Prev", NULL, NULL);
 }
-
-// ========================================================
-// Temporaly displays
-// ========================================================
 
 int32_t about_us_thread(void* context) {
     App* app = (App*)context;
 
     uint8_t counter = 0;
-    uint8_t total_count = 6;
+    uint8_t total_count = 7;
 
     UNUSED(app);
 
@@ -178,6 +171,9 @@ int32_t about_us_thread(void* context) {
             case 5:
                 draw_credits_to(app);
                 break;
+
+            case 6:
+                draw_license_view(app);
 
             default:
                 break;
