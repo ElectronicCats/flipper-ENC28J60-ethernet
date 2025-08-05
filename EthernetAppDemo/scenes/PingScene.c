@@ -2,6 +2,14 @@
 #include "../modules/ping_module.h"
 #include "../modules/arp_module.h"
 
+/**
+ * Still on development, at this moment this file it can't be seen by the user
+ * but if you want to see it you only need to add an option in Main menu to switch at any of these scenes
+ * The ping is missing some valid values to send, for examle the ping to google only receive 8 ping replies
+ * But if you do ping to a linux device some times it replies 8 times, but others replies 35 times.
+ * This problem will be solved but at the moment will be in development
+ */
+
 // Ping to by default, it does ping to google
 uint8_t ip_ping[4] = {8, 8, 8, 8};
 
@@ -119,10 +127,15 @@ void input_bytes_for_ip_to_ping_callback(void* context) {
 void app_scene_ping_set_ip_scene_on_enter(void* context) {
     App* app = (App*)context;
 
-    byte_input_set_header_text(app->input_byte_value, "IP TO PING");
-    byte_input_set_result_callback(
-        app->input_byte_value, input_bytes_for_ip_to_ping_callback, NULL, app, ip_ping, 4);
-    view_dispatcher_switch_to_view(app->view_dispatcher, InputByteView);
+    ip_assigner_reset(app->ip_assigner);
+
+    ip_assigner_set_header(app->ip_assigner, "IP TO PING");
+
+    ip_assigner_set_ip_array(app->ip_assigner, ip_ping);
+
+    ip_assigner_callback(app->ip_assigner, input_bytes_for_ip_to_ping_callback, app);
+
+    view_dispatcher_switch_to_view(app->view_dispatcher, IpAssignerView);
 }
 
 // Function for ping scene on event
