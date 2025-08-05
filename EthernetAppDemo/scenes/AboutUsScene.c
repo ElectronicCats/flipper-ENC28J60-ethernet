@@ -105,9 +105,13 @@ void draw_credits_to(App* app) {
     widget_reset(app->widget);
     widget_add_icon_element(app->widget, 10, 5, &I_credits_to);
     widget_add_string_multiline_element(
-        app->widget, 86, 20, AlignCenter, AlignCenter, FontSecondary, "Created\nwith love\nby");
-    widget_add_string_multiline_element(
-        app->widget, 86, 45, AlignCenter, AlignCenter, FontPrimary, "Adonai Diaz");
+        app->widget,
+        88,
+        20,
+        AlignCenter,
+        AlignCenter,
+        FontSecondary,
+        "Credits to\nElectronic Cats\n&\nAdonai Diaz");
     widget_add_button_element(app->widget, GuiButtonTypeRight, "Next", NULL, NULL);
     widget_add_button_element(app->widget, GuiButtonTypeLeft, "Prev", NULL, NULL);
 }
