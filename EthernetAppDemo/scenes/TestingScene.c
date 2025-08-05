@@ -15,7 +15,9 @@ void app_scene_testing_scene_on_enter(void* context) {
     // comming soon
     widget_reset(app->widget);
     widget_add_string_multiline_element(
-        app->widget, 64, 32, AlignCenter, AlignCenter, FontPrimary, "COMING\nSOON...");
+        app->widget, 64, 25, AlignCenter, AlignCenter, FontPrimary, "COMING\nSOON...");
+
+    widget_add_icon_element(app->widget, 57, 40, &I_icon_for_coming_soon);
 
     view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
 }
