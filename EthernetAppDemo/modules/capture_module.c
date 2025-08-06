@@ -23,7 +23,6 @@ typedef struct pcap_packet_header {
 static uint32_t base_timestamp_sec = 0;
 static uint32_t base_tick = 0;
 
-// Function to create path name
 void create_pcap_name(FuriString* complete_path, const char* PATH, const char* name) {
     furi_string_reset(complete_path);
     furi_string_cat_printf(complete_path, "%s", PATH);
@@ -32,8 +31,6 @@ void create_pcap_name(FuriString* complete_path, const char* PATH, const char* n
     furi_string_cat_printf(complete_path, ".pcap");
 }
 
-// Function to Initialize the pcap file
-// The filename includes the path
 bool pcap_capture_init(File* file, const char* filename) {
     // Initialize timestamp reference
     DateTime datetime;
@@ -80,7 +77,6 @@ bool pcap_capture_init(File* file, const char* filename) {
     return true;
 }
 
-// Add the packet to the PCAP file
 bool pcap_capture_add_packet(File* file, const uint8_t* packet, uint32_t packet_len) {
     // Create packet header
     pcap_packet_header_t packet_header;
@@ -116,13 +112,11 @@ bool pcap_capture_add_packet(File* file, const uint8_t* packet, uint32_t packet_
     return true;
 }
 
-// Sync the PCAP file to ensure data is written to storage
 bool pcap_capture_sync(File* file) {
     if(!file) return false;
     return storage_file_sync(file);
 }
 
-// Close the PCAP file
 void pcap_close(File* file) {
     if(file) {
         storage_file_sync(file);
@@ -130,12 +124,6 @@ void pcap_close(File* file) {
     }
 }
 
-/**
- * From here the functions are to read de packets
- */
-
-// Function to open pcap file and read the header
-// Returns true if file is valid PCAP, false otherwise
 size_t pcap_reader_init(File* file, const char* filename) {
     // Open file
     if(!storage_file_open(file, filename, FSAM_READ, FSOM_OPEN_EXISTING)) {
@@ -154,7 +142,6 @@ size_t pcap_reader_init(File* file, const char* filename) {
     return bytes_read;
 }
 
-// Get the packet and return the size of the packet
 size_t pcap_get_specific_packet(File* file, uint8_t* packet, uint32_t packet_position) {
     if(!file || !storage_file_is_open(file)) return 0;
 
@@ -177,7 +164,6 @@ size_t pcap_get_specific_packet(File* file, uint8_t* packet, uint32_t packet_pos
     return packet_header.orig_len;
 }
 
-// Get the position in the pcap file
 uint32_t pcap_scan(File* file, const char* filename, uint64_t* positions) {
     // Counter and positions
     uint32_t counter = 0;

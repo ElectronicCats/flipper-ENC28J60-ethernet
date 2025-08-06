@@ -169,7 +169,6 @@ bool flipper_process_dora(enc28j60_t* ethernet, uint8_t* static_ip, uint8_t* ip_
 
     while(!ret && is_link_up(ethernet)) {
         if(furi_get_tick() > (current_time + 3000)) {
-            printf("FAIL\n");
             break;
         }
 
@@ -179,8 +178,6 @@ bool flipper_process_dora(enc28j60_t* ethernet, uint8_t* static_ip, uint8_t* ip_
             set_dhcp_discover_message(tx_buffer, &length);
             send_packet(ethernet, tx_buffer, length);
             memset(tx_buffer, 0, MAX_FRAMELEN);
-
-            printf("SEND DHCP DISCOVER\n");
 
             current_time = furi_get_tick();
 
@@ -192,8 +189,6 @@ bool flipper_process_dora(enc28j60_t* ethernet, uint8_t* static_ip, uint8_t* ip_
             set_dhcp_request_message(tx_buffer, &length);
             send_packet(ethernet, tx_buffer, length);
             memset(tx_buffer, 0, MAX_FRAMELEN);
-
-            printf("SEND DHCP REQUEST\n");
 
             current_time = furi_get_tick();
 
@@ -209,7 +204,6 @@ bool flipper_process_dora(enc28j60_t* ethernet, uint8_t* static_ip, uint8_t* ip_
                 if(deconstruct_dhcp_offer(rx_buffer)) {
                     state = DHCP_STATE_REQUEST; // set the state in request
                     memset(rx_buffer, 0, MAX_FRAMELEN);
-                    printf("SEND DHCP OFFER\n");
 
                     current_time = furi_get_tick();
                 }
@@ -217,7 +211,7 @@ bool flipper_process_dora(enc28j60_t* ethernet, uint8_t* static_ip, uint8_t* ip_
                 // This part helps to know if it is dhcp acknowledge
                 if(deconstruct_dhcp_ack(rx_buffer)) {
                     state = DHCP_OK; // state ok
-                    printf("SEND DHCP OK\n");
+
                     ret = true;
 
                     current_time = furi_get_tick();
@@ -257,10 +251,6 @@ void get_mac_server(uint8_t* MAC_SERVER) {
 void get_gateway_ip(uint8_t* ip_gateway) {
     memcpy(ip_gateway, gateway, 4);
 }
-
-/**
- * Test
-*/
 
 // Function to set a Discover Message
 void set_dhcp_discover_message_with_host_name(uint8_t* buffer, uint16_t* length, const char* host) {
@@ -306,7 +296,6 @@ void set_dhcp_request_message_with_host_name(uint8_t* buffer, uint16_t* length, 
     *length = dhcp_len + ETHERNET_HEADER_LEN + IP_HEADER_LEN + UDP_HEADER_LEN;
 }
 
-// Function to start the DORA process and get the ip and the gateway ip
 bool flipper_process_dora_with_host_name(
     enc28j60_t* ethernet,
     uint8_t* static_ip,
@@ -330,7 +319,6 @@ bool flipper_process_dora_with_host_name(
 
     while(!ret && is_link_up(ethernet)) {
         if(furi_get_tick() > (current_time + 3000)) {
-            printf("FAIL\n");
             break;
         }
 
@@ -340,11 +328,7 @@ bool flipper_process_dora_with_host_name(
             set_dhcp_discover_message_with_host_name(tx_buffer, &length, host);
             send_packet(ethernet, tx_buffer, length);
             memset(tx_buffer, 0, MAX_FRAMELEN);
-
-            printf("SEND DHCP DISCOVER\n");
-
             current_time = furi_get_tick();
-
             state = DHCP_STATE_WAITING;
             break;
 
@@ -353,11 +337,7 @@ bool flipper_process_dora_with_host_name(
             set_dhcp_request_message_with_host_name(tx_buffer, &length, host);
             send_packet(ethernet, tx_buffer, length);
             memset(tx_buffer, 0, MAX_FRAMELEN);
-
-            printf("SEND DHCP REQUEST\n");
-
             current_time = furi_get_tick();
-
             state = DHCP_STATE_WAITING;
             break;
 
@@ -370,15 +350,12 @@ bool flipper_process_dora_with_host_name(
                 if(deconstruct_dhcp_offer(rx_buffer)) {
                     state = DHCP_STATE_REQUEST; // set the state in request
                     memset(rx_buffer, 0, MAX_FRAMELEN);
-                    printf("SEND DHCP OFFER\n");
-
                     current_time = furi_get_tick();
                 }
 
                 // This part helps to know if it is dhcp acknowledge
                 if(deconstruct_dhcp_ack(rx_buffer)) {
                     state = DHCP_OK; // state ok
-                    printf("SEND DHCP OK\n");
                     ret = true;
 
                     current_time = furi_get_tick();

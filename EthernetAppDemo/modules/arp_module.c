@@ -18,27 +18,16 @@ uint8_t mac_dest[6] = {0};
 // For function arp_get_requested
 uint8_t IP_SRC_REQUESTED[4] = {0};
 
-/**
- * Function to set the MAC address
- */
 void arp_set_my_mac_address(uint8_t* MAC) {
     if(MAC == NULL) return;
     memcpy(my_mac, MAC, 6);
 }
-
-/**
- * Function to set our own ip
- */
 
 void arp_set_my_ip_address(uint8_t* ip) {
     if(ip == NULL) return;
     memcpy(my_ip, ip, 4);
 }
 
-/**
- * Function to set our arp message for attack
- *
- */
 void set_arp_message_for_attack_all(
     uint8_t* buffer,
     uint8_t* MAC,
@@ -54,10 +43,6 @@ void set_arp_message_for_attack_all(
     *len = ETHERNET_HEADER_LEN + ARP_LEN;
 }
 
-/**
- * Function to set the attack to the specific IP
- */
-
 void arp_set_message_attack(
     uint8_t* buffer,
     uint8_t* ip_src,
@@ -72,11 +57,6 @@ void arp_set_message_attack(
     *len = ETHERNET_HEADER_LEN + ARP_LEN;
 }
 
-/**
- * Function to attack the ethernet network with arp spoofing
- *
- * Buffer needs to set before with an arp function to set the message
- */
 void send_arp_spoofing(enc28j60_t* ethernet, uint8_t* buffer, uint16_t len) {
     static uint32_t prev_time = 0;
 
@@ -86,9 +66,6 @@ void send_arp_spoofing(enc28j60_t* ethernet, uint8_t* buffer, uint16_t len) {
     }
 }
 
-/**
- * Function to send an ARP request to a specific IP address
- */
 bool set_arp_request(uint8_t* buffer, uint16_t* len, uint8_t* target_ip) {
     if(!buffer || !target_ip) return false;
 
@@ -108,9 +85,6 @@ bool set_arp_request(uint8_t* buffer, uint16_t* len, uint8_t* target_ip) {
     return true;
 }
 
-/**
- * Function to send an ARP reply to a specific IP address
- */
 bool set_arp_reply(uint8_t* buffer, uint8_t* mac_dst, uint8_t* target_ip) {
     if(!buffer || !target_ip) return false;
 
@@ -142,9 +116,6 @@ bool set_arp_reply(uint8_t* buffer, uint8_t* mac_dst, uint8_t* target_ip) {
     return true;
 }
 
-/**
- * Function to know if it is the same IP
- */
 bool is_the_ip(uint8_t* current_ip, uint8_t* compare_ip) {
     uint32_t ip_get_it = current_ip[0] << 24 | current_ip[1] << 16 | current_ip[2] << 8 |
                          current_ip[3];
@@ -157,9 +128,6 @@ bool is_the_ip(uint8_t* current_ip, uint8_t* compare_ip) {
     return true;
 }
 
-/**
- * Function to get the ARP replay
- */
 bool get_arp_reply(
     uint8_t* ip_to_compare,
     uint8_t* ip_to_get,
@@ -187,9 +155,6 @@ bool get_arp_reply(
     return true;
 }
 
-/**
- * Function to reply the ARP MAC requested
- */
 bool get_arp_requested(uint8_t* buffer, uint8_t* dst_ip) {
     if(!buffer || !dst_ip) return false;
 
@@ -207,33 +172,12 @@ bool get_arp_requested(uint8_t* buffer, uint8_t* dst_ip) {
     // MAC source
     memcpy(mac_dest, arp_header.mac_source, 6);
 
-    // Print the MAC source
-    printf(
-        "ARP REQUEST FROM: %02x:%02x:%02x:%02x:%02x:%02x\n",
-        arp_header.mac_source[0],
-        arp_header.mac_source[1],
-        arp_header.mac_source[2],
-        arp_header.mac_source[3],
-        arp_header.mac_source[4],
-        arp_header.mac_source[5]);
-
     // IP source requested
     memcpy(IP_SRC_REQUESTED, arp_header.ip_source, 4);
-
-    // Print the IP source requested
-    printf(
-        "ARP REQUEST FOR IP: %u.%u.%u.%u\n",
-        arp_header.ip_source[0],
-        arp_header.ip_source[1],
-        arp_header.ip_source[2],
-        arp_header.ip_source[3]);
 
     return true;
 }
 
-/**
- *  Function to ARP scan, get all the IP
- */
 void arp_scan_network(
     enc28j60_t* ethernet,
     arp_list* list,
@@ -293,9 +237,6 @@ void arp_scan_network(
     *list_count = counter;
 }
 
-/**
- * Function to get the MAC address of specific IP address
- */
 bool arp_get_specific_mac(enc28j60_t* ethernet, uint8_t* src_ip, uint8_t* dst_ip, uint8_t* mac_dst) {
     uint16_t packet_len = 0;
     uint8_t packet[500] = {0};
@@ -333,9 +274,6 @@ bool arp_get_specific_mac(enc28j60_t* ethernet, uint8_t* src_ip, uint8_t* dst_ip
     return ret;
 }
 
-/**
- * Function to know if there is a requested from other device and reply with the ip
- */
 bool arp_reply_requested(enc28j60_t* ethernet, uint8_t* buffer, uint8_t* dst_ip) {
     if(!buffer || !dst_ip) return false;
 
@@ -354,23 +292,9 @@ bool arp_reply_requested(enc28j60_t* ethernet, uint8_t* buffer, uint8_t* dst_ip)
 
     send_packet(ethernet, buffer_reply, ETHERNET_HEADER_LEN + ARP_LEN);
 
-    printf(
-        "ARP REPLY FROM: %02x:%02x:%02x:%02x:%02x:%02x\n",
-        my_mac[0],
-        my_mac[1],
-        my_mac[2],
-        my_mac[3],
-        my_mac[4],
-        my_mac[5]);
-
-    printf("ARP REPLY TO: %u.%u.%u.%u\n", my_ip[0], my_ip[1], my_ip[2], my_ip[3]);
-
     return true;
 }
 
-/**
- * Function to know if there's a IP duplicated in an arp_list struct
- */
 uint8_t is_duplicated_ip(uint8_t* ip, arp_list* list, uint8_t total_list) {
     uint8_t count_of_duplicated = 0;
     for(uint8_t i = 0; i < total_list; i++) {
