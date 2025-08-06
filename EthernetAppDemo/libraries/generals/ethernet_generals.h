@@ -1,6 +1,11 @@
 #ifndef GENERALS_H_
 #define GENERALS_H_
 
+/**
+ * This files only works to set the default values to
+ * MAC ADDRESS and IP ADDRESS just for help.
+ */
+
 #include <furi.h>
 #include <furi_hal.h>
 

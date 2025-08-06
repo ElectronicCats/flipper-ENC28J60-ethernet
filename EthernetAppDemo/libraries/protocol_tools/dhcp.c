@@ -1,7 +1,6 @@
 #include "udp.h"
 #include "dhcp.h"
 
-// Throw a dhcp discover message
 dhcp_message_t
     dhcp_message_discover(uint8_t* MAC_ADDRESS, uint32_t xid, uint8_t* host_name, uint16_t* len) {
     dhcp_message_t message = {0};
@@ -65,7 +64,6 @@ dhcp_message_t
     return message;
 }
 
-// Throw a dhcp request message
 dhcp_message_t dhcp_message_request(
     uint8_t* MAC_ADDRESS,
     uint32_t xid,
@@ -152,7 +150,6 @@ dhcp_message_t dhcp_message_request(
     return message;
 }
 
-// Function to deconstruct the dhcp message
 dhcp_message_t dhcp_deconstruct_dhcp_message(uint8_t* buffer) {
     udp_header_t udp_header = udp_get_header(buffer);
     uint16_t len = (udp_header.length[0] << 8 | udp_header.length[1]) - 8;
@@ -163,7 +160,6 @@ dhcp_message_t dhcp_deconstruct_dhcp_message(uint8_t* buffer) {
     return message;
 }
 
-// Function to get the data of an option data
 bool dhcp_get_option_data(dhcp_message_t message, uint8_t option, uint8_t* data, uint8_t* len_data) {
     uint8_t pos = 0;
 
@@ -180,28 +176,24 @@ bool dhcp_get_option_data(dhcp_message_t message, uint8_t option, uint8_t* data,
     return false;
 }
 
-// Function to know if it is a dhcp discover message
 bool dhcp_is_discover(dhcp_message_t message) {
     if(message.operation != 1) return false;
     if(message.dhcp_options[2] != DHCP_DISCOVER) return false;
     return true;
 }
 
-// Function to know if it is a dhcp offer message
 bool dhcp_is_offer(dhcp_message_t message) {
     if(message.operation != 2) return false;
     if(message.dhcp_options[2] != DHCP_OFFER) return false;
     return true;
 }
 
-// Function to know if it is a dhcp request message
 bool dhcp_is_request(dhcp_message_t message) {
     if(message.operation != 1) return false;
     if(message.dhcp_options[2] != DHCP_REQUEST) return false;
     return true;
 }
 
-// Function to know if it is a dhcp acknowledge message
 bool dhcp_is_acknoledge(dhcp_message_t message) {
     if(message.operation != 2) return false;
     if(message.dhcp_options[2] != DHCP_ACKNOLEDGE) return false;
@@ -209,7 +201,6 @@ bool dhcp_is_acknoledge(dhcp_message_t message) {
     return true;
 }
 
-// Function to know if the payload is a DHCP message
 bool is_dhcp(uint8_t* buffer) {
     if(!is_udp_packet(buffer)) return false;
 

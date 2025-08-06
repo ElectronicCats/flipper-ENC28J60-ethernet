@@ -56,7 +56,28 @@
 
 #define DEBUG_UNKNWON 0
 
+/**
+ * @brief Analyzes and processes a network packet.
+ *
+ * This function takes a raw network packet from a buffer and performs
+ * a detailed analysis of its headers, from the lowest layer (Ethernet) up to
+ * the transport or application layer. It identifies the packet's type (e.g., ARP, IPv4, IPv6),
+ * and, if applicable, the higher-level protocols (e.g., TCP, UDP, ICMP).
+ *
+ * @param buffer A pointer to the buffer containing the raw network packet.
+ * @param len The total length of the packet in bytes.
+ */
 void analize_packet(uint8_t* buffer, uint16_t len);
+
+/**
+ * @brief Prints the contents of a network packet for debugging.
+ *
+ * This function provides a formatted output of a raw network packet.
+ * It typically displays the packet's data in a hex dump.
+ *
+ * @param buffer A pointer to the buffer containing the raw network packet.
+ * @param len The total length of the packet in bytes.
+ */
 void show_packet(uint8_t* buffer, uint16_t len);
 
 #endif

@@ -1,7 +1,6 @@
 #include "arp.h"
 #include "ethernet_protocol.h"
 
-// Function to set the arp header with ipv4 protocol
 bool arp_set_header(
     uint8_t* buffer,
     uint8_t* MAC_SRC,
@@ -51,7 +50,6 @@ bool arp_set_header(
     return true;
 }
 
-// Function to know if it is a arp header
 bool is_arp(uint8_t* buffer) {
     if(buffer == NULL) return false;
 
@@ -62,7 +60,6 @@ bool is_arp(uint8_t* buffer) {
     return type == 0x0806;
 }
 
-// Function to get the arp header
 arp_header_t arp_get_header(uint8_t* buffer) {
     arp_header_t arp_header = {0};
 
