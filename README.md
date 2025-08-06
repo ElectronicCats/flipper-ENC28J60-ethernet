@@ -7,6 +7,7 @@ ENC28J60 ethernet project to the Flipper Zero
 
 <p align=center>
  <a href="https://github.com/ElectronicCats/flipper-addons/wiki">
+  <img width=200 src="https://github.com/ElectronicCats/flipper-MCP2515-CANBUS/assets/107638696/75e82f16-ae59-4d86-a465-6c6e6b761e80" />
  </a>
 </p>
 
