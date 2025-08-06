@@ -1,5 +1,5 @@
-![GitHub release (with filter)](https://img.shields.io/github/v/release/ElectronicCats/flipper-MCP2515-CANBUS?color=%23008000)
-![GitHub actions](https://img.shields.io/github/actions/workflow/status/ElectronicCats/flipper-MCP2515-CANBUS/build.yml)
+![GitHub release (with filter)](https://img.shields.io/github/v/release/ElectronicCats/flipper-ENC28J60-ethernet?color=%23008000)
+![GitHub actions](https://img.shields.io/github/actions/workflow/status/ElectronicCats/flipper-ENC28J60-ethernet/build.yml)
 
 
 # Flipper ENC28J60 Ethernet App 🐬
@@ -7,7 +7,6 @@ ENC28J60 ethernet project to the Flipper Zero
 
 <p align=center>
  <a href="https://github.com/ElectronicCats/flipper-addons/wiki">
-  <img width=200 src="https://github.com/ElectronicCats/flipper-MCP2515-CANBUS/assets/107638696/75e82f16-ae59-4d86-a465-6c6e6b761e80" />
  </a>
 </p>
 
