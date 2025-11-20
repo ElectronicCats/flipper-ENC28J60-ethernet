@@ -11,7 +11,7 @@
  */
 
 // Ping to by default, it does ping to google
-uint8_t ip_ping[4] = {192, 168, 12, 1};
+uint8_t ip_ping[4] = {0, 0, 0, 0};
 
 // counter for messages sent
 uint16_t messages_sent = 0;
@@ -39,7 +39,6 @@ void menu_ping_options_callback(void* context, uint32_t index) {
 
     if(index == 1) {
         // Switch to the ping set IP scene
-        FURI_LOG_I("PING PROCESS", "ESTE ES EL EVENTO PARA ASIGNAR UN IP DE MAPEO");
         scene_manager_next_scene(app->scene_manager, app_scene_ping_set_ip_option);
     }
 }
@@ -52,6 +51,8 @@ void app_scene_ping_menu_scene_on_enter(void* context) {
     submenu_reset(app->submenu);
 
     furi_string_reset(app->text);
+
+    if(memcmp(ip_ping, app->ip_gateway, 4) < 0) memcpy(ip_ping, app->ip_gateway, 4);
 
     furi_string_cat_printf(
         app->text, "PING TO %u:%u:%u:%u", ip_ping[0], ip_ping[1], ip_ping[2], ip_ping[3]);
