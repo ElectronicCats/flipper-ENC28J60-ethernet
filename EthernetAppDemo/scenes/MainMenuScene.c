@@ -1,5 +1,4 @@
 #include "../app_user.h"
-
 /**
  * The main menu is the first scene to see in the Ethernet App
  * here the user selects an option that wants to do.
@@ -40,8 +39,9 @@ void main_menu_options_callback(void* context, uint32_t index) {
 
     switch(index) {
     case TESTING_OPTION:
-        //scene_manager_next_scene(app->scene_manager, app_scene_testing_scene_option);
+
         furi_thread_flags_set(app->thread, flag_dhcp_dora);
+
         break;
 
     case SNIFFING_OPTION:

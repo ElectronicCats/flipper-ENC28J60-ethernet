@@ -15,7 +15,7 @@ typedef struct {
     uint8_t mac_source[6];
     uint8_t ip_source[4];
     uint8_t mac_destiny[6];
-    uint8_t ip_destiny[6];
+    uint8_t ip_destiny[4];
 } arp_header_t;
 
 /**

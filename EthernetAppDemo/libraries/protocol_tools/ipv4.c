@@ -22,6 +22,21 @@ uint16_t calculate_checksum(uint8_t* data, uint16_t len) {
     return ~sum;
 }
 
+uint16_t calculate_checksum_ipv4(uint16_t* data, uint16_t len) {
+    uint32_t sum = 0;
+    uint16_t byte_act;
+
+    for(int i = 0; i < len; i++) {
+        byte_act = (data[i] >> 8) + (data[i] << 8);
+        sum += byte_act;
+        if(sum & 0x10000) {
+            sum = (sum & 0xFFFF) + 1;
+        }
+    }
+
+    return ~sum & 0xFFFF;
+}
+
 bool set_ipv4_header(
     uint8_t* buffer,
     uint8_t protocol,
@@ -67,7 +82,7 @@ bool set_ipv4_header(
     memcpy(header->source_ip, src_ip, 4);
 
     // Set checksum
-    uint16_t checksum = calculate_checksum((uint8_t*)header, sizeof(ipv4_header_t));
+    uint16_t checksum = calculate_checksum_ipv4((uint16_t*)header, sizeof(ipv4_header_t) / 2);
 
     header->checksum[0] = (checksum >> 8) & 0xff;
     header->checksum[1] = checksum & 0xff;

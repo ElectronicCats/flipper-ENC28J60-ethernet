@@ -26,6 +26,7 @@ typedef struct {
     FuriHalSpiBusHandle* spi; // SPI interface handle
     uint8_t mac_address[6]; // MAC address (6 bytes)
     uint8_t ip_address[4]; // IP address (4 bytes)
+    uint8_t subnet_mask[4];
     uint8_t tx_buffer[MAX_FRAMELEN]; // Transmit buffer
     uint8_t rx_buffer[MAX_FRAMELEN]; // Receive buffer
 } enc28j60_t;

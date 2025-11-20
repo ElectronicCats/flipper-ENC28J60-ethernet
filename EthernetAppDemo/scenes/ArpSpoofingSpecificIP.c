@@ -302,7 +302,7 @@ int32_t thread_for_spoofing_specific_ip(void* context) {
     // draw the waiting attack
     if(program_loop) {
         // then get mac gateway
-        if(!arp_get_specific_mac(ethernet, ip_alternative, app->ip_gateway, app->mac_gateway)) {
+        /*if(!arp_get_specific_mac(ethernet, ip_alternative, app->ip_gateway, app->mac_gateway)) {
             draw_process_failed(app);
             goto finalize_arp_spoofing_ip;
         }
@@ -312,7 +312,7 @@ int32_t thread_for_spoofing_specific_ip(void* context) {
                ethernet, ip_alternative, ip_device_to_disconnect, mac_device_to_disconnect)) {
             draw_process_failed(app);
             goto finalize_arp_spoofing_ip;
-        }
+        }*/
 
         // Set the frames or messages to send
         // 1. Reply to the Gateway

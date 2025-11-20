@@ -294,7 +294,8 @@ int32_t ping_thread(void* context) {
 
     // Do process Dora to get the IP gateway, and set our IP if we didnt have the IP
     if(!app->is_static_ip) {
-        start_ping = flipper_process_dora(ethernet, app->ethernet->ip_address, app->ip_gateway);
+        start_ping = flipper_process_dora(
+            ethernet, app->ethernet->ip_address, app->ip_gateway, ethernet->subnet_mask);
     }
 
     // If the process Dora failed, we will not continue
@@ -304,35 +305,21 @@ int32_t ping_thread(void* context) {
     }
 
     // Get the MAC gateway
-    if(!arp_get_specific_mac(ethernet, app->ethernet->ip_address, ip_ping, app->mac_gateway) &&
+    if(!arp_get_specific_mac(
+           ethernet,
+           app->ethernet->ip_address,
+           ip_ping,
+           app->ethernet->mac_address,
+           app->mac_gateway) &&
        start_ping && is_connected) {
         start_ping = false;
     } else {
         memcpy(mac_to_send, app->mac_gateway, 6);
     }
 
-    FURI_LOG_I(
-        "THREAD PING",
-        "SE BUSCA LA MAC DE %u.%u.%u.%u",
-        ip_ping[0],
-        ip_ping[1],
-        ip_ping[2],
-        ip_ping[3]);
-
-    FURI_LOG_I(
-        "THREAD PING",
-        "LOS MENSAJES VAN A %02X:%02X:%02X:%02X:%02X:%02X",
-        mac_to_send[0],
-        mac_to_send[1],
-        mac_to_send[2],
-        mac_to_send[3],
-        mac_to_send[4],
-        mac_to_send[5]);
-
     // Here is where gonna make the ping
     while(start_ping && is_connected && furi_hal_gpio_read(&gpio_button_back)) {
         if((furi_get_tick() - last_time_ping > 1000)) {
-            //printf("SECUENCIA: %u\n", sequence);
             packet_size = create_flipper_ping_packet(
                 packet_to_send,
                 ethernet->mac_address,
@@ -344,15 +331,6 @@ int32_t ping_thread(void* context) {
                 (uint8_t*)ping_data,
                 data_len);
 
-            /*printf("FRAME: ");
-            for(uint8_t i = 0; i < 6; i++) {
-                printf("%02X%c", packet_to_send[i], i != 5 ? ':' : '\0');
-            }
-            printf(" - ");
-            for(uint8_t i = 6; i < 12; i++) {
-                printf("%02X%c", packet_to_send[i], i != 11 ? ':' : '\0');
-            }
-            printf("\n");*/
             send_packet(ethernet, packet_to_send, packet_size);
 
             if(sequence == 0xffff) sequence = 0;
@@ -364,31 +342,12 @@ int32_t ping_thread(void* context) {
         packet_receive_len = receive_packet(ethernet, packet_to_receive, MAX_FRAMELEN);
 
         if(packet_receive_len) {
-            /*printf("FRAME: ");
-            for(uint8_t i = 0; i < 6; i++) {
-                printf("%02X%c", packet_to_receive[i], i != 5 ? ':' : '\0');
-            }
-            printf(" - ");
-            for(uint8_t i = 6; i < 12; i++) {
-                printf("%02X%c", packet_to_receive[i], i != 11 ? ':' : '\0');
-            }
-            printf("\n");*/
             if(ping_packet_replied(packet_to_receive, ip_ping)) {
                 ping_responses++;
                 view_dispatcher_send_custom_event(
                     app->view_dispatcher, 5); // Update the ping count
             } else {
                 arp_reply_requested(ethernet, packet_to_receive, ethernet->ip_address);
-                /*printf("NO ES UN ICMP\n");
-                if(arp_reply_requested(ethernet, packet_to_receive, ethernet->ip_address)) {
-                    printf("SI ES ARP\n");
-                } else {
-                    printf("NO ES ARP\n");
-                }
-                for(uint32_t i = 0; i < packet_receive_len; i++) {
-                    printf("%02X ", packet_to_receive[i]);
-                }
-                printf("\n");*/
             }
         }
     }

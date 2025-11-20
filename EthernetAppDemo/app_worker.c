@@ -48,12 +48,16 @@ int32_t ethernet_thread(void* context) {
         // If the Option is DORA
         if(event == flag_dhcp_dora) {
             view_dispatcher_send_custom_event(app->view_dispatcher, wait_ip_event);
-            if(flipper_process_dora(ethernet, ethernet->ip_address, app->ip_gateway)) {
+            if(flipper_process_dora_with_host_name(
+                   ethernet, ethernet->ip_address, app->ip_gateway, "Flippa 0")) {
+                send_arp_gratuitous(
+                    ethernet, app->ethernet->mac_address, app->ethernet->ip_address);
                 view_dispatcher_send_custom_event(app->view_dispatcher, ip_gotten_event);
                 app->is_static_ip = true;
             } else {
                 view_dispatcher_send_custom_event(app->view_dispatcher, ip_no_gotten_event);
             }
+            furi_thread_flags_clear(flag_dhcp_dora);
         }
     }
 

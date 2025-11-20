@@ -66,7 +66,9 @@ typedef struct {
     uint8_t yiaddr[4];
     uint8_t siaddr[4];
     uint8_t giaddr[4];
-    uint8_t chaddr[208];
+    uint8_t chaddr[16];
+    uint8_t sname[64];
+    uint8_t file[128];
     uint8_t magic_cookie[4];
     uint8_t dhcp_options[1000];
 } dhcp_message_t;
