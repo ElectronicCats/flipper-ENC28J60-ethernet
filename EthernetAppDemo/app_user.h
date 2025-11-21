@@ -11,6 +11,7 @@
 #include <gui/modules/widget.h>
 #include <gui/modules/file_browser.h>
 #include <gui/modules/file_browser_worker.h>
+#include <gui/modules/loading.h>
 #include <gui/scene_manager.h>
 #include <gui/view_dispatcher.h>
 #include <storage/storage.h>
@@ -78,6 +79,7 @@ typedef struct {
     ByteInput* input_byte_value;
     FileBrowser* file_browser;
     ip_assigner_t* ip_assigner;
+    Loading* loading;
 
     enc28j60_t* ethernet; // Instance for the enc28j60
 
@@ -102,7 +104,8 @@ typedef enum {
     DialogInfoView,
     InputByteView,
     FileBrowserView,
-    IpAssignerView
+    IpAssignerView,
+    LoadingView
 } scenesViews;
 
 // This functions works only to draw repetitive views in widgets

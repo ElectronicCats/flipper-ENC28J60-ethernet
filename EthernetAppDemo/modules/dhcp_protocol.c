@@ -92,7 +92,8 @@ bool deconstruct_dhcp_offer(uint8_t* buffer) {
     memcpy(ip_client, dhcp_message.yiaddr, 4);
 
     // dhcp message ip server
-    memcpy(ip_server, dhcp_message.siaddr, 4);
+    uint8_t length = 0;
+    dhcp_get_option_data(dhcp_message, DHCP_OP_SERVER_IDENTIFIER, ip_server, &length);
 
     return true;
 }
@@ -150,7 +151,11 @@ bool deconstruct_dhcp_ack(uint8_t* buffer) {
 }
 
 // Function to start the DORA process and get the ip and the gateway ip
-bool flipper_process_dora(enc28j60_t* ethernet, uint8_t* static_ip, uint8_t* ip_router) {
+bool flipper_process_dora(
+    enc28j60_t* ethernet,
+    uint8_t* static_ip,
+    uint8_t* ip_router,
+    uint8_t* mac_router) {
     uint32_t current_time = furi_get_tick();
 
     bool ret = false;
@@ -210,8 +215,8 @@ bool flipper_process_dora(enc28j60_t* ethernet, uint8_t* static_ip, uint8_t* ip_
 
                 // This part helps to know if it is dhcp acknowledge
                 if(deconstruct_dhcp_ack(rx_buffer)) {
+                    get_subnet_mask(mac_router);
                     state = DHCP_OK; // state ok
-
                     ret = true;
 
                     current_time = furi_get_tick();
@@ -300,6 +305,7 @@ bool flipper_process_dora_with_host_name(
     enc28j60_t* ethernet,
     uint8_t* static_ip,
     uint8_t* ip_router,
+    uint8_t* mac_router,
     const char* host) {
     uint32_t current_time = furi_get_tick();
 
@@ -307,7 +313,7 @@ bool flipper_process_dora_with_host_name(
 
     xid = furi_hal_random_get();
 
-    memcpy(MAC_ADDRESS, ethernet->mac_address, 6);
+    set_mac_address(ethernet->mac_address);
 
     uint8_t* tx_buffer = ethernet->tx_buffer;
     uint8_t* rx_buffer = ethernet->rx_buffer;
@@ -355,6 +361,7 @@ bool flipper_process_dora_with_host_name(
 
                 // This part helps to know if it is dhcp acknowledge
                 if(deconstruct_dhcp_ack(rx_buffer)) {
+                    get_subnet_mask(mac_router);
                     state = DHCP_OK; // state ok
                     ret = true;
 
@@ -384,4 +391,12 @@ bool flipper_process_dora_with_host_name(
     }
 
     return ret;
+}
+
+void set_mac_address(uint8_t* mac_address) {
+    memcpy(MAC_ADDRESS, mac_address, 6);
+}
+
+void get_subnet_mask(uint8_t* mask) {
+    memcpy(mask, subnet_mask, 4);
 }

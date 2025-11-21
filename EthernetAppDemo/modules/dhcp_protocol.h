@@ -17,7 +17,11 @@
  * @param ip_router A pointer to a 4-byte buffer where the router's IP address will be stored.
  * @return `true` if the DORA process was successful and an IP was obtained, `false` otherwise.
  */
-bool flipper_process_dora(enc28j60_t* ethernet, uint8_t* static_ip, uint8_t* ip_router);
+bool flipper_process_dora(
+    enc28j60_t* ethernet,
+    uint8_t* static_ip,
+    uint8_t* ip_router,
+    uint8_t* mac_router);
 
 /**
  * @brief Performs the DORA process with an included host name.
@@ -37,6 +41,7 @@ bool flipper_process_dora_with_host_name(
     enc28j60_t* ethernet,
     uint8_t* static_ip,
     uint8_t* ip_router,
+    uint8_t* mac_router,
     const char* host);
 
 /**
@@ -58,5 +63,11 @@ void get_mac_server(uint8_t* MAC_SERVER);
  * @param ip_gateway A pointer to a 4-byte buffer where the gateway's IP address will be copied.
  */
 void get_gateway_ip(uint8_t* ip_gateway);
+
+void get_subnet_mask(uint8_t* mask);
+
+void set_dhcp_discover_message_with_host_name(uint8_t* buffer, uint16_t* length, const char* host);
+
+void set_mac_address(uint8_t* mac_address);
 
 #endif

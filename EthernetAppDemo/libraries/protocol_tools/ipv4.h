@@ -31,6 +31,7 @@ typedef struct {
  * @return The calculated 16-bit checksum value.
  */
 uint16_t calculate_checksum(uint8_t* data, uint16_t len);
+uint16_t calculate_checksum_ipv4(uint16_t* data, uint16_t len);
 
 /**
  * @brief Populates an IPv4 header in a given buffer.

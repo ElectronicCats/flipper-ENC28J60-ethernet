@@ -95,7 +95,12 @@ void arp_scan_network(
  * @param mac_dst A pointer to a 6-byte buffer where the discovered MAC address will be stored.
  * @return `true` if the MAC address was successfully retrieved, `false` otherwise (e.g., timeout).
  */
-bool arp_get_specific_mac(enc28j60_t* ethernet, uint8_t* src_ip, uint8_t* dst_ip, uint8_t* mac_dst);
+bool arp_get_specific_mac(
+    enc28j60_t* ethernet,
+    uint8_t* sender_ip,
+    uint8_t* target_ip,
+    uint8_t* sender_mac,
+    uint8_t* target_mac);
 
 /**
  * @brief Checks if an incoming packet is a requested ARP.
@@ -124,5 +129,7 @@ bool arp_reply_requested(enc28j60_t* ethernet, uint8_t* buffer, uint8_t* dst_ip)
  * @return The index of the duplicated IP in the list, or a value indicating it was not found.
  */
 uint8_t is_duplicated_ip(uint8_t* ip, arp_list* list, uint8_t total_list);
+
+void send_arp_gratuitous(enc28j60_t* ethernet, uint8_t* source_mac, uint8_t* source_ip);
 
 #endif

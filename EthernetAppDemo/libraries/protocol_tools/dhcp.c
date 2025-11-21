@@ -17,7 +17,15 @@ dhcp_message_t
     memset(message.secs, 0, 2);
     memset(message.flags, 0, 2);
 
+    memset(message.ciaddr, 0, 4);
+    memset(message.yiaddr, 0, 4);
+    memset(message.siaddr, 0, 4);
+    memset(message.giaddr, 0, 4);
+
     memcpy(message.chaddr, MAC_ADDRESS, 6);
+
+    memset(message.sname, 0, 64);
+    memset(message.file, 0, 128);
 
     message.magic_cookie[0] = 0x63;
     message.magic_cookie[1] = 0x82;
@@ -32,7 +40,7 @@ dhcp_message_t
     size = sizeof(first_option);
 
     // This is to send the cliend identifier
-    uint8_t second_option[9] = {DHCP_OP_CLIENT_IDENTIFIER, 7, 0x1, 0, 0, 0, 0, 0, 0};
+    uint8_t second_option[] = {DHCP_OP_CLIENT_IDENTIFIER, 7, 0x1, 0, 0, 0, 0, 0, 0};
     memcpy(second_option + 3, MAC_ADDRESS, 6);
 
     memcpy(message.dhcp_options + size, second_option, sizeof(second_option));

@@ -11,7 +11,7 @@
  */
 
 // Ping to by default, it does ping to google
-uint8_t ip_ping[4] = {8, 8, 8, 8};
+uint8_t ip_ping[4] = {0, 0, 0, 0};
 
 // counter for messages sent
 uint16_t messages_sent = 0;
@@ -50,7 +50,14 @@ void app_scene_ping_menu_scene_on_enter(void* context) {
     // reset submenu and switch view
     submenu_reset(app->submenu);
 
-    submenu_set_header(app->submenu, "PING TO 8.8.8.8");
+    furi_string_reset(app->text);
+
+    if(*(uint32_t*)ip_ping == 0) memcpy(ip_ping, app->ip_gateway, 4);
+
+    furi_string_cat_printf(
+        app->text, "PING TO %u:%u:%u:%u", ip_ping[0], ip_ping[1], ip_ping[2], ip_ping[3]);
+
+    submenu_set_header(app->submenu, furi_string_get_cstr(app->text));
     submenu_add_item(app->submenu, "Ping", 0, menu_ping_options_callback, app);
 
     furi_string_reset(app->text);
@@ -58,7 +65,8 @@ void app_scene_ping_menu_scene_on_enter(void* context) {
     furi_string_cat_printf(
         app->text, "IP to do ping %u:%u:%u:%u", ip_ping[0], ip_ping[1], ip_ping[2], ip_ping[3]);
 
-    submenu_add_item(app->submenu, furi_string_get_cstr(app->text), 1, NULL, app);
+    submenu_add_item(
+        app->submenu, furi_string_get_cstr(app->text), 1, menu_ping_options_callback, app);
 
     view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);
 }
@@ -165,6 +173,8 @@ void app_scene_ping_set_ip_scene_on_exit(void* context) {
 void app_scene_ping_scene_on_enter(void* context) {
     App* app = (App*)context;
 
+    view_dispatcher_switch_to_view(app->view_dispatcher, LoadingView);
+
     furi_thread_suspend(app->thread);
 
     // Allocate and start the thread
@@ -173,9 +183,6 @@ void app_scene_ping_scene_on_enter(void* context) {
 
     // Reset the widget and switch view
     widget_reset(app->widget);
-
-    // switch to the widget view
-    view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
 }
 
 // Function for  ping scene on event
@@ -209,6 +216,7 @@ bool app_scene_ping_scene_on_event(void* context, SceneManagerEvent event) {
         }
     }
 
+    view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
     return consumed;
 }
 
@@ -250,6 +258,7 @@ int32_t ping_thread(void* context) {
 
     // Array to get the MAC for the GATEWAY
     uint8_t mac_to_send[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+    //uint8_t MAC_INITIAL[6] = {0xba, 0x3f, 0x91, 0xc2, 0x7e, 0x5d};
 
     // reset the counters
     messages_sent = 0;
@@ -286,7 +295,9 @@ int32_t ping_thread(void* context) {
 
     // Do process Dora to get the IP gateway, and set our IP if we didnt have the IP
     if(!app->is_static_ip) {
-        start_ping = flipper_process_dora(ethernet, app->ethernet->ip_address, app->ip_gateway);
+        start_ping = flipper_process_dora_with_host_name(
+            ethernet, ethernet->ip_address, app->ip_gateway, ethernet->subnet_mask, "Flippa 0");
+        if(start_ping) send_arp_gratuitous(ethernet, ethernet->mac_address, ethernet->ip_address);
     }
 
     // If the process Dora failed, we will not continue
@@ -297,7 +308,14 @@ int32_t ping_thread(void* context) {
 
     // Get the MAC gateway
     if(!arp_get_specific_mac(
-           ethernet, app->ethernet->ip_address, app->ip_gateway, app->mac_gateway) &&
+           ethernet,
+           app->ethernet->ip_address,
+           (*(uint32_t*)ethernet->ip_address & *(uint32_t*)ethernet->subnet_mask) ==
+                   (*(uint32_t*)ip_ping & *(uint32_t*)ethernet->subnet_mask) ?
+               ip_ping :
+               app->ip_gateway,
+           app->ethernet->mac_address,
+           app->mac_gateway) &&
        start_ping && is_connected) {
         start_ping = false;
     } else {
@@ -306,13 +324,11 @@ int32_t ping_thread(void* context) {
 
     // Here is where gonna make the ping
     while(start_ping && is_connected && furi_hal_gpio_read(&gpio_button_back)) {
-        packet_receive_len = receive_packet(ethernet, packet_to_receive, MAX_FRAMELEN);
-
-        if((furi_get_tick() - last_time_ping) > 1000) {
+        if((furi_get_tick() - last_time_ping > 1000)) {
             packet_size = create_flipper_ping_packet(
                 packet_to_send,
+                ethernet->mac_address,
                 mac_to_send,
-                app->mac_gateway,
                 app->ethernet->ip_address,
                 ip_ping,
                 1,
@@ -328,12 +344,15 @@ int32_t ping_thread(void* context) {
             view_dispatcher_send_custom_event(app->view_dispatcher, 5); // Update the ping count
             last_time_ping = furi_get_tick();
         }
+        packet_receive_len = receive_packet(ethernet, packet_to_receive, MAX_FRAMELEN);
 
         if(packet_receive_len) {
             if(ping_packet_replied(packet_to_receive, ip_ping)) {
                 ping_responses++;
                 view_dispatcher_send_custom_event(
                     app->view_dispatcher, 5); // Update the ping count
+            } else {
+                arp_reply_requested(ethernet, packet_to_receive, ethernet->ip_address);
             }
         }
     }

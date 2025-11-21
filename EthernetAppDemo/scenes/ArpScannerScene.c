@@ -6,7 +6,7 @@
  */
 
 // Variables for the ARP Scanner
-uint8_t ip_start[4] = {192, 168, 0, 3}; // The IP address to start the scan
+uint8_t ip_start[4] = {0, 0, 0, 0}; // The IP address to start the scan
 uint8_t range_ip = 1; // The count of the IP addresses to scan
 
 /**
@@ -67,6 +67,7 @@ void app_scene_arp_scanner_menu_on_enter(void* context) {
     variable_item_set_current_value_text(item, "START");
 
     // Add item to set the IP address
+    if(*(uint32_t*)ip_start == 0) memcpy(ip_start, app->ip_gateway, 4);
     item = variable_item_list_add(app->varList, "Set IP Address", 0, NULL, app);
 
     furi_string_reset(app->text); // Reset the text
@@ -132,7 +133,6 @@ void draw_the_arp_list(App* app) {
 
     // Switch the view of the flipper
     widget_reset(app->widget);
-    view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
 }
 
 // Function to draw to finished the thread
@@ -173,6 +173,7 @@ void app_scene_arp_scanner_on_enter(void* context) {
     case 3:
         // If the scene is in state 0, starts the thread and show ip list
         draw_the_arp_list(app);
+        view_dispatcher_switch_to_view(app->view_dispatcher, LoadingView);
         break;
 
     case 1:
