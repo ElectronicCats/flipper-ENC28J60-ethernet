@@ -173,6 +173,8 @@ void app_scene_ping_set_ip_scene_on_exit(void* context) {
 void app_scene_ping_scene_on_enter(void* context) {
     App* app = (App*)context;
 
+    view_dispatcher_switch_to_view(app->view_dispatcher, LoadingView);
+
     furi_thread_suspend(app->thread);
 
     // Allocate and start the thread
@@ -181,9 +183,6 @@ void app_scene_ping_scene_on_enter(void* context) {
 
     // Reset the widget and switch view
     widget_reset(app->widget);
-
-    // switch to the widget view
-    view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
 }
 
 // Function for  ping scene on event
@@ -217,6 +216,7 @@ bool app_scene_ping_scene_on_event(void* context, SceneManagerEvent event) {
         }
     }
 
+    view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
     return consumed;
 }
 

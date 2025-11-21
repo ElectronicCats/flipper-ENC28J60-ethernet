@@ -133,7 +133,6 @@ void draw_the_arp_list(App* app) {
 
     // Switch the view of the flipper
     widget_reset(app->widget);
-    view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
 }
 
 // Function to draw to finished the thread
@@ -174,6 +173,7 @@ void app_scene_arp_scanner_on_enter(void* context) {
     case 3:
         // If the scene is in state 0, starts the thread and show ip list
         draw_the_arp_list(app);
+        view_dispatcher_switch_to_view(app->view_dispatcher, LoadingView);
         break;
 
     case 1:
