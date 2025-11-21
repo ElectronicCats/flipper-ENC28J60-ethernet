@@ -41,6 +41,7 @@ bool flipper_process_dora_with_host_name(
     enc28j60_t* ethernet,
     uint8_t* static_ip,
     uint8_t* ip_router,
+    uint8_t* mac_router,
     const char* host);
 
 /**

@@ -67,7 +67,7 @@ void app_scene_arp_scanner_menu_on_enter(void* context) {
     variable_item_set_current_value_text(item, "START");
 
     // Add item to set the IP address
-    if(memcmp(ip_start, app->ip_gateway, 4) < 0) memcpy(ip_start, app->ip_gateway, 4);
+    if(*(uint32_t*)ip_start == 0) memcpy(ip_start, app->ip_gateway, 4);
     item = variable_item_list_add(app->varList, "Set IP Address", 0, NULL, app);
 
     furi_string_reset(app->text); // Reset the text

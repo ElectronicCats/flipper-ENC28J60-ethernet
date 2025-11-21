@@ -52,7 +52,7 @@ void app_scene_ping_menu_scene_on_enter(void* context) {
 
     furi_string_reset(app->text);
 
-    if(memcmp(ip_ping, app->ip_gateway, 4) < 0) memcpy(ip_ping, app->ip_gateway, 4);
+    if(*(uint32_t*)ip_ping == 0) memcpy(ip_ping, app->ip_gateway, 4);
 
     furi_string_cat_printf(
         app->text, "PING TO %u:%u:%u:%u", ip_ping[0], ip_ping[1], ip_ping[2], ip_ping[3]);
@@ -295,8 +295,9 @@ int32_t ping_thread(void* context) {
 
     // Do process Dora to get the IP gateway, and set our IP if we didnt have the IP
     if(!app->is_static_ip) {
-        start_ping = flipper_process_dora(
-            ethernet, app->ethernet->ip_address, app->ip_gateway, ethernet->subnet_mask);
+        start_ping = flipper_process_dora_with_host_name(
+            ethernet, ethernet->ip_address, app->ip_gateway, ethernet->subnet_mask, "Flippa 0");
+        if(start_ping) send_arp_gratuitous(ethernet, ethernet->mac_address, ethernet->ip_address);
     }
 
     // If the process Dora failed, we will not continue
@@ -309,7 +310,10 @@ int32_t ping_thread(void* context) {
     if(!arp_get_specific_mac(
            ethernet,
            app->ethernet->ip_address,
-           ip_ping,
+           (*(uint32_t*)ethernet->ip_address & *(uint32_t*)ethernet->subnet_mask) ==
+                   (*(uint32_t*)ip_ping & *(uint32_t*)ethernet->subnet_mask) ?
+               ip_ping :
+               app->ip_gateway,
            app->ethernet->mac_address,
            app->mac_gateway) &&
        start_ping && is_connected) {

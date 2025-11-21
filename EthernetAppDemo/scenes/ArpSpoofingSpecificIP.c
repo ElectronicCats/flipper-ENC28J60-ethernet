@@ -293,7 +293,11 @@ int32_t thread_for_spoofing_specific_ip(void* context) {
 
         // Get the ip gateway and then it mac address
         if(!flipper_process_dora_with_host_name(
-               ethernet, ip_alternative, app->ip_gateway, furi_string_get_cstr(app->text))) {
+               ethernet,
+               ip_alternative,
+               app->ip_gateway,
+               ethernet->subnet_mask,
+               furi_string_get_cstr(app->text))) {
             draw_dora_failed(app);
             goto finalize_arp_spoofing_ip;
         }

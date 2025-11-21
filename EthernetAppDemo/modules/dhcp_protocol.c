@@ -215,14 +215,12 @@ bool flipper_process_dora(
 
                 // This part helps to know if it is dhcp acknowledge
                 if(deconstruct_dhcp_ack(rx_buffer)) {
+                    get_subnet_mask(mac_router);
                     state = DHCP_OK; // state ok
-
                     ret = true;
 
                     current_time = furi_get_tick();
                 }
-
-                get_subnet_mask(mac_router);
             }
             break;
 
@@ -307,6 +305,7 @@ bool flipper_process_dora_with_host_name(
     enc28j60_t* ethernet,
     uint8_t* static_ip,
     uint8_t* ip_router,
+    uint8_t* mac_router,
     const char* host) {
     uint32_t current_time = furi_get_tick();
 
@@ -362,6 +361,7 @@ bool flipper_process_dora_with_host_name(
 
                 // This part helps to know if it is dhcp acknowledge
                 if(deconstruct_dhcp_ack(rx_buffer)) {
+                    get_subnet_mask(mac_router);
                     state = DHCP_OK; // state ok
                     ret = true;
 
