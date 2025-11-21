@@ -182,9 +182,6 @@ void arp_scan_network(
     arp_set_my_mac_address(ethernet->mac_address);
     arp_set_my_ip_address(ethernet->ip_address);
 
-    UNUSED(list);
-    UNUSED(list_count);
-
     uint8_t* tx_buffer = ethernet->tx_buffer;
     uint8_t* rx_buffer = ethernet->rx_buffer;
 
@@ -203,6 +200,22 @@ void arp_scan_network(
         // Send packet to lan
         send_packet(ethernet, tx_buffer, packet_len);
 
+        // Set time to get Address
+        uint32_t last_time = furi_get_tick();
+
+        // Part to received the arp messages
+        while((furi_get_tick() - last_time) < 1000) {
+            packet_len = receive_packet(ethernet, rx_buffer, MAX_FRAMELEN);
+
+            if(packet_len && get_arp_reply(start_list, list[counter].mac, rx_buffer, packet_len)) {
+                memcpy(list[counter].ip, start_list, 4);
+                counter++;
+                last_time = furi_get_tick();
+                break;
+            }
+            furi_delay_us(1);
+        }
+
         // Check if the ip address is the last
         if(start_list[3] == 255) {
             start_list[2]++;
@@ -211,21 +224,6 @@ void arp_scan_network(
 
         // Add one more
         start_list[3]++;
-    }
-
-    // Set time to get Address
-    uint32_t last_time = furi_get_tick();
-
-    // Part to received the arp messages
-    while((furi_get_tick() - last_time) < 1000) {
-        packet_len = receive_packet(ethernet, rx_buffer, MAX_FRAMELEN);
-
-        if(packet_len &&
-           get_arp_reply(list[counter].ip, list[counter].mac, rx_buffer, packet_len)) {
-            counter++;
-            last_time = furi_get_tick();
-        }
-        furi_delay_us(1);
     }
 
     *list_count = counter;
