@@ -27,7 +27,7 @@ uint16_t calculate_checksum_ipv4(uint16_t* data, uint16_t len) {
     uint16_t byte_act;
 
     for(int i = 0; i < len; i++) {
-        byte_act = (data[i] >> 8) + (data[i] << 8);
+        byte_act = (uint16_t)((((uint8_t*)&data[i])[0] << 8) + ((uint8_t*)&data[i])[1]);
         sum += byte_act;
         if(sum & 0x10000) {
             sum = (sum & 0xFFFF) + 1;
@@ -72,7 +72,7 @@ bool set_ipv4_header(
     header->flags_offset[1] = 0x00;
 
     // Set time to live
-    header->ttl = 64;
+    header->ttl = 128; // 64;
 
     // Set protocol
     header->protocol = protocol;

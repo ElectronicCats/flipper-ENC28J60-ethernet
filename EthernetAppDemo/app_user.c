@@ -103,6 +103,7 @@ App* app_alloc() {
     memcpy(app->ip_helper, IP_DEFAULT, 4);
 
     app->is_static_ip = false;
+    app->is_dora = false;
 
     return app;
 }

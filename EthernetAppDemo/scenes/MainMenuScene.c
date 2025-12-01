@@ -1,4 +1,5 @@
 #include "../app_user.h"
+//#include "../libraries/protocol_tools/tcp.h"
 /**
  * The main menu is the first scene to see in the Ethernet App
  * here the user selects an option that wants to do.
@@ -14,6 +15,7 @@ enum {
     ARP_ACTIONS_OPTION,
     TESTING_OPTION,
     PING_OPTION,
+    PORTS_SCANNER_OPTION,
     SETTINGS_OPTION,
     ABOUT_US
 } main_menu_options;
@@ -40,7 +42,12 @@ void main_menu_options_callback(void* context, uint32_t index) {
     switch(index) {
     case TESTING_OPTION:
 
-        furi_thread_flags_set(app->thread, flag_dhcp_dora);
+        furi_thread_suspend(app->thread);
+
+        draw_dora_needed(app);
+        view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
+
+        furi_thread_resume(app->thread);
 
         break;
 
@@ -58,6 +65,10 @@ void main_menu_options_callback(void* context, uint32_t index) {
 
     case PING_OPTION:
         scene_manager_next_scene(app->scene_manager, app_scene_ping_menu_option);
+        break;
+
+    case PORTS_SCANNER_OPTION:
+        scene_manager_next_scene(app->scene_manager, app_scene_ports_scanner_option);
         break;
 
     case SETTINGS_OPTION:
@@ -102,6 +113,9 @@ void app_scene_main_menu_on_enter(void* context) {
         app->submenu, "Read Pcaps", READ_PCAPS_OPTION, main_menu_options_callback, app);
 
     submenu_add_item(app->submenu, "Ping", PING_OPTION, main_menu_options_callback, app);
+
+    submenu_add_item(
+        app->submenu, "Ports Scanner", PORTS_SCANNER_OPTION, main_menu_options_callback, app);
 
     submenu_add_item(app->submenu, "...", TESTING_OPTION, main_menu_options_callback, app);
 

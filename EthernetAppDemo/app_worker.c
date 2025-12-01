@@ -54,6 +54,7 @@ int32_t ethernet_thread(void* context) {
                    app->ip_gateway,
                    ethernet->subnet_mask,
                    "Flippa 0")) {
+                app->is_dora = true;
                 send_arp_gratuitous(ethernet, ethernet->mac_address, ethernet->ip_address);
                 view_dispatcher_send_custom_event(app->view_dispatcher, ip_gotten_event);
                 app->is_static_ip = true;

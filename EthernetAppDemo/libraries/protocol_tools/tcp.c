@@ -1,55 +1,170 @@
+#include "app_user.h"
 #include "tcp.h"
 #include "ipv4.h"
 #include "ethernet_protocol.h"
 
-// Helper function to convert 16-bit value to network byte order (big-endian)
-static void uint16_to_bytes(uint16_t value, uint8_t* bytes) {
-    bytes[0] = (value >> 8) & 0xFF;
-    bytes[1] = value & 0xFF;
-}
-
-// Helper function to convert 32-bit value to network byte order (big-endian)
-static void uint32_to_bytes(uint32_t value, uint8_t* bytes) {
-    bytes[0] = (value >> 24) & 0xFF;
-    bytes[1] = (value >> 16) & 0xFF;
-    bytes[2] = (value >> 8) & 0xFF;
-    bytes[3] = value & 0xFF;
-}
-
-bool set_tcp_header(
-    uint8_t* buffer,
+// New function to create a complete TCP packet
+bool create_tcp_header(
+    tcp_header_t* tcp_header,
     uint16_t source_port,
     uint16_t dest_port,
     uint32_t sequence,
     uint32_t ack_number,
-    uint8_t flags,
+    uint16_t flags,
     uint16_t window_size,
     uint16_t urgent_pointer) {
-    if(buffer == NULL) return false;
+    if(tcp_header == NULL) return false;
 
     // Set source and destination ports
-    uint16_to_bytes(source_port, buffer);
-    uint16_to_bytes(dest_port, buffer + 2);
+    uint_to_bytes(&source_port, tcp_header->source_port, sizeof(uint16_t));
+    uint_to_bytes(&dest_port, tcp_header->dest_port, sizeof(uint16_t));
 
     // Set sequence and acknowledgment numbers
-    uint32_to_bytes(sequence, buffer + 4);
-    uint32_to_bytes(ack_number, buffer + 8);
+    uint_to_bytes(&sequence, tcp_header->sequence, sizeof(uint32_t));
+    uint_to_bytes(&ack_number, tcp_header->ack_number, sizeof(uint32_t));
 
     // Set data offset (5 = 20 bytes / 4) and reserved bits
-    buffer[12] = (5 << 4); // 5 * 4 = 20 bytes header length
+    tcp_header->data_offset_flags[0] = (5 << 4); // 5 * 4 = 20 bytes header length
 
     // Set flags
-    buffer[13] = flags;
+    tcp_header->data_offset_flags[0] |= ((uint8_t*)&flags)[1] & 0x01;
+    tcp_header->data_offset_flags[1] = ((uint8_t*)&flags)[0];
 
     // Set window size
-    uint16_to_bytes(window_size, buffer + 14);
+    uint_to_bytes(&window_size, tcp_header->window_size, sizeof(uint16_t));
 
     // Checksum will be calculated later
-    buffer[16] = 0;
-    buffer[17] = 0;
+    tcp_header->checksum[0] = 0;
+    tcp_header->checksum[1] = 0;
 
     // Set urgent pointer
-    uint16_to_bytes(urgent_pointer, buffer + 18);
+    uint_to_bytes(&urgent_pointer, tcp_header->urgent_pointer, sizeof(uint16_t));
+
+    return true;
+}
+
+void calculate_checksum_tcp(
+    uint16_t options_size,
+    pseudo_header_ip_t* pseudo_header,
+    tcp_header_t* tcp_header) {
+    uint8_t* buffer_checksum =
+        calloc(1, sizeof(pseudo_header_ip_t) + TCP_HEADER_LEN + options_size);
+
+    pseudo_header->tcp_lenght[0] = (options_size + TCP_HEADER_LEN) >> 8;
+    pseudo_header->tcp_lenght[1] = options_size + TCP_HEADER_LEN;
+
+    memcpy(buffer_checksum, pseudo_header, sizeof(pseudo_header_ip_t));
+    memcpy(
+        buffer_checksum + sizeof(pseudo_header_ip_t), tcp_header, TCP_HEADER_LEN + options_size);
+
+    uint16_t cheksum = calculate_checksum_ipv4(
+        (uint16_t*)buffer_checksum,
+        (sizeof(pseudo_header_ip_t) + TCP_HEADER_LEN + options_size) / 2);
+
+    tcp_header->checksum[0] = ((uint8_t*)&cheksum)[1];
+    tcp_header->checksum[1] = ((uint8_t*)&cheksum)[0];
+
+    free(buffer_checksum);
+}
+
+bool set_tcp_header_syn(
+    uint8_t* buffer,
+    uint8_t* source_ip,
+    uint8_t* target_ip,
+    uint16_t source_port,
+    uint16_t dest_port,
+    uint32_t sequence,
+    uint32_t ack_number,
+    uint16_t window_size,
+    uint16_t urgent_pointer,
+    uint16_t* len) {
+    if(buffer == NULL || source_ip == NULL || target_ip == NULL) return false;
+
+    pseudo_header_ip_t* pseudo_header = calloc(1, sizeof(pseudo_header_ip_t));
+    memcpy(pseudo_header->source_ip, source_ip, 4);
+    memcpy(pseudo_header->dest_ip, target_ip, 4);
+    pseudo_header->protocol = 0x06;
+
+    tcp_header_t* tcp_header = calloc(1, sizeof(tcp_header_t));
+
+    create_tcp_header(
+        tcp_header,
+        source_port,
+        dest_port,
+        sequence,
+        ack_number,
+        TCP_SYN,
+        window_size,
+        urgent_pointer);
+
+    // Crear la funcion para armar el paquete SYN
+    uint16_t options_size = 0;
+
+    // This is the array with the values to send the request
+    uint8_t first_option[] = {TCP_MSS, 0x04, 0x05, 0xB4, 0x01};
+    memcpy(tcp_header->options + options_size, first_option, sizeof(first_option));
+    options_size += sizeof(first_option);
+
+    uint8_t second_option[] = {TCP_WS, 0x03, 0x08, 0x01, 0x01};
+    memcpy(tcp_header->options + options_size, second_option, sizeof(second_option));
+    options_size += sizeof(second_option);
+
+    uint8_t tree_option[] = {TCP_SACK_P, 0x02};
+    memcpy(tcp_header->options + options_size, tree_option, sizeof(tree_option));
+    options_size += sizeof(tree_option);
+
+    tcp_header->data_offset_flags[0] =
+        ((tcp_header->data_offset_flags[0] >> 4) + (options_size / 4)) << 4;
+
+    calculate_checksum_tcp(options_size, pseudo_header, tcp_header);
+
+    memcpy(buffer, tcp_header, TCP_HEADER_LEN + options_size);
+
+    free(tcp_header);
+
+    *len = TCP_HEADER_LEN + options_size;
+
+    return true;
+}
+
+bool set_tcp_header_ack(
+    uint8_t* buffer,
+    uint8_t* source_ip,
+    uint8_t* target_ip,
+    uint16_t source_port,
+    uint16_t dest_port,
+    uint32_t sequence,
+    uint32_t ack_number,
+    uint16_t window_size,
+    uint16_t urgent_pointer,
+    uint16_t* len) {
+    if(buffer == NULL) return false;
+
+    pseudo_header_ip_t* pseudo_header = calloc(1, sizeof(pseudo_header_ip_t));
+    memcpy(pseudo_header->source_ip, source_ip, 4);
+    memcpy(pseudo_header->dest_ip, target_ip, 4);
+    pseudo_header->protocol = 0x06;
+
+    tcp_header_t* tcp_header = calloc(1, sizeof(tcp_header_t));
+
+    if(!create_tcp_header(
+           tcp_header,
+           source_port,
+           dest_port,
+           sequence,
+           ack_number,
+           TCP_ACK,
+           window_size,
+           urgent_pointer))
+        return false;
+
+    calculate_checksum_tcp(0, pseudo_header, tcp_header);
+
+    memcpy(buffer, tcp_header, TCP_HEADER_LEN);
+
+    free(tcp_header);
+
+    *len = TCP_HEADER_LEN;
 
     return true;
 }
@@ -57,29 +172,11 @@ bool set_tcp_header(
 tcp_header_t tcp_get_header(uint8_t* buffer) {
     tcp_header_t header = {0};
 
-    // TCP header starts after Ethernet + IP headers
-    uint8_t* tcp_start = buffer + ETHERNET_HEADER_LEN + IP_HEADER_LEN;
+    memcpy(&header, buffer + ETHERNET_HEADER_LEN + IP_HEADER_LEN, sizeof(tcp_header_t) - 50);
 
-    // Copy source and destination ports
-    memcpy(header.source_port, tcp_start, 2);
-    memcpy(header.dest_port, tcp_start + 2, 2);
+    uint8_t data_offset = (header.data_offset_flags[0] >> 4) * 4;
 
-    // Copy sequence and acknowledgment numbers
-    memcpy(header.sequence, tcp_start + 4, 4);
-    memcpy(header.ack_number, tcp_start + 8, 4);
-
-    // Copy data offset and flags
-    header.data_offset = tcp_start[12];
-    header.flags = tcp_start[13];
-
-    // Copy window size
-    memcpy(header.window_size, tcp_start + 14, 2);
-
-    // Copy checksum
-    memcpy(header.checksum, tcp_start + 16, 2);
-
-    // Copy urgent pointer
-    memcpy(header.urgent_pointer, tcp_start + 18, 2);
+    memcpy(&header, buffer + ETHERNET_HEADER_LEN + IP_HEADER_LEN, data_offset);
 
     return header;
 }
@@ -93,107 +190,4 @@ bool is_tcp(uint8_t* buffer) {
     // Get IP header and check protocol field
     ipv4_header_t ip_header = ipv4_get_header(buffer);
     return ip_header.protocol == 6;
-}
-
-uint16_t calculate_tcp_checksum(
-    uint8_t* tcp_segment,
-    uint16_t tcp_length,
-    uint8_t* src_ip,
-    uint8_t* dst_ip) {
-    // Create pseudo-header for checksum calculation
-    uint8_t pseudo_header[12];
-
-    // Source IP address (4 bytes)
-    memcpy(pseudo_header, src_ip, 4);
-
-    // Destination IP address (4 bytes)
-    memcpy(pseudo_header + 4, dst_ip, 4);
-
-    // Reserved byte (always 0)
-    pseudo_header[8] = 0;
-
-    // Protocol (TCP = 6)
-    pseudo_header[9] = 6;
-
-    // TCP segment length (16 bits)
-    pseudo_header[10] = (tcp_length >> 8) & 0xFF;
-    pseudo_header[11] = tcp_length & 0xFF;
-
-    // Calculate the sum of pseudo-header
-    uint32_t sum = 0;
-    for(int i = 0; i < 12; i += 2) {
-        sum += (pseudo_header[i] << 8) + pseudo_header[i + 1];
-    }
-
-    // Add the TCP segment to the sum
-    uint16_t* ptr = (uint16_t*)tcp_segment;
-    for(int i = 0; i < tcp_length / 2; i++) {
-        sum += ptr[i];
-    }
-
-    // If length is odd, add the last byte padded with zero
-    if(tcp_length % 2) {
-        sum += tcp_segment[tcp_length - 1] << 8;
-    }
-
-    // Fold 32-bit sum to 16 bits
-    while(sum >> 16) {
-        sum = (sum & 0xFFFF) + (sum >> 16);
-    }
-
-    // One's complement
-    return ~sum;
-}
-
-// New function to create a complete TCP packet
-bool create_tcp_packet(
-    uint8_t* buffer,
-    uint8_t* src_mac,
-    uint8_t* dst_mac,
-    uint8_t* src_ip,
-    uint8_t* dst_ip,
-    uint16_t src_port,
-    uint16_t dst_port,
-    uint32_t seq_num,
-    uint32_t ack_num,
-    uint8_t flags,
-    uint16_t window_size,
-    uint8_t* payload,
-    uint16_t payload_length) {
-    if(!buffer || !src_mac || !dst_mac || !src_ip || !dst_ip) {
-        return false;
-    }
-
-    // Set Ethernet header
-    if(!set_ethernet_header(buffer, src_mac, dst_mac, 0x0800)) { // 0x0800 is IPv4
-        return false;
-    }
-
-    // Set IP header
-    uint8_t* ip_header_ptr = buffer + ETHERNET_HEADER_LEN;
-    uint16_t total_tcp_length = TCP_HEADER_LEN + payload_length;
-
-    if(!set_ipv4_header(ip_header_ptr, 6, total_tcp_length, src_ip, dst_ip)) { // 6 is TCP
-        return false;
-    }
-
-    // Set TCP header
-    uint8_t* tcp_header_ptr = buffer + ETHERNET_HEADER_LEN + IP_HEADER_LEN;
-
-    if(!set_tcp_header(
-           tcp_header_ptr, src_port, dst_port, seq_num, ack_num, flags, window_size, 0)) {
-        return false;
-    }
-
-    // Copy payload data if any
-    if(payload_length > 0 && payload != NULL) {
-        memcpy(tcp_header_ptr + TCP_HEADER_LEN, payload, payload_length);
-    }
-
-    // Calculate and set TCP checksum
-    uint16_t checksum = calculate_tcp_checksum(tcp_header_ptr, total_tcp_length, src_ip, dst_ip);
-    tcp_header_ptr[16] = (checksum >> 8) & 0xFF;
-    tcp_header_ptr[17] = checksum & 0xFF;
-
-    return true;
 }
