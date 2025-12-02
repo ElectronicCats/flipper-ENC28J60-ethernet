@@ -190,25 +190,32 @@ bool tcp_handshake_process(
                             *(uint32_t*)app->ethernet->rx_buffer)) {
                             tcp_header_t tcp_header = tcp_get_header(app->ethernet->rx_buffer);
 
-                            bytes_to_uint(&sequence, tcp_header.sequence, sizeof(uint32_t));
-                            bytes_to_uint(&ack_number, tcp_header.ack_number, sizeof(uint32_t));
+                            uint16_t data_offset_flags = 0;
+                            bytes_to_uint(
+                                &data_offset_flags,
+                                tcp_header.data_offset_flags,
+                                sizeof(uint16_t));
+                            if(data_offset_flags & (TCP_ACK | TCP_SYN)) {
+                                bytes_to_uint(&sequence, tcp_header.sequence, sizeof(uint32_t));
+                                bytes_to_uint(
+                                    &ack_number, tcp_header.ack_number, sizeof(uint32_t));
 
+                                state = TCP_HS_ACK;
 #if DEBUG
 
-                            printf("SEQUENCE: %lu\n", sequence);
-                            printf("ACK: %lu\n", ack_number);
+                                printf("SEQUENCE: %lu\n", sequence);
+                                printf("ACK: %lu\n", ack_number);
 
-                            printf("RECIBIDO: ");
-                            for(uint16_t i = 0; i < packen_len; i++) {
-                                printf(
-                                    "%02X%c",
-                                    app->ethernet->rx_buffer[i],
-                                    i == (packen_len - 1) ? '\n' : ' ');
-                            }
+                                printf("RECIBIDO: ");
+                                for(uint16_t i = 0; i < packen_len; i++) {
+                                    printf(
+                                        "%02X%c",
+                                        app->ethernet->rx_buffer[i],
+                                        i == (packen_len - 1) ? '\n' : ' ');
+                                }
 
 #endif
-
-                            state = TCP_HS_ACK;
+                            }
                         }
                     }
                 }

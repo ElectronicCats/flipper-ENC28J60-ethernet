@@ -4,7 +4,6 @@
 #include <furi.h>
 #include <furi_hal.h>
 
-#
 #define UDP_HEADER_LEN 8
 
 typedef struct {

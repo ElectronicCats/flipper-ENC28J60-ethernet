@@ -11,6 +11,8 @@
 #define ICMP_TYPE_TIME_EXCEEDED    11
 #define ICMP_TYPE_REDIRECT         5
 
+#define ICMP_CODE_PORT_UNREACHABLE 3
+
 typedef struct {
     uint8_t type;
     uint8_t code;

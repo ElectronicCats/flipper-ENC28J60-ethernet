@@ -91,7 +91,15 @@ int32_t ports_scanner_thread(void* context) {
         break;
 
     case PORTS_SCANNER_UDP:
-        printf("AQUI DEBERIA HABER LOGICA PARA ENVIAR UN PAQUETE UDP\n");
+        value = udp_check_port(
+                    app,
+                    app->ethernet->mac_address,
+                    app->ethernet->ip_address,
+                    target_ip,
+                    source_port,
+                    target_port) ?
+                    PORT_OPEN :
+                    PORT_CLOSED;
         break;
     }
 
@@ -136,9 +144,11 @@ void variable_list_ports_scanner_callback(void* context, uint32_t index) {
         break;
 
     case TARGET_IP:
+
         scene_manager_set_scene_state(
             app->scene_manager, app_scene_ports_scanner_option, PORTS_SCANNER_SCENE_IP_INPUT);
         set_ip_address_ports_scanner(app);
+
         break;
 
     case TARGET_PORT:
@@ -248,11 +258,14 @@ bool app_scene_ports_scanner_on_event(void* context, SceneManagerEvent event) {
         case PORTS_SCANNER_SCENE_BYTE_INPUT:
         case PORTS_SCANNER_SCENE_IP_INPUT:
         case PORTS_SCANNER_SCENE_WIDGET:
+
             scene_manager_set_scene_state(
                 app->scene_manager, app_scene_ports_scanner_option, PORTS_SCANNER_SCENE_MENU);
             app_scene_ports_scanner_on_enter(app);
             view_dispatcher_switch_to_view(app->view_dispatcher, VarListView);
+
             consumed = true;
+
             break;
         }
     }

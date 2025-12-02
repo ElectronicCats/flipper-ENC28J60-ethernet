@@ -24,6 +24,7 @@
 #include "modules/arp_module.h"
 #include "modules/dhcp_protocol.h"
 #include "modules/tcp_module.h"
+#include "modules/udp_module.h"
 #include "modules/capture_module.h"
 #include "modules/analysis_module.h"
 #include "modules/ping_module.h"
