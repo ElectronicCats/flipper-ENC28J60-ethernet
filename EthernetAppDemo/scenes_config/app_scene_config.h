@@ -39,6 +39,9 @@ ADD_SCENE(app, get_ip_scene, get_ip_option)
 // Ports Scanner scene
 ADD_SCENE(app, ports_scanner, ports_scanner_option)
 
+// OS Detector scene
+ADD_SCENE(app, os_detector, os_detector_option)
+
 /**
  * Scene to set the IP in the ping Option
  */

@@ -8,5 +8,6 @@
 #include "../libraries/chip/enc28j60.h"
 
 bool tcp_handshake_process(void* app, uint8_t* target_ip, uint16_t source_port, uint16_t dest_port);
+bool tcp_os_detector(void* context, uint8_t* target_ip, uint16_t source_port, uint16_t dest_port);
 
 #endif

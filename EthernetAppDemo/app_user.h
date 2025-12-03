@@ -124,6 +124,7 @@ void draw_dora_needed(App* app); // Draw when the DORA process needed
 void draw_port_open(App* app); // Draw when the port is open
 void draw_port_not_open(App* app); // Draw when the port is not open
 void draw_ask_for_ip(App* app); // Draw to ask a new IP
+void draw_text(App* app, const char* text); // Draw text
 
 // Thread
 int32_t ethernet_thread(void* context);

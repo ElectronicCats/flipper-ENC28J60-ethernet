@@ -89,6 +89,18 @@ bool set_tcp_header_ack(
     uint16_t urgent_pointer,
     uint16_t* len);
 
+bool set_tcp_header_fin(
+    uint8_t* buffer,
+    uint8_t* source_ip,
+    uint8_t* target_ip,
+    uint16_t source_port,
+    uint16_t dest_port,
+    uint32_t sequence,
+    uint32_t ack_number,
+    uint16_t window_size,
+    uint16_t urgent_pointer,
+    uint16_t* len);
+
 /**
  * @brief Parses a network packet and extracts its TCP header.
  *

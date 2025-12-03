@@ -213,7 +213,7 @@ void app_scene_ports_scanner_on_enter(void* context) {
     variable_item_set_current_value_text(
         item, furi_string_get_cstr(app->text)); // Set the varible item text
 
-    // Add item to set the range of the scan
+    // Add item to set the range of the target port
     item = variable_item_list_add(app->varList, TARGET_PORT_TEXT, 0, NULL, &target_port);
 
     furi_string_reset(app->text); // Reset the text
@@ -223,7 +223,7 @@ void app_scene_ports_scanner_on_enter(void* context) {
     variable_item_set_current_value_text(
         item, furi_string_get_cstr(app->text)); // Set the varible item text
 
-    // Add item to set the range of the scan
+    // Add item to set the range of the source port
     item = variable_item_list_add(app->varList, SOURCE_PORT_TEXT, 0, NULL, &source_port);
 
     furi_string_reset(app->text); // Reset the text

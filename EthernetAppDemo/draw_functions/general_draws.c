@@ -99,6 +99,20 @@ void draw_dora_needed(App* app) {
         furi_string_get_cstr(app->text));
 }
 
+void draw_text(App* app, const char* text) {
+    widget_reset(app->widget);
+    furi_string_reset(app->text);
+    furi_string_cat_printf(app->text, "THE OS IS %s", text);
+    widget_add_string_element(
+        app->widget,
+        64,
+        32,
+        AlignCenter,
+        AlignCenter,
+        FontPrimary,
+        furi_string_get_cstr(app->text));
+}
+
 // Draws port open
 void draw_port_open(App* app) {
     widget_reset(app->widget);

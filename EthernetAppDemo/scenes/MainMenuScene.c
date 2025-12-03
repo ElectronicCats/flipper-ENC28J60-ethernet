@@ -16,6 +16,7 @@ enum {
     TESTING_OPTION,
     PING_OPTION,
     PORTS_SCANNER_OPTION,
+    OS_DETECTOR_OPTION,
     SETTINGS_OPTION,
     ABOUT_US
 } main_menu_options;
@@ -71,6 +72,10 @@ void main_menu_options_callback(void* context, uint32_t index) {
         scene_manager_next_scene(app->scene_manager, app_scene_ports_scanner_option);
         break;
 
+    case OS_DETECTOR_OPTION:
+        scene_manager_next_scene(app->scene_manager, app_scene_os_detector_option);
+        break;
+
     case SETTINGS_OPTION:
         scene_manager_next_scene(app->scene_manager, app_scene_settings_option);
         break;
@@ -116,6 +121,9 @@ void app_scene_main_menu_on_enter(void* context) {
 
     submenu_add_item(
         app->submenu, "Ports Scanner", PORTS_SCANNER_OPTION, main_menu_options_callback, app);
+
+    submenu_add_item(
+        app->submenu, "OS Detector", OS_DETECTOR_OPTION, main_menu_options_callback, app);
 
     submenu_add_item(app->submenu, "...", TESTING_OPTION, main_menu_options_callback, app);
 

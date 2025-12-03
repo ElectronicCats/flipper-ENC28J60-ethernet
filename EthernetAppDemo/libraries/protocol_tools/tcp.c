@@ -127,6 +127,48 @@ bool set_tcp_header_syn(
     return true;
 }
 
+bool set_tcp_header_fin(
+    uint8_t* buffer,
+    uint8_t* source_ip,
+    uint8_t* target_ip,
+    uint16_t source_port,
+    uint16_t dest_port,
+    uint32_t sequence,
+    uint32_t ack_number,
+    uint16_t window_size,
+    uint16_t urgent_pointer,
+    uint16_t* len) {
+    if(buffer == NULL) return false;
+
+    pseudo_header_ip_t* pseudo_header = calloc(1, sizeof(pseudo_header_ip_t));
+    memcpy(pseudo_header->source_ip, source_ip, 4);
+    memcpy(pseudo_header->dest_ip, target_ip, 4);
+    pseudo_header->protocol = 0x06;
+
+    tcp_header_t* tcp_header = calloc(1, sizeof(tcp_header_t));
+
+    if(!create_tcp_header(
+           tcp_header,
+           source_port,
+           dest_port,
+           sequence,
+           ack_number,
+           TCP_FIN,
+           window_size,
+           urgent_pointer))
+        return false;
+
+    calculate_checksum_tcp(0, pseudo_header, tcp_header);
+
+    memcpy(buffer, tcp_header, TCP_HEADER_LEN);
+
+    free(tcp_header);
+
+    *len = TCP_HEADER_LEN;
+
+    return true;
+}
+
 bool set_tcp_header_ack(
     uint8_t* buffer,
     uint8_t* source_ip,
