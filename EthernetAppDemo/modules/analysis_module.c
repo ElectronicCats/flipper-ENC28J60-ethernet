@@ -103,7 +103,7 @@ uint16_t get_packet_information(
         uint16_t ip_header_length = (ip_header.version_ihl & 0x0F) * 4;
 
         // Check if it's UDP
-        if(is_udp_packet(packet)) {
+        if(is_udp(packet)) {
             *packet_type = UDP;
             udp_header_t udp_header = udp_get_header(packet);
 

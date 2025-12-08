@@ -12,6 +12,7 @@ int32_t arpspoofing_thread(void* context);
 // ArpSpoofing on enter
 void app_scene_arp_spoofing_on_enter(void* context) {
     App* app = (App*)context;
+    furi_thread_suspend(furi_thread_get_id(app->thread));
     app->thread_alternative =
         furi_thread_alloc_ex("ArpSpoofing", 10 * 1024, arpspoofing_thread, app);
     furi_thread_start(app->thread_alternative);
@@ -31,6 +32,7 @@ void app_scene_arp_spoofing_on_exit(void* context) {
     App* app = (App*)context;
     furi_thread_join(app->thread_alternative);
     furi_thread_free(app->thread_alternative);
+    furi_thread_resume(furi_thread_get_id(app->thread));
 }
 
 /**
@@ -114,8 +116,13 @@ int32_t arpspoofing_thread(void* context) {
         program_loop = false;
     }
 
+    if(!app->is_dora) {
+        draw_dora_needed(app);
+        program_loop = false;
+    }
+
     // This condition works to get the IP
-    if(program_loop) {
+    /*if(program_loop) {
         // Draw to ask for a IP
         draw_ask_for_ip(app);
 
@@ -140,7 +147,7 @@ int32_t arpspoofing_thread(void* context) {
 
             furi_delay_ms(1);
         }
-    }
+    }*/
 
     // draw the waiting attack
     if(program_loop) {

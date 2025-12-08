@@ -1,5 +1,12 @@
 #include "../app_user.h"
 
+#include "../libraries/protocol_tools/tcp.h"
+#include "../libraries/protocol_tools/udp.h"
+#include "../libraries/protocol_tools/arp.h"
+#include "../libraries/protocol_tools/ipv4.h"
+#include "../modules/tcp_module.h"
+#include "../modules/udp_module.h"
+#include "../modules/arp_module.h"
 /**
  * The main menu is the first scene to see in the Ethernet App
  * here the user selects an option that wants to do.
@@ -7,7 +14,7 @@
 
 // Time to show the LOGO
 const uint32_t time_showing = 1000;
-
+static uint8_t target_ip[4] = {192, 168, 2, 100};
 // List for the menu options
 enum {
     SNIFFING_OPTION,
@@ -45,8 +52,125 @@ void main_menu_options_callback(void* context, uint32_t index) {
 
         furi_thread_suspend(app->thread);
 
-        draw_dora_needed(app);
-        view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
+        uint16_t ids[5] = {0};
+        bool respuestas[5] = {0};
+
+        uint16_t ids_an[5] = {0};
+
+        uint8_t target_mac[6] = {0};
+
+        arp_get_specific_mac(
+            app->ethernet,
+            app->ethernet->ip_address,
+            (*(uint32_t*)app->ip_gateway & *(uint32_t*)app->ethernet->subnet_mask) ==
+                    (*(uint32_t*)target_ip & *(uint32_t*)app->ethernet->subnet_mask) ?
+                target_ip :
+                app->ip_gateway,
+            app->ethernet->mac_address,
+            target_mac);
+
+        uint32_t sequence = 1;
+        uint32_t ack_number = 0;
+
+        uint32_t last_time;
+
+        printf("IP[3]: %u\n", target_ip[3]);
+
+        uint8_t attemp = 0;
+        while(attemp != 5) {
+            tcp_send_syn(
+                app->ethernet,
+                app->ethernet->mac_address,
+                app->ethernet->ip_address,
+                target_mac,
+                target_ip,
+                5005,
+                80,
+                sequence,
+                ack_number);
+
+            last_time = furi_get_tick();
+            while(!(furi_get_tick() - last_time > 3000)) {
+                uint16_t packen_len = 0;
+
+                packen_len = receive_packet(app->ethernet, app->ethernet->rx_buffer, 1500);
+
+                if(packen_len) {
+                    if(is_arp(app->ethernet->rx_buffer)) {
+                        arp_reply_requested(
+                            app->ethernet, app->ethernet->rx_buffer, app->ethernet->ip_address);
+                    } else if(is_tcp(app->ethernet->rx_buffer)) {
+                        if((*(uint16_t*)(app->ethernet->mac_address + 4) ==
+                            *(uint16_t*)(app->ethernet->rx_buffer + 4)) &&
+                           (*(uint32_t*)app->ethernet->mac_address ==
+                            *(uint32_t*)app->ethernet->rx_buffer)) {
+                            ipv4_header_t ipv4_header = ipv4_get_header(app->ethernet->rx_buffer);
+                            tcp_header_t tcp_header = tcp_get_header(app->ethernet->rx_buffer);
+
+                            uint16_t id;
+                            uint16_t window_size;
+
+                            bytes_to_uint(&id, ipv4_header.identification, sizeof(uint16_t));
+                            bytes_to_uint(&window_size, tcp_header.window_size, sizeof(uint16_t));
+
+                            printf("EL IP ID DE ESTE PAQUETE ES: 0x%04X = %u\n", id, id);
+                            printf("EL TTL DE ESTE PAQUETE ES: %u\n", ipv4_header.ttl);
+                            printf("EL WINDOWS SIZE ES: %u\n", window_size);
+
+                            ids[attemp] = id;
+                            respuestas[attemp] = true;
+                            printf("RECIBIDO: ");
+                            for(uint16_t i = 0; i < packen_len; i++) {
+                                printf(
+                                    "%02X%c",
+                                    app->ethernet->rx_buffer[i],
+                                    i == (packen_len - 1) ? '\n' : ' ');
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+            attemp++;
+        }
+
+        uint8_t sum_true = 0;
+        for(uint8_t i = 0; i < 5; i++) {
+            printf("[%u] => ID: %u\tRESP: %s\n", i, ids[i], respuestas[i] ? "true" : "false");
+            sum_true += respuestas[i] ? 1 : 0;
+        }
+
+        uint8_t an_index = 0;
+        for(uint8_t i = 0; i < 5; i++) {
+            if(respuestas[i]) {
+                ids_an[an_index] = ids[i];
+                an_index++;
+            }
+        }
+
+        uint32_t sum_dif = 0;
+        for(uint8_t i = 0; i < (sum_true - 1); i++) {
+            printf("%u - %u = %u\n", ids_an[i + 1], ids_an[i], ids_an[i + 1] - ids_an[i]);
+            sum_dif += ids_an[i + 1] - ids_an[i];
+        }
+
+        printf("LA SUMA DIFERENCIAL DEL IP ID ES: %lu\n", sum_dif);
+        printf("LA SUMA DE TRUES: %u\n", sum_true);
+        if(sum_true == 0)
+            printf("PUERTO CERRADO\n");
+        else if(sum_dif == 4)
+            printf("LA RESPUESTA PARECE SER DE WINDOWS\n");
+        else if(sum_dif == 0)
+            printf("LA RESPUESTA PARECER SER DE IOS\n");
+        else if(sum_dif != 4)
+            printf("LA RESPUESTA PARECER DE LINUX\n");
+
+        if(target_ip[3] == 100)
+            target_ip[3] = 102;
+        else if(target_ip[3] == 102)
+            target_ip[3] = 1;
+        else if(target_ip[3] == 1)
+            target_ip[3] = 100;
 
         furi_thread_resume(app->thread);
 

@@ -12,6 +12,7 @@
 // MAC address
 extern uint8_t MAC_ZEROS[6];
 extern uint8_t MAC_BROADCAST[6];
+extern uint8_t MAC_SPOOF[6];
 
 // IP address
 extern uint8_t IP_ZEROS[4];

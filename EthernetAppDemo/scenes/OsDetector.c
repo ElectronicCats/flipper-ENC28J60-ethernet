@@ -54,17 +54,16 @@ int32_t os_detector_thread(void* context) {
 
         uint16_t window_size = 0;
         bytes_to_uint(&window_size, tcp_header.window_size, sizeof(uint16_t));
-        printf("TAMANIO DE UINT16 %u\n", sizeof(uint16_t));
         printf("LLEGO EL TTL: %u\n", ipv4_header.ttl);
         printf("CON WINDOW SIZE: %u\n", window_size);
-        if((ipv4_header.ttl > 118 && ipv4_header.ttl <= 128) &&
+        if((ipv4_header.ttl > 64 && ipv4_header.ttl <= 128) &&
            ((window_size >= 8192 && window_size <= 65534) || window_size == 0)) {
             value = WINDOWS;
         } else if(
-            (ipv4_header.ttl >= 52 && ipv4_header.ttl <= 64) &&
+            (ipv4_header.ttl <= 64) &&
             ((window_size >= 5840 && window_size <= 64240) || window_size == 0)) {
             value = LINUX;
-        } else if(ipv4_header.ttl >= 52 && ipv4_header.ttl <= 64 && window_size >= 65535) {
+        } else if(ipv4_header.ttl <= 64 && window_size >= 65535) {
             value = IOS;
         }
     }

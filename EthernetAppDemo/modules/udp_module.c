@@ -106,7 +106,7 @@ bool udp_check_port(
             if(is_arp(app->ethernet->rx_buffer)) {
                 arp_reply_requested(
                     app->ethernet, app->ethernet->rx_buffer, app->ethernet->ip_address);
-            } else if(is_udp_packet(app->ethernet->rx_buffer)) {
+            } else if(is_udp(app->ethernet->rx_buffer)) {
                 // Packet is for me
                 if((*(uint16_t*)(app->ethernet->mac_address + 4) ==
                     *(uint16_t*)(app->ethernet->rx_buffer + 4)) &&

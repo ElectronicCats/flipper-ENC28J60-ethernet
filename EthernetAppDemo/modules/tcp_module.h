@@ -8,6 +8,22 @@
 #include "../libraries/chip/enc28j60.h"
 
 bool tcp_handshake_process(void* app, uint8_t* target_ip, uint16_t source_port, uint16_t dest_port);
+bool tcp_handshake_process_spoof(
+    void* app,
+    uint8_t* target_ip,
+    uint16_t source_port,
+    uint16_t dest_port);
 bool tcp_os_detector(void* context, uint8_t* target_ip, uint16_t source_port, uint16_t dest_port);
+
+bool tcp_send_syn(
+    enc28j60_t* ethernet,
+    uint8_t* source_mac,
+    uint8_t* source_ip,
+    uint8_t* target_mac,
+    uint8_t* target_ip,
+    uint16_t source_port,
+    uint16_t dest_port,
+    uint32_t sequence,
+    uint32_t ack_number);
 
 #endif
