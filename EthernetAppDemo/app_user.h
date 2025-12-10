@@ -33,7 +33,7 @@
 
 // Version of the app
 #define APP_NAME    "ETHERNET APP"
-#define APP_VERSION "v1.0.0"
+#define APP_VERSION "v1.1.1.0"
 
 // Path for the files
 #define PATHAPP    "apps_data/ethernet" // Path
