@@ -2,9 +2,12 @@
 
 #include "../libraries/protocol_tools/ipv4.h"
 #include "../libraries/protocol_tools/tcp.h"
+#include "../libraries/protocol_tools/arp.h"
+
+#define packet_count 20
 
 static uint8_t target_ip[4] = {0};
-const char* os_texts[] = {"WINDOWS", "LINUX", "IOS/MAC OS"};
+const char* os_texts[] = {"WINDOWS", "LINUX", "IOS/MAC OS", "NO DETECTED"};
 
 typedef enum {
     START,
@@ -21,7 +24,7 @@ typedef enum {
     WINDOWS,
     LINUX,
     IOS,
-    NO_DETECT,
+    NO_DETECTED,
 } OS_DETECTOR_OS;
 
 //  Callback for the Input
@@ -43,29 +46,137 @@ void set_ip_address_os_detector(App* app) {
         app->view_dispatcher, IpAssignerView); // Switch to the input byte view
 }
 
+// diferencia de IPID con manejo de wrap-around de 16 bits
+int32_t ipid_diff(uint16_t prev, uint16_t curr) {
+    int32_t diff = (int32_t)curr - (int32_t)prev;
+
+    // corrección por wrap-around
+    if(diff < -32768) {
+        diff += 65536;
+    } else if(diff > 32767) {
+        diff -= 65536;
+    }
+    return diff;
+}
+
+double varianza(int32_t* d, int len) {
+    double suma = 0.0, suma2 = 0.0;
+    for(int i = 0; i < len; i++) {
+        suma += d[i];
+        suma2 += (double)d[i] * (double)d[i];
+    }
+    double media = suma / len;
+    return (suma2 / len) - (media * media);
+}
+
+void clasificar_ipid(uint16_t* id, int n, uint8_t* value_ptr) {
+    int32_t d[100];
+    int positivos = 0, negativos = 0;
+
+    for(int i = 0; i < n - 1; i++) {
+        d[i] = ipid_diff(id[i], id[i + 1]);
+
+        if(d[i] > 0)
+            positivos++;
+        else
+            negativos++;
+    }
+
+    double var = varianza(d, n - 1);
+
+    // regla simple para clasificar
+    if(positivos >= 0.75 * (n - 1) && var < 5000) {
+        *value_ptr = LINUX;
+    } else {
+        *value_ptr = IOS;
+    }
+}
+
 int32_t os_detector_thread(void* context) {
     App* app = context;
 
-    uint8_t value = NO_DETECT;
+    uint8_t value = NO_DETECTED;
 
-    if(tcp_os_detector(app, target_ip, 100, 80)) {
-        ipv4_header_t ipv4_header = ipv4_get_header(app->ethernet->rx_buffer);
-        tcp_header_t tcp_header = tcp_get_header(app->ethernet->rx_buffer);
+    uint16_t ids[packet_count] = {0};
+    bool respuestas[packet_count] = {0};
+    uint16_t ids_an[packet_count] = {0};
 
-        uint16_t window_size = 0;
-        bytes_to_uint(&window_size, tcp_header.window_size, sizeof(uint16_t));
-        printf("LLEGO EL TTL: %u\n", ipv4_header.ttl);
-        printf("CON WINDOW SIZE: %u\n", window_size);
-        if((ipv4_header.ttl > 64 && ipv4_header.ttl <= 128) &&
-           ((window_size >= 8192 && window_size <= 65534) || window_size == 0)) {
-            value = WINDOWS;
-        } else if(
-            (ipv4_header.ttl <= 64) &&
-            ((window_size >= 5840 && window_size <= 64240) || window_size == 0)) {
-            value = LINUX;
-        } else if(ipv4_header.ttl <= 64 && window_size >= 65535) {
-            value = IOS;
+    uint8_t target_mac[6] = {0};
+
+    arp_get_specific_mac(
+        app->ethernet,
+        app->ethernet->ip_address,
+        (*(uint32_t*)app->ip_gateway & *(uint32_t*)app->ethernet->subnet_mask) ==
+                (*(uint32_t*)target_ip & *(uint32_t*)app->ethernet->subnet_mask) ?
+            target_ip :
+            app->ip_gateway,
+        app->ethernet->mac_address,
+        target_mac);
+
+    uint32_t sequence = 1;
+    uint32_t ack_number = 0;
+
+    uint32_t last_time;
+
+    uint8_t attemp = 0;
+    ipv4_header_t ipv4_header;
+    while(attemp != packet_count) {
+        tcp_send_syn(
+            app->ethernet,
+            app->ethernet->mac_address,
+            app->ethernet->ip_address,
+            target_mac,
+            target_ip,
+            5005,
+            80,
+            sequence,
+            ack_number);
+
+        last_time = furi_get_tick();
+        while(!(furi_get_tick() - last_time > 3000)) {
+            uint16_t packen_len = 0;
+
+            packen_len = receive_packet(app->ethernet, app->ethernet->rx_buffer, 1500);
+
+            if(packen_len) {
+                if(is_arp(app->ethernet->rx_buffer)) {
+                    arp_reply_requested(
+                        app->ethernet, app->ethernet->rx_buffer, app->ethernet->ip_address);
+                } else if(is_tcp(app->ethernet->rx_buffer)) {
+                    if((*(uint16_t*)(app->ethernet->mac_address + 4) ==
+                        *(uint16_t*)(app->ethernet->rx_buffer + 4)) &&
+                       (*(uint32_t*)app->ethernet->mac_address ==
+                        *(uint32_t*)app->ethernet->rx_buffer)) {
+                        ipv4_header = ipv4_get_header(app->ethernet->rx_buffer);
+
+                        uint16_t id;
+
+                        bytes_to_uint(&id, ipv4_header.identification, sizeof(uint16_t));
+
+                        ids[attemp] = id;
+                        respuestas[attemp] = true;
+                        break;
+                    }
+                }
+            }
         }
+        attemp++;
+    }
+
+    if(ipv4_header.ttl > 64 && ipv4_header.ttl <= 128) {
+        value = WINDOWS;
+    } else {
+        uint8_t sum_true = 0;
+        uint8_t an_index = 0;
+        for(uint8_t i = 0; i < packet_count; i++) {
+            sum_true += respuestas[i] ? 1 : 0;
+            if(respuestas[i]) {
+                ids_an[an_index] = ids[i];
+                an_index++;
+            }
+        }
+
+        clasificar_ipid(ids_an, sum_true, &value);
     }
 
     return value;
@@ -86,14 +197,10 @@ void variable_list_os_detector_callback(void* context, uint32_t index) {
             view_dispatcher_switch_to_view(app->view_dispatcher, LoadingView);
 
             furi_thread_start(app->thread_alternative);
-
             furi_thread_join(app->thread_alternative);
 
             uint32_t value = furi_thread_get_return_code(app->thread_alternative);
-            if(value == WINDOWS || value == LINUX || value == IOS)
-                draw_text(app, os_texts[value]);
-            else if(value == NO_DETECT)
-                draw_text(app, "NO DETECTED");
+            draw_text(app, os_texts[value]);
 
             furi_thread_free(app->thread_alternative);
 

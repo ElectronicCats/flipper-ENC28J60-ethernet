@@ -40,7 +40,7 @@ bool tcp_send_syn(
            dest_port,
            sequence,
            ack_number,
-           0xFFFF,
+           1,
            0,
            &tcp_len))
         return false;
