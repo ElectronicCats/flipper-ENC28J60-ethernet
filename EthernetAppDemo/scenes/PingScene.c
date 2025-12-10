@@ -206,6 +206,10 @@ bool app_scene_ping_scene_on_event(void* context, SceneManagerEvent event) {
             draw_dora_failed(app);
             break;
 
+        case 3:
+            draw_dora_needed(app);
+            break;
+
         case 5:
             // Draw the ping packet count
             draw_ping_packet_count(app);
@@ -258,7 +262,6 @@ int32_t ping_thread(void* context) {
 
     // Array to get the MAC for the GATEWAY
     uint8_t mac_to_send[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
-    //uint8_t MAC_INITIAL[6] = {0xba, 0x3f, 0x91, 0xc2, 0x7e, 0x5d};
 
     // reset the counters
     messages_sent = 0;
@@ -294,15 +297,13 @@ int32_t ping_thread(void* context) {
     }
 
     // Do process Dora to get the IP gateway, and set our IP if we didnt have the IP
-    if(!app->is_static_ip) {
-        start_ping = flipper_process_dora_with_host_name(
-            ethernet, ethernet->ip_address, app->ip_gateway, ethernet->subnet_mask, "Flippa 0");
-        if(start_ping) send_arp_gratuitous(ethernet, ethernet->mac_address, ethernet->ip_address);
+    if(!app->is_dora) {
+        start_ping = false;
     }
 
     // If the process Dora failed, we will not continue
     if(!start_ping) {
-        view_dispatcher_send_custom_event(app->view_dispatcher, 2);
+        view_dispatcher_send_custom_event(app->view_dispatcher, 3);
         goto finalize;
     }
 

@@ -14,7 +14,7 @@
 
 // Time to show the LOGO
 const uint32_t time_showing = 1000;
-static uint8_t target_ip[4] = {192, 168, 2, 100};
+static uint8_t target_ip[4] = {192, 168, 2, 100}; /* OS DETECTOR TEST */
 // List for the menu options
 enum {
     SNIFFING_OPTION,
@@ -50,7 +50,9 @@ void main_menu_options_callback(void* context, uint32_t index) {
     switch(index) {
     case TESTING_OPTION:
 
-        furi_thread_suspend(app->thread);
+        furi_thread_suspend(furi_thread_get_id(app->thread));
+
+        /* OS DETECTOR TEST */
 
         uint16_t ids[5] = {0};
         bool respuestas[5] = {0};
@@ -172,7 +174,9 @@ void main_menu_options_callback(void* context, uint32_t index) {
         else if(target_ip[3] == 1)
             target_ip[3] = 100;
 
-        furi_thread_resume(app->thread);
+        /* OS DETECTOR TEST */
+
+        furi_thread_resume(furi_thread_get_id(app->thread));
 
         break;
 
