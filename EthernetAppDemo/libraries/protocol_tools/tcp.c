@@ -80,15 +80,15 @@ bool set_tcp_header_syn(
     uint16_t* len) {
     if(buffer == NULL || source_ip == NULL || target_ip == NULL) return false;
 
-    pseudo_header_ip_t* pseudo_header = calloc(1, sizeof(pseudo_header_ip_t));
-    memcpy(pseudo_header->source_ip, source_ip, 4);
-    memcpy(pseudo_header->dest_ip, target_ip, 4);
-    pseudo_header->protocol = 0x06;
+    pseudo_header_ip_t pseudo_header;
+    memcpy(pseudo_header.source_ip, source_ip, 4);
+    memcpy(pseudo_header.dest_ip, target_ip, 4);
+    pseudo_header.protocol = 0x06;
 
-    tcp_header_t* tcp_header = calloc(1, sizeof(tcp_header_t));
+    tcp_header_t tcp_header;
 
     create_tcp_header(
-        tcp_header,
+        &tcp_header,
         source_port,
         dest_port,
         sequence,
@@ -102,25 +102,23 @@ bool set_tcp_header_syn(
 
     // This is the array with the values to send the request
     uint8_t first_option[] = {TCP_MSS, 0x04, 0x05, 0xB4, 0x01};
-    memcpy(tcp_header->options + options_size, first_option, sizeof(first_option));
+    memcpy(tcp_header.options + options_size, first_option, sizeof(first_option));
     options_size += sizeof(first_option);
 
     uint8_t second_option[] = {TCP_WS, 0x03, 0x08, 0x01, 0x01};
-    memcpy(tcp_header->options + options_size, second_option, sizeof(second_option));
+    memcpy(tcp_header.options + options_size, second_option, sizeof(second_option));
     options_size += sizeof(second_option);
 
     uint8_t tree_option[] = {TCP_SACK_P, 0x02};
-    memcpy(tcp_header->options + options_size, tree_option, sizeof(tree_option));
+    memcpy(tcp_header.options + options_size, tree_option, sizeof(tree_option));
     options_size += sizeof(tree_option);
 
-    tcp_header->data_offset_flags[0] =
-        ((tcp_header->data_offset_flags[0] >> 4) + (options_size / 4)) << 4;
+    tcp_header.data_offset_flags[0] = ((tcp_header.data_offset_flags[0] >> 4) + (options_size / 4))
+                                      << 4;
 
-    calculate_checksum_tcp(options_size, pseudo_header, tcp_header);
+    calculate_checksum_tcp(options_size, &pseudo_header, &tcp_header);
 
-    memcpy(buffer, tcp_header, TCP_HEADER_LEN + options_size);
-
-    free(tcp_header);
+    memcpy(buffer, &tcp_header, TCP_HEADER_LEN + options_size);
 
     *len = TCP_HEADER_LEN + options_size;
 

@@ -120,6 +120,7 @@ int32_t os_detector_thread(void* context) {
 
     uint8_t attemp = 0;
     ipv4_header_t ipv4_header;
+    tcp_header_t tcp_header;
     while(attemp != packet_count) {
         tcp_send_syn(
             app->ethernet,
@@ -148,13 +149,31 @@ int32_t os_detector_thread(void* context) {
                        (*(uint32_t*)app->ethernet->mac_address ==
                         *(uint32_t*)app->ethernet->rx_buffer)) {
                         ipv4_header = ipv4_get_header(app->ethernet->rx_buffer);
+                        tcp_header = tcp_get_header(app->ethernet->rx_buffer);
 
                         uint16_t id;
+                        uint16_t windows_size;
+                        uint16_t ipid;
 
                         bytes_to_uint(&id, ipv4_header.identification, sizeof(uint16_t));
+                        bytes_to_uint(&windows_size, tcp_header.window_size, sizeof(uint16_t));
+                        bytes_to_uint(&ipid, ipv4_header.identification, sizeof(uint16_t));
+
+                        printf("WINDOWS SIZE: %u\n", windows_size);
+                        printf("TTL: %u\n", ipv4_header.ttl);
+                        printf("IPID: %u\n", ipid);
 
                         ids[attemp] = id;
                         respuestas[attemp] = true;
+
+                        printf("PACKET: ");
+                        for(uint16_t i = 0; i < packen_len; i++) {
+                            printf(
+                                "%02X%c",
+                                app->ethernet->rx_buffer[i],
+                                i == (packen_len - 1) ? '\n' : ' ');
+                        }
+
                         break;
                     }
                 }
@@ -176,7 +195,11 @@ int32_t os_detector_thread(void* context) {
             }
         }
 
-        clasificar_ipid(ids_an, sum_true, &value);
+        if(sum_true) {
+            clasificar_ipid(ids_an, sum_true, &value);
+        } else {
+            value = NO_DETECTED;
+        }
     }
 
     return value;
@@ -192,7 +215,7 @@ void variable_list_os_detector_callback(void* context, uint32_t index) {
             furi_thread_suspend(app->thread);
 
             app->thread_alternative =
-                furi_thread_alloc_ex("OS Detector", 5 * 1024, os_detector_thread, app);
+                furi_thread_alloc_ex("OS Detector", 10 * 1024, os_detector_thread, app);
 
             view_dispatcher_switch_to_view(app->view_dispatcher, LoadingView);
 

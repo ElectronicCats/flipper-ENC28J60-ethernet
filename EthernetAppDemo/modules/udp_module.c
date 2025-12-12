@@ -65,6 +65,23 @@ bool send_empty_udp_packet(
     return true;
 }
 
+/*void udp_port_scan(
+    void* context,
+    uint8_t* source_mac,
+    uint8_t* source_ip,
+    uint8_t* target_ip,
+    uint16_t init_port,
+    uint16_t range_port) {
+    App* app = context;
+
+    enc28j60_t* ethernet = app->ethernet;
+
+    uint8_t* target_mac[6] = {0};
+
+    for(uint16_t i = init_port; i < (init_port + range_port); i++) {
+    }
+}*/
+
 bool udp_check_port(
     void* context,
     uint8_t* source_mac,

@@ -43,7 +43,19 @@ void main_menu_options_callback(void* context, uint32_t index) {
     switch(index) {
     case TESTING_OPTION:
 
-        printf("TEST OPTION\n");
+        //printf("TEST OPTION\n");
+
+        furi_thread_suspend(furi_thread_get_id(app->thread));
+
+        uint8_t target_ip[4] = {192, 168, 0, 175};
+        printf(
+            "%s RESPONDIO\n",
+            udp_check_port(
+                app, app->ethernet->mac_address, app->ethernet->ip_address, target_ip, 5005, 80) ?
+                "SI" :
+                "NO");
+
+        furi_thread_resume(furi_thread_get_id(app->thread));
 
         break;
 

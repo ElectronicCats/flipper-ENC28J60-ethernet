@@ -15,6 +15,8 @@ bool tcp_handshake_process_spoof(
     uint16_t dest_port);
 bool tcp_os_detector(void* context, uint8_t* target_ip, uint16_t source_port, uint16_t dest_port);
 
+void tcp_syn_scan(void* context, uint8_t* target_ip, uint16_t init_port, uint16_t range_port);
+
 bool tcp_send_syn(
     enc28j60_t* ethernet,
     uint8_t* source_mac,
