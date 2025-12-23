@@ -38,7 +38,14 @@ bool send_empty_udp_packet(
         return false;
 
     if(!set_ipv4_header(
-           buffer + sizeof(ethernet_header_t), 17, sizeof(udp_header_t), source_ip, target_ip))
+           buffer + sizeof(ethernet_header_t),
+           17,
+           sizeof(udp_header_t),
+           source_ip,
+           target_ip,
+           0,
+           0x4000,
+           WIN_TTL))
         return false;
 
     if(!set_ethernet_header(buffer, source_mac, target_mac, 0x0800)) return false;

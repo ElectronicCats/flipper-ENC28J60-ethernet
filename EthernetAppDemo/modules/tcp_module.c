@@ -47,7 +47,14 @@ bool tcp_send_syn(
         return false;
 
     if(!set_ipv4_header(
-           ethernet->tx_buffer + ETHERNET_HEADER_LEN, 6, tcp_len, source_ip, target_ip))
+           ethernet->tx_buffer + ETHERNET_HEADER_LEN,
+           6,
+           tcp_len,
+           source_ip,
+           target_ip,
+           0,
+           0x4000,
+           WIN_TTL))
         return false;
 
     if(!set_ethernet_header(ethernet->tx_buffer, source_mac, target_mac, 0x800)) return false;
@@ -108,7 +115,15 @@ bool tcp_send_fin(
            &tcp_len))
         return false;
 
-    if(!set_ipv4_header(buffer + ETHERNET_HEADER_LEN, 6, tcp_len, ethernet->ip_address, target_ip))
+    if(!set_ipv4_header(
+           buffer + ETHERNET_HEADER_LEN,
+           6,
+           tcp_len,
+           ethernet->ip_address,
+           target_ip,
+           0,
+           0x4000,
+           WIN_TTL))
         return false;
 
     if(!set_ethernet_header(buffer, ethernet->mac_address, target_mac, 0x800)) return false;
@@ -160,7 +175,8 @@ bool tcp_send_ack(
            &tcp_len))
         return false;
 
-    if(!set_ipv4_header(buffer + ETHERNET_HEADER_LEN, 6, tcp_len, source_ip, target_ip))
+    if(!set_ipv4_header(
+           buffer + ETHERNET_HEADER_LEN, 6, tcp_len, source_ip, target_ip, 0, 0x4000, WIN_TTL))
         return false;
 
     if(!set_ethernet_header(buffer, source_mac, target_mac, 0x800)) return false;

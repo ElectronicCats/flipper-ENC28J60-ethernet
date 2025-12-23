@@ -1,4 +1,7 @@
 #include "../app_user.h"
+#include <stdio.h>
+
+#include "../modules/os_detector_module.h"
 
 /**
  * The main menu is the first scene to see in the Ethernet App
@@ -45,7 +48,7 @@ void main_menu_options_callback(void* context, uint32_t index) {
 
         //printf("TEST OPTION\n");
 
-        furi_thread_suspend(furi_thread_get_id(app->thread));
+        /*furi_thread_suspend(furi_thread_get_id(app->thread));
 
         uint8_t target_ip[4] = {192, 168, 0, 175};
         printf(
@@ -55,7 +58,9 @@ void main_menu_options_callback(void* context, uint32_t index) {
                 "SI" :
                 "NO");
 
-        furi_thread_resume(furi_thread_get_id(app->thread));
+        furi_thread_resume(furi_thread_get_id(app->thread));*/
+        uint8_t target_ip[4] = {192, 168, 0, 112};
+        os_scan(app, target_ip);
 
         break;
 

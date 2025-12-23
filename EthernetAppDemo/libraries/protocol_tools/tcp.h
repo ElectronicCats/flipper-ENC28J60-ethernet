@@ -19,16 +19,26 @@
 #define TCP_NS  0x0100
 
 // TCP Options
-#define TCP_EOL    0 // End of Option List
-#define TCP_NOP    1 // No Operation
-#define TCP_MSS    2 // Maximum Segmen Size
-#define TCP_WS     3 // Window Scale
-#define TCP_SACK_P 4 // Selective Acknowledgment Permitted
-#define TCP_SACK   5 // Selective Acknowledgment
+#define TCP_EOL       0 // End of Option List
+#define TCP_NOP       1 // No Operation
+#define TCP_MSS       2 // Maximum Segmen Size
+#define TCP_WS        3 // Window Scale
+#define TCP_SACK_P    4 // Selective Acknowledgment Permitted
+#define TCP_SACK      5 // Selective Acknowledgment
+#define TCP_ECHO      6 // Echo (obsolete, RFC 1072)
+#define TCP_ECHOREPLY 7 // Echo Reply (obsolete, RFC 1072)
+#define TCP_TS        8 // Timestamps
+#define TCP_POCP      9 // Partial Order Connection Permitted (obsolete)
+#define TCP_POSP      10 // Partial Order Service Profile (obsolete)
+#define TCP_CC        11 // Connection Count (obsolete, RFC 1644)
+#define TCP_CC_NEW    12 // CC.NEW (obsolete, RFC 1644)
+#define TCP_CC_ECHO   13 // CC.ECHO (obsolete, RFC 1644)
+#define TCP_ALTCHK    14 // Alternate Checksum Request (obsolete)
+#define TCP_ALTCHKD   15 // Alternate Checksum Data (obsolete)
 
 typedef struct {
     uint8_t source_ip[4];
-    uint8_t dest_ip[4];
+    uint8_t target_ip[4];
     uint8_t zero;
     uint8_t protocol;
     uint8_t tcp_lenght[2];
@@ -99,6 +109,20 @@ bool set_tcp_header_fin(
     uint32_t ack_number,
     uint16_t window_size,
     uint16_t urgent_pointer,
+    uint16_t* len);
+
+bool set_tcp_header_tseq(
+    uint8_t* buffer,
+    uint8_t* source_ip,
+    uint8_t* target_ip,
+    uint16_t source_port,
+    uint16_t dest_port,
+    uint32_t sequence,
+    uint32_t ack_number,
+    uint16_t window_size,
+    uint16_t urgent_pointer,
+    uint16_t* options_size,
+    uint8_t* options_vector,
     uint16_t* len);
 
 /**

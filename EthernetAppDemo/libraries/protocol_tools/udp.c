@@ -106,7 +106,7 @@ bool create_udp_packet(
     uint8_t* ip_header_ptr = buffer + ETHERNET_HEADER_LEN;
     uint16_t total_udp_length = UDP_HEADER_LEN + payload_length;
 
-    if(!set_ipv4_header(ip_header_ptr, 17, total_udp_length, src_ip, dst_ip)) {
+    if(!set_ipv4_header(ip_header_ptr, 17, total_udp_length, src_ip, dst_ip, 0, 0x4000, WIN_TTL)) {
         return false;
     }
 

@@ -1,6 +1,8 @@
 #include "ipv4.h"
 #include "ethernet_protocol.h"
 
+#include "app_user.h"
+
 uint16_t calculate_checksum(uint8_t* data, uint16_t len) {
     uint32_t sum = 0;
 
@@ -42,7 +44,10 @@ bool set_ipv4_header(
     uint8_t protocol,
     uint16_t data_length,
     uint8_t* src_ip,
-    uint8_t* dst_ip) {
+    uint8_t* dst_ip,
+    uint16_t ip_id,
+    uint16_t ip_flags_offset,
+    uint8_t ttl) {
     // If any of the arrays are NULL, will return false
     if(!buffer || !src_ip || !dst_ip) {
         return false;
@@ -65,14 +70,16 @@ bool set_ipv4_header(
     header->total_length[1] = (uint8_t)total_length;
 
     // Set Identification
-    memset(header->identification, 0, 2);
+    //memset(header->identification, 0, 2);
+    uint_to_bytes(&ip_id, header->identification, sizeof(uint16_t));
 
     // Set flags
-    header->flags_offset[0] = 0x40;
-    header->flags_offset[1] = 0x00;
+    //header->flags_offset[0] = 0x40;
+    //header->flags_offset[1] = 0x00;
+    uint_to_bytes(&ip_flags_offset, header->flags_offset, sizeof(uint16_t));
 
     // Set time to live
-    header->ttl = 128; // 64;
+    header->ttl = ttl; // 64;
 
     // Set protocol
     header->protocol = protocol;

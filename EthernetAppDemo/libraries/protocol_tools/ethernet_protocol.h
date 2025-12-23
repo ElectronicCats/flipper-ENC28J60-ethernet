@@ -4,6 +4,7 @@
 #include <furi.h>
 #include <furi_hal.h>
 
+#define WIN_TTL             128
 #define ETHERNET_HEADER_LEN 14
 
 typedef struct {
