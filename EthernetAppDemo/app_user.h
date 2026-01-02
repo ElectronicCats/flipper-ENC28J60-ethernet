@@ -31,6 +31,8 @@
 
 #include "libraries/functions/functions.h"
 
+#define DEV_MODE 0
+
 // Version of the app
 #define APP_NAME    "ETHERNET APP"
 #define APP_VERSION "v1.1.1.0"

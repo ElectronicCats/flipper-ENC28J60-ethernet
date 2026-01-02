@@ -7,6 +7,9 @@
 #include "../libraries/protocol_tools/udp.h"
 #include "../libraries/protocol_tools/arp.h"
 
+#define TEXT_PORT_FORMAT "%lu%s"
+#define TEXT_POINTS      "..."
+
 #define DEBUG 0
 
 bool send_empty_udp_packet(
@@ -72,94 +75,94 @@ bool send_empty_udp_packet(
     return true;
 }
 
-/*void udp_port_scan(
-    void* context,
-    uint8_t* source_mac,
-    uint8_t* source_ip,
-    uint8_t* target_ip,
-    uint16_t init_port,
-    uint16_t range_port) {
+void udp_port_scan(void* context, uint8_t* target_ip, uint16_t init_port, uint16_t range_port) {
     App* app = context;
-
-    enc28j60_t* ethernet = app->ethernet;
-
-    uint8_t* target_mac[6] = {0};
-
-    for(uint16_t i = init_port; i < (init_port + range_port); i++) {
-    }
-}*/
-
-bool udp_check_port(
-    void* context,
-    uint8_t* source_mac,
-    uint8_t* source_ip,
-    uint8_t* target_ip,
-    uint16_t source_port,
-    uint16_t target_port) {
-    App* app = context;
-    enc28j60_t* ethernet = app->ethernet;
-
-    bool result = false;
-    bool run = true;
-
-    uint8_t* buffer =
-        calloc(1, sizeof(ethernet_header_t) + sizeof(ipv4_header_t) + sizeof(udp_header_t));
 
     uint8_t target_mac[6] = {0};
+    if(!arp_get_specific_mac(
+           app->ethernet,
+           app->ethernet->ip_address,
+           (*(uint32_t*)app->ip_gateway & *(uint32_t*)app->ethernet->subnet_mask) ==
+                   (*(uint32_t*)target_ip & *(uint32_t*)app->ethernet->subnet_mask) ?
+               target_ip :
+               app->ip_gateway,
+           app->ethernet->mac_address,
+           target_mac))
+        return;
 
-    if(!send_empty_udp_packet(
-           buffer,
-           ethernet,
-           app->ip_gateway,
-           source_mac,
-           target_mac,
-           source_ip,
-           target_ip,
-           source_port,
-           target_port)) {
-        run = false;
-        result = false;
-    }
+    udp_header_t udp_header;
 
-    uint16_t packen_len = 0;
-    uint32_t last_time = furi_get_tick();
-    while(run) {
-        if((furi_get_tick() - last_time > 3000)) break;
-        packen_len = receive_packet(app->ethernet, app->ethernet->rx_buffer, 1500);
-        if(packen_len) {
-            if(is_arp(app->ethernet->rx_buffer)) {
-                arp_reply_requested(
-                    app->ethernet, app->ethernet->rx_buffer, app->ethernet->ip_address);
-            } else if(is_udp(app->ethernet->rx_buffer)) {
-                // Packet is for me
-                if((*(uint16_t*)(app->ethernet->mac_address + 4) ==
-                    *(uint16_t*)(app->ethernet->rx_buffer + 4)) &&
-                   (*(uint32_t*)app->ethernet->mac_address ==
-                    *(uint32_t*)app->ethernet->rx_buffer)) {
-                    result = true;
-                    run = false;
-#if DEBUG
-                    printf("UDP PACKET RECIVED: ");
-                    for(uint16_t i = 0; i < packen_len; i++) {
-                        printf(
-                            "%02X%c",
-                            app->ethernet->rx_buffer[i],
-                            i == (packen_len - 1) ? '\n' : ' ');
+    uint32_t submenu_index = 0;
+
+    submenu_add_item(app->submenu, "", submenu_index, NULL, NULL);
+
+    for(uint32_t i = init_port; i < (init_port + range_port); i++) {
+        if(!furi_hal_gpio_read(&gpio_button_back)) break;
+        furi_string_reset(app->text);
+        furi_string_cat_printf(app->text, TEXT_PORT_FORMAT, i, TEXT_POINTS);
+        submenu_change_item_label(app->submenu, submenu_index, furi_string_get_cstr(app->text));
+
+        send_empty_udp_packet(
+            app->ethernet->tx_buffer,
+            app->ethernet,
+            app->ip_gateway,
+            app->ethernet->mac_address,
+            target_mac,
+            app->ethernet->ip_address,
+            target_ip,
+            64892,
+            i);
+
+        uint32_t last_time = furi_get_tick();
+
+        while(!(furi_get_tick() - last_time > 100)) {
+            uint16_t packen_len = 0;
+
+            packen_len = receive_packet(app->ethernet, app->ethernet->rx_buffer, 1500);
+
+            if(packen_len) {
+                if(is_arp(app->ethernet->rx_buffer)) {
+                    arp_reply_requested(
+                        app->ethernet, app->ethernet->rx_buffer, app->ethernet->ip_address);
+                } else if(is_udp(app->ethernet->rx_buffer)) {
+                    // Packet is for me
+                    if((*(uint16_t*)(app->ethernet->mac_address + 4) ==
+                        *(uint16_t*)(app->ethernet->rx_buffer + 4)) &&
+                       (*(uint32_t*)app->ethernet->mac_address ==
+                        *(uint32_t*)app->ethernet->rx_buffer)) {
+                        udp_header = udp_get_header(app->ethernet->rx_buffer);
+
+                        uint16_t source_port;
+                        uint16_t target_port;
+                        bytes_to_uint(&source_port, udp_header.source_port, sizeof(uint16_t));
+                        bytes_to_uint(&target_port, udp_header.dest_port, sizeof(uint16_t));
+
+                        if(source_port == i && target_port == 64892) {
+                            furi_string_reset(app->text);
+                            furi_string_cat_printf(
+                                app->text, TEXT_PORT_FORMAT, (uint32_t)source_port, "\0");
+                            submenu_change_item_label(
+                                app->submenu, submenu_index, furi_string_get_cstr(app->text));
+                            //submenu_set_selected_item(app->submenu, submenu_index);
+                            submenu_index++;
+                            furi_string_reset(app->text);
+                            furi_string_cat_printf(app->text, TEXT_PORT_FORMAT, i, TEXT_POINTS);
+                            submenu_add_item(
+                                app->submenu,
+                                furi_string_get_cstr(app->text),
+                                submenu_index,
+                                NULL,
+                                NULL);
+                            submenu_set_selected_item(app->submenu, submenu_index);
+                            break;
+                        } else {
+                            break;
+                        }
                     }
-#endif
-                }
-            } else if(is_icmp(app->ethernet->rx_buffer)) {
-                icmp_header_t icmp_header = icmp_get_header(app->ethernet->rx_buffer);
-                if((icmp_header.type == ICMP_TYPE_DEST_UNREACHABLE) &&
-                   (icmp_header.code == ICMP_CODE_PORT_UNREACHABLE)) {
-                    result = false;
-                    run = false;
                 }
             }
         }
     }
-
-    free(buffer);
-
-    return result;
+    furi_string_reset(app->text);
+    submenu_change_item_label(app->submenu, submenu_index, "FINISH");
 }

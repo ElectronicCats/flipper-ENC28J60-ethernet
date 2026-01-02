@@ -1,8 +1,6 @@
 #include "../app_user.h"
 #include <stdio.h>
 
-#include "../modules/os_detector_module.h"
-
 /**
  * The main menu is the first scene to see in the Ethernet App
  * here the user selects an option that wants to do.
@@ -44,26 +42,13 @@ void main_menu_options_callback(void* context, uint32_t index) {
     App* app = (App*)context;
 
     switch(index) {
+#if DEV_MODE
     case TESTING_OPTION:
 
         //printf("TEST OPTION\n");
 
-        /*furi_thread_suspend(furi_thread_get_id(app->thread));
-
-        uint8_t target_ip[4] = {192, 168, 0, 175};
-        printf(
-            "%s RESPONDIO\n",
-            udp_check_port(
-                app, app->ethernet->mac_address, app->ethernet->ip_address, target_ip, 5005, 80) ?
-                "SI" :
-                "NO");
-
-        furi_thread_resume(furi_thread_get_id(app->thread));*/
-        uint8_t target_ip[4] = {192, 168, 0, 112};
-        os_scan(app, target_ip);
-
         break;
-
+#endif
     case SNIFFING_OPTION:
         scene_manager_next_scene(app->scene_manager, app_scene_sniffer_option);
         break;
@@ -133,12 +118,12 @@ void app_scene_main_menu_on_enter(void* context) {
 
     submenu_add_item(
         app->submenu, "Ports Scanner", PORTS_SCANNER_OPTION, main_menu_options_callback, app);
-
+#if DEV_MODE
     submenu_add_item(
         app->submenu, "OS Detector", OS_DETECTOR_OPTION, main_menu_options_callback, app);
 
     submenu_add_item(app->submenu, "...", TESTING_OPTION, main_menu_options_callback, app);
-
+#endif
     submenu_add_item(app->submenu, "Settings", SETTINGS_OPTION, main_menu_options_callback, app);
 
     submenu_add_item(app->submenu, "About Us", ABOUT_US, main_menu_options_callback, app);

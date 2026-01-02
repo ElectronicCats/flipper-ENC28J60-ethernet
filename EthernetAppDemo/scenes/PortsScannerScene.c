@@ -87,21 +87,11 @@ int32_t ports_scanner_thread(void* context) {
 
     switch(protocols_index) {
     case PORTS_SCANNER_TCP:
-        //value = tcp_handshake_process(app, target_ip, source_port, target_port) ? PORT_OPEN :
-        //                                                                          PORT_CLOSED;
         tcp_syn_scan(app, target_ip, target_port, range_port);
         break;
 
     case PORTS_SCANNER_UDP:
-        value = udp_check_port(
-                    app,
-                    app->ethernet->mac_address,
-                    app->ethernet->ip_address,
-                    target_ip,
-                    range_port,
-                    target_port) ?
-                    PORT_OPEN :
-                    PORT_CLOSED;
+        udp_port_scan(app, target_ip, target_port, range_port);
         break;
     }
 

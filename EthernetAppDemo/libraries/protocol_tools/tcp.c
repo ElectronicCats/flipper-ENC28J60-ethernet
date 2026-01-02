@@ -51,19 +51,14 @@ void calculate_checksum_tcp(
 
     uint8_t* buffer_checksum = calloc(1, IP_PSEUDO_HEADER_LEN + tcp_header_len);
 
-    //pseudo_header->tcp_lenght[0] = (options_size + TCP_HEADER_LEN) >> 8;
-    //pseudo_header->tcp_lenght[1] = options_size + TCP_HEADER_LEN;
     uint_to_bytes(&tcp_header_len, pseudo_header->tcp_lenght, sizeof(uint16_t));
 
     memcpy(buffer_checksum, pseudo_header, IP_PSEUDO_HEADER_LEN);
     memcpy(buffer_checksum + IP_PSEUDO_HEADER_LEN, tcp_header, tcp_header_len);
 
-    printf("TAM DEL BUFFER CHECKSUM: %u\n", (IP_PSEUDO_HEADER_LEN + tcp_header_len) / 2);
     uint16_t checksum = calculate_checksum_ipv4(
         (uint16_t*)buffer_checksum, (IP_PSEUDO_HEADER_LEN + tcp_header_len) / 2);
-    printf("EL CHECKSUM CALULADO ES: %04X\n", checksum);
-    //tcp_header->checksum[0] = ((uint8_t*)&cheksum)[1];
-    //tcp_header->checksum[1] = ((uint8_t*)&cheksum)[0];
+
     uint_to_bytes(&checksum, tcp_header->checksum, sizeof(uint16_t));
 
     free(buffer_checksum);

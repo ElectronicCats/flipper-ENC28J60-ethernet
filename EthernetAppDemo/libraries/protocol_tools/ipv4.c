@@ -70,12 +70,9 @@ bool set_ipv4_header(
     header->total_length[1] = (uint8_t)total_length;
 
     // Set Identification
-    //memset(header->identification, 0, 2);
     uint_to_bytes(&ip_id, header->identification, sizeof(uint16_t));
 
     // Set flags
-    //header->flags_offset[0] = 0x40;
-    //header->flags_offset[1] = 0x00;
     uint_to_bytes(&ip_flags_offset, header->flags_offset, sizeof(uint16_t));
 
     // Set time to live

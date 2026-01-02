@@ -181,6 +181,14 @@ void ofp_tseq(App* app, uint8_t* target_ip) {
                 app->ethernet->tx_buffer[j],
                 j == (ETHERNET_HEADER_LEN + IP_HEADER_LEN + tcp_len - 1) ? '\n' : ' ');
         }
+
+        uint32_t sequences_vector[6] = {0};
+        uint16_t len_receive = receive_packet(app->ethernet, app->ethernet->rx_buffer, 1500);
+        UNUSED(len_receive);
+        if(is_tcp(app->ethernet->rx_buffer)) {
+            tcp_header_t tcp_header = tcp_get_header(app->ethernet->rx_buffer);
+            bytes_to_uint(sequences_vector + i, tcp_header.sequence, sizeof(uint32_t));
+        }
     }
 }
 

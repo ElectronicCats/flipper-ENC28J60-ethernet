@@ -237,7 +237,7 @@ void tcp_syn_scan(void* context, uint8_t* target_ip, uint16_t init_port, uint16_
             app->ethernet->ip_address,
             target_mac,
             target_ip,
-            5005,
+            64892,
             i,
             sequence,
             ack_number);
