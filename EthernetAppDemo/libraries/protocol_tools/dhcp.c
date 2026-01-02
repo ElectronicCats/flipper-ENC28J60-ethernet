@@ -210,7 +210,7 @@ bool dhcp_is_acknoledge(dhcp_message_t message) {
 }
 
 bool is_dhcp(uint8_t* buffer) {
-    if(!is_udp_packet(buffer)) return false;
+    if(!is_udp(buffer)) return false;
 
     udp_header_t udp_header = udp_get_header(buffer);
 

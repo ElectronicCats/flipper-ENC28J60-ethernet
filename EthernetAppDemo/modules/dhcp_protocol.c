@@ -59,7 +59,14 @@ void set_dhcp_discover_message(uint8_t* buffer, uint16_t* length) {
     set_ethernet_header(buffer, MAC_ADDRESS, MAC_BROADCAST, 0x800);
 
     set_ipv4_header(
-        buffer + ETHERNET_HEADER_LEN, 0x11, dhcp_len + UDP_HEADER_LEN, source_ip, destination_ip);
+        buffer + ETHERNET_HEADER_LEN,
+        0x11,
+        dhcp_len + UDP_HEADER_LEN,
+        source_ip,
+        destination_ip,
+        0,
+        0x4000,
+        WIN_TTL);
 
     set_udp_header(
         buffer + ETHERNET_HEADER_LEN + IP_HEADER_LEN, 0x44, 0x43, dhcp_len + UDP_HEADER_LEN);
@@ -110,7 +117,14 @@ void set_dhcp_request_message(uint8_t* buffer, uint16_t* length) {
     set_ethernet_header(buffer, MAC_ADDRESS, MAC_BROADCAST, 0x800);
 
     set_ipv4_header(
-        buffer + ETHERNET_HEADER_LEN, 0x11, dhcp_len + UDP_HEADER_LEN, source_ip, destination_ip);
+        buffer + ETHERNET_HEADER_LEN,
+        0x11,
+        dhcp_len + UDP_HEADER_LEN,
+        source_ip,
+        destination_ip,
+        0,
+        0x4000,
+        WIN_TTL);
 
     set_udp_header(
         buffer + ETHERNET_HEADER_LEN + IP_HEADER_LEN, 0x44, 0x43, dhcp_len + UDP_HEADER_LEN);
@@ -269,7 +283,14 @@ void set_dhcp_discover_message_with_host_name(uint8_t* buffer, uint16_t* length,
     set_ethernet_header(buffer, MAC_ADDRESS, MAC_BROADCAST, 0x800);
 
     set_ipv4_header(
-        buffer + ETHERNET_HEADER_LEN, 0x11, dhcp_len + UDP_HEADER_LEN, source_ip, destination_ip);
+        buffer + ETHERNET_HEADER_LEN,
+        0x11,
+        dhcp_len + UDP_HEADER_LEN,
+        source_ip,
+        destination_ip,
+        0,
+        0x4000,
+        WIN_TTL);
 
     set_udp_header(
         buffer + ETHERNET_HEADER_LEN + IP_HEADER_LEN, 0x44, 0x43, dhcp_len + UDP_HEADER_LEN);
@@ -291,7 +312,14 @@ void set_dhcp_request_message_with_host_name(uint8_t* buffer, uint16_t* length, 
     set_ethernet_header(buffer, MAC_ADDRESS, MAC_BROADCAST, 0x800);
 
     set_ipv4_header(
-        buffer + ETHERNET_HEADER_LEN, 0x11, dhcp_len + UDP_HEADER_LEN, source_ip, destination_ip);
+        buffer + ETHERNET_HEADER_LEN,
+        0x11,
+        dhcp_len + UDP_HEADER_LEN,
+        source_ip,
+        destination_ip,
+        0,
+        0x4000,
+        WIN_TTL);
 
     set_udp_header(
         buffer + ETHERNET_HEADER_LEN + IP_HEADER_LEN, 0x44, 0x43, dhcp_len + UDP_HEADER_LEN);

@@ -52,7 +52,10 @@ bool set_ipv4_header(
     uint8_t protocol,
     uint16_t data_length,
     uint8_t* src_ip,
-    uint8_t* dst_ip);
+    uint8_t* dst_ip,
+    uint16_t ip_id,
+    uint16_t ip_flags_offset,
+    uint8_t ttl);
 
 /**
  * @brief Parses a network packet and extracts the IPv4 header.

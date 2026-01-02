@@ -299,7 +299,7 @@ void analize_packet(uint8_t* buffer, uint16_t len) {
         return;
     }
 
-    if(is_udp_packet(buffer)) {
+    if(is_udp(buffer)) {
         print_udp_info(buffer, len);
     } else if(is_icmp(buffer)) {
         print_icmp_info(buffer, len);

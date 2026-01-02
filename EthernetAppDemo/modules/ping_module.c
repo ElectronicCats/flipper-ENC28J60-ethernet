@@ -71,7 +71,10 @@ uint16_t create_flipper_ping_packet(
            1, // Protocolo ICMP
            ICMP_HEADER_LEN + PING_DATA_SIZE,
            src_ip,
-           dst_ip)) {
+           dst_ip,
+           0,
+           0x4000,
+           WIN_TTL)) {
         return 0;
     }
 
@@ -116,7 +119,10 @@ uint16_t create_ping_packet_reply(
            1, // Protocolo ICMP
            ICMP_HEADER_LEN + payload_len,
            src_ip,
-           dst_ip)) {
+           dst_ip,
+           0,
+           0x4000,
+           WIN_TTL)) {
         return 0;
     }
 

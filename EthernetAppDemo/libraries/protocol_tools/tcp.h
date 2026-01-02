@@ -4,28 +4,56 @@
 #include <furi.h>
 #include <furi_hal.h>
 
-#define TCP_HEADER_LEN 20 // Minimum TCP header length (without options)
+#define TCP_HEADER_LEN       20 // Minimum TCP header length (without options)
+#define IP_PSEUDO_HEADER_LEN 12
 
 // TCP Flag definitions
-#define TCP_FIN 0x01
-#define TCP_SYN 0x02
-#define TCP_RST 0x04
-#define TCP_PSH 0x08
-#define TCP_ACK 0x10
-#define TCP_URG 0x20
-#define TCP_ECE 0x40
-#define TCP_CWR 0x80
+#define TCP_FIN 0x0001
+#define TCP_SYN 0x0002
+#define TCP_RST 0x0004
+#define TCP_PSH 0x0008
+#define TCP_ACK 0x0010
+#define TCP_URG 0x0020
+#define TCP_ECE 0x0040
+#define TCP_CWR 0x0080
+#define TCP_NS  0x0100
+
+// TCP Options
+#define TCP_EOL       0 // End of Option List
+#define TCP_NOP       1 // No Operation
+#define TCP_MSS       2 // Maximum Segmen Size
+#define TCP_WS        3 // Window Scale
+#define TCP_SACK_P    4 // Selective Acknowledgment Permitted
+#define TCP_SACK      5 // Selective Acknowledgment
+#define TCP_ECHO      6 // Echo (obsolete, RFC 1072)
+#define TCP_ECHOREPLY 7 // Echo Reply (obsolete, RFC 1072)
+#define TCP_TS        8 // Timestamps
+#define TCP_POCP      9 // Partial Order Connection Permitted (obsolete)
+#define TCP_POSP      10 // Partial Order Service Profile (obsolete)
+#define TCP_CC        11 // Connection Count (obsolete, RFC 1644)
+#define TCP_CC_NEW    12 // CC.NEW (obsolete, RFC 1644)
+#define TCP_CC_ECHO   13 // CC.ECHO (obsolete, RFC 1644)
+#define TCP_ALTCHK    14 // Alternate Checksum Request (obsolete)
+#define TCP_ALTCHKD   15 // Alternate Checksum Data (obsolete)
+
+typedef struct {
+    uint8_t source_ip[4];
+    uint8_t target_ip[4];
+    uint8_t zero;
+    uint8_t protocol;
+    uint8_t tcp_lenght[2];
+} pseudo_header_ip_t;
 
 typedef struct {
     uint8_t source_port[2]; // Source port (16 bits)
     uint8_t dest_port[2]; // Destination port (16 bits)
     uint8_t sequence[4]; // Sequence number (32 bits)
     uint8_t ack_number[4]; // Acknowledgment number (32 bits)
-    uint8_t data_offset; // 4 bits data offset + 4 bits reserved
-    uint8_t flags; // Control flags (6 bits) + 2 bits reserved
+    uint8_t data_offset_flags[2]; // 4 bits data offset + 3 bits reserved + 9 control flags
     uint8_t window_size[2]; // Window size (16 bits)
     uint8_t checksum[2]; // Checksum (16 bits)
     uint8_t urgent_pointer[2]; // Urgent pointer (16 bits)
+    uint8_t options[50];
     // Options can be added here if needed
 } tcp_header_t;
 
@@ -42,20 +70,60 @@ typedef struct {
  * @param dest_port The 16-bit destination port number.
  * @param sequence The 32-bit sequence number for the segment.
  * @param ack_number The 32-bit acknowledgment number.
- * @param flags The 8-bit TCP flags (e.g., SYN, ACK, FIN, PSH, RST, URG).
+ * @param flags The 9-bit TCP flags (e.g., SYN, ACK, FIN, PSH, RST, URG).
  * @param window_size The 16-bit window size, indicating the receive window.
  * @param urgent_pointer The 16-bit urgent pointer, used with the URG flag.
  * @return `true` if the header was successfully set, `false` otherwise.
  */
-bool set_tcp_header(
+bool set_tcp_header_syn(
     uint8_t* buffer,
+    uint8_t* source_ip,
+    uint8_t* target_ip,
     uint16_t source_port,
     uint16_t dest_port,
     uint32_t sequence,
     uint32_t ack_number,
-    uint8_t flags,
     uint16_t window_size,
-    uint16_t urgent_pointer);
+    uint16_t urgent_pointer,
+    uint16_t* len);
+
+bool set_tcp_header_ack(
+    uint8_t* buffer,
+    uint8_t* source_ip,
+    uint8_t* target_ip,
+    uint16_t source_port,
+    uint16_t dest_port,
+    uint32_t sequence,
+    uint32_t ack_number,
+    uint16_t window_size,
+    uint16_t urgent_pointer,
+    uint16_t* len);
+
+bool set_tcp_header_fin(
+    uint8_t* buffer,
+    uint8_t* source_ip,
+    uint8_t* target_ip,
+    uint16_t source_port,
+    uint16_t dest_port,
+    uint32_t sequence,
+    uint32_t ack_number,
+    uint16_t window_size,
+    uint16_t urgent_pointer,
+    uint16_t* len);
+
+bool set_tcp_header_tseq(
+    uint8_t* buffer,
+    uint8_t* source_ip,
+    uint8_t* target_ip,
+    uint16_t source_port,
+    uint16_t dest_port,
+    uint32_t sequence,
+    uint32_t ack_number,
+    uint16_t window_size,
+    uint16_t urgent_pointer,
+    uint16_t* options_size,
+    uint8_t* options_vector,
+    uint16_t* len);
 
 /**
  * @brief Parses a network packet and extracts its TCP header.
@@ -79,26 +147,6 @@ tcp_header_t tcp_get_header(uint8_t* buffer);
  * @return `true` if the packet's payload is TCP, `false` otherwise.
  */
 bool is_tcp(uint8_t* buffer);
-
-/**
- * @brief Calculates the TCP checksum, including the pseudo-header.
- *
- * This function computes the 16-bit one's complement checksum for a
- * TCP segment. This calculation includes a pseudo-header (derived from the
- * IPv4 source and destination addresses, protocol, and TCP length), the TCP
- * header itself, and the TCP payload.
- *
- * @param tcp_segment A pointer to the start of the TCP header.
- * @param tcp_length The total length of the TCP segment (header + payload) in bytes.
- * @param src_ip A pointer to the 4-byte source IP address (from the IPv4 header).
- * @param dst_ip A pointer to the 4-byte destination IP address (from the IPv4 header).
- * @return The calculated 16-bit TCP checksum value.
- */
-uint16_t calculate_tcp_checksum(
-    uint8_t* tcp_segment,
-    uint16_t tcp_length,
-    uint8_t* src_ip,
-    uint8_t* dst_ip);
 
 /**
  * @brief Creates a complete TCP packet (Ethernet + IPv4 + TCP + Payload).

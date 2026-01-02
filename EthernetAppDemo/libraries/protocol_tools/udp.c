@@ -74,7 +74,7 @@ udp_header_t udp_get_header(uint8_t* buffer) {
     return udp_header;
 }
 
-bool is_udp_packet(uint8_t* buffer) {
+bool is_udp(uint8_t* buffer) {
     if(!is_ipv4(buffer)) return false;
 
     ipv4_header_t ip_header = ipv4_get_header(buffer);
@@ -106,7 +106,7 @@ bool create_udp_packet(
     uint8_t* ip_header_ptr = buffer + ETHERNET_HEADER_LEN;
     uint16_t total_udp_length = UDP_HEADER_LEN + payload_length;
 
-    if(!set_ipv4_header(ip_header_ptr, 17, total_udp_length, src_ip, dst_ip)) {
+    if(!set_ipv4_header(ip_header_ptr, 17, total_udp_length, src_ip, dst_ip, 0, 0x4000, WIN_TTL)) {
         return false;
     }
 

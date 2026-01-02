@@ -85,6 +85,50 @@ void draw_ip_not_got_it(App* app) {
         furi_string_get_cstr(app->text));
 }
 
+void draw_dora_needed(App* app) {
+    widget_reset(app->widget);
+    furi_string_reset(app->text);
+    furi_string_cat_printf(app->text, "DORA PROCESS NEEDED");
+    widget_add_string_element(
+        app->widget,
+        64,
+        32,
+        AlignCenter,
+        AlignCenter,
+        FontPrimary,
+        furi_string_get_cstr(app->text));
+}
+
+void draw_text(App* app, const char* text) {
+    widget_reset(app->widget);
+    furi_string_reset(app->text);
+    furi_string_cat_printf(app->text, "THE OS IS %s", text);
+    widget_add_string_element(
+        app->widget,
+        64,
+        32,
+        AlignCenter,
+        AlignCenter,
+        FontPrimary,
+        furi_string_get_cstr(app->text));
+}
+
+// Draws port open
+void draw_port_open(App* app) {
+    widget_reset(app->widget);
+    widget_add_icon_element(app->widget, 41, 0, &I_PO119x38);
+    widget_add_string_multiline_element(
+        app->widget, 65, 60, AlignCenter, AlignBottom, FontPrimary, "PORT OPEN");
+}
+
+// Draws port not open
+void draw_port_not_open(App* app) {
+    widget_reset(app->widget);
+    widget_add_icon_element(app->widget, 41, 0, &I_NCR);
+    widget_add_string_multiline_element(
+        app->widget, 65, 60, AlignCenter, AlignBottom, FontPrimary, "PORT NOT OPEN");
+}
+
 void draw_dora_failed(App* app) {
     widget_reset(app->widget);
     furi_string_reset(app->text);

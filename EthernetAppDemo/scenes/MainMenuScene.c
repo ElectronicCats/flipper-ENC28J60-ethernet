@@ -1,4 +1,6 @@
 #include "../app_user.h"
+#include <stdio.h>
+
 /**
  * The main menu is the first scene to see in the Ethernet App
  * here the user selects an option that wants to do.
@@ -14,6 +16,8 @@ enum {
     ARP_ACTIONS_OPTION,
     TESTING_OPTION,
     PING_OPTION,
+    PORTS_SCANNER_OPTION,
+    OS_DETECTOR_OPTION,
     SETTINGS_OPTION,
     ABOUT_US
 } main_menu_options;
@@ -38,12 +42,13 @@ void main_menu_options_callback(void* context, uint32_t index) {
     App* app = (App*)context;
 
     switch(index) {
+#if DEV_MODE
     case TESTING_OPTION:
 
-        furi_thread_flags_set(app->thread, flag_dhcp_dora);
+        //printf("TEST OPTION\n");
 
         break;
-
+#endif
     case SNIFFING_OPTION:
         scene_manager_next_scene(app->scene_manager, app_scene_sniffer_option);
         break;
@@ -58,6 +63,14 @@ void main_menu_options_callback(void* context, uint32_t index) {
 
     case PING_OPTION:
         scene_manager_next_scene(app->scene_manager, app_scene_ping_menu_option);
+        break;
+
+    case PORTS_SCANNER_OPTION:
+        scene_manager_next_scene(app->scene_manager, app_scene_ports_scanner_option);
+        break;
+
+    case OS_DETECTOR_OPTION:
+        scene_manager_next_scene(app->scene_manager, app_scene_os_detector_option);
         break;
 
     case SETTINGS_OPTION:
@@ -103,8 +116,14 @@ void app_scene_main_menu_on_enter(void* context) {
 
     submenu_add_item(app->submenu, "Ping", PING_OPTION, main_menu_options_callback, app);
 
-    submenu_add_item(app->submenu, "...", TESTING_OPTION, main_menu_options_callback, app);
+    submenu_add_item(
+        app->submenu, "Ports Scanner", PORTS_SCANNER_OPTION, main_menu_options_callback, app);
+#if DEV_MODE
+    submenu_add_item(
+        app->submenu, "OS Detector", OS_DETECTOR_OPTION, main_menu_options_callback, app);
 
+    submenu_add_item(app->submenu, "...", TESTING_OPTION, main_menu_options_callback, app);
+#endif
     submenu_add_item(app->submenu, "Settings", SETTINGS_OPTION, main_menu_options_callback, app);
 
     submenu_add_item(app->submenu, "About Us", ABOUT_US, main_menu_options_callback, app);

@@ -24,13 +24,18 @@
 #include "modules/arp_module.h"
 #include "modules/dhcp_protocol.h"
 #include "modules/tcp_module.h"
+#include "modules/udp_module.h"
 #include "modules/capture_module.h"
 #include "modules/analysis_module.h"
 #include "modules/ping_module.h"
 
+#include "libraries/functions/functions.h"
+
+#define DEV_MODE 0
+
 // Version of the app
 #define APP_NAME    "ETHERNET APP"
-#define APP_VERSION "v1.0.0"
+#define APP_VERSION "v1.1.1.0"
 
 // Path for the files
 #define PATHAPP    "apps_data/ethernet" // Path
@@ -69,6 +74,7 @@ typedef struct {
 
     bool is_static_ip; // To know if the device has the static IP
     bool enc28j60_connected; // To know if the enc28j60 is connected
+    bool is_dora;
 
     SceneManager* scene_manager;
     ViewDispatcher* view_dispatcher;
@@ -116,7 +122,11 @@ void draw_waiting_for_ip(App* app); // Draw when you're waiting for an IP
 void draw_your_ip_is(App* app); // Draw the IP when you got it
 void draw_ip_not_got_it(App* app); // Draw when get the ip failed
 void draw_dora_failed(App* app); // Draw when the DORA process failed
+void draw_dora_needed(App* app); // Draw when the DORA process needed
+void draw_port_open(App* app); // Draw when the port is open
+void draw_port_not_open(App* app); // Draw when the port is not open
 void draw_ask_for_ip(App* app); // Draw to ask a new IP
+void draw_text(App* app, const char* text); // Draw text
 
 // Thread
 int32_t ethernet_thread(void* context);

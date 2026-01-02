@@ -4,7 +4,6 @@
 #include <furi.h>
 #include <furi_hal.h>
 
-#
 #define UDP_HEADER_LEN 8
 
 typedef struct {
@@ -54,7 +53,7 @@ udp_header_t udp_get_header(uint8_t* buffer);
  * @param buffer A pointer to the buffer containing the start of the IPv4 packet.
  * @return `true` if the packet's payload is UDP, `false` otherwise.
  */
-bool is_udp_packet(uint8_t* buffer);
+bool is_udp(uint8_t* buffer);
 
 /**
  * @brief Creates a complete UDP packet (Ethernet + IPv4 + UDP + Payload).

