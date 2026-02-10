@@ -5,30 +5,42 @@
 #include "../libraries/protocol_tools/tcp.h"
 #include "../libraries/protocol_tools/ipv4.h"
 #include "../libraries/protocol_tools/ethernet_protocol.h"
-#include "tcp_module.h"
-
 #include "../libraries/protocol_tools/icmp.h"
+#include "../libraries/protocol_tools/arp.h"
+#include "tcp_module.h"
+#include "ping_module.h"
 
-#include "../modules/ping_module.h"
+#define TAG "OsDetector"
 
+#define OS_TCP_PROBE_PORT  80
+#define OS_TCP_SOURCE_PORT 5005
+#define OS_ICMP_TIMEOUT_MS 1000
+#define OS_TCP_TIMEOUT_MS  3000
+#define OS_MAX_TCP_OPTS    12
 
-#define OPTS_LEN    13
-#define OPTS_PROBES 6
+/* ── helpers ─────────────────────────────────────────────────── */
 
-static bool os_icmp_probe(App* app, uint8_t* target_ip, uint8_t* out_ttl, uint32_t* out_rtt) {
-    uint32_t start_time = furi_get_tick();
+static uint16_t infer_initial_ttl(uint8_t observed) {
+    if(observed <= 32) return 32;
+    if(observed <= 64) return 64;
+    if(observed <= 128) return 128;
+    return 255;
+}
+
+/* Check if a received packet is addressed to us (MAC match). */
+static bool packet_is_for_us(enc28j60_t* eth) {
+    return (*(uint32_t*)eth->mac_address == *(uint32_t*)eth->rx_buffer) &&
+           (*(uint16_t*)(eth->mac_address + 4) == *(uint16_t*)(eth->rx_buffer + 4));
+}
+
+/* ── ICMP probe ──────────────────────────────────────────────── */
+
+static bool os_icmp_probe(App* app, uint8_t* target_ip, uint8_t* target_mac, uint8_t* out_ttl) {
+    uint32_t start = furi_get_tick();
 
     uint8_t packet[MAX_FRAMELEN] = {0};
-    uint8_t target_mac[6] = {0};
 
-    arp_get_specific_mac(
-        app->ethernet,
-        app->ethernet->ip_address,
-        target_ip,
-        app->ethernet->mac_address,
-        target_mac);
-
-    uint16_t packet_len = create_flipper_ping_packet(
+    uint16_t pkt_len = create_flipper_ping_packet(
         packet,
         app->ethernet->mac_address,
         target_mac,
@@ -39,13 +51,19 @@ static bool os_icmp_probe(App* app, uint8_t* target_ip, uint8_t* out_ttl, uint32
         (uint8_t*)"OSPROBE",
         7);
 
-    if(packet_len == 0) return false;
+    if(pkt_len == 0) return false;
 
-    send_packet(app->ethernet, packet, packet_len);
+    send_packet(app->ethernet, packet, pkt_len);
 
-    while((furi_get_tick() - start_time) < 1000) {
+    while((furi_get_tick() - start) < OS_ICMP_TIMEOUT_MS) {
         uint16_t len = receive_packet(app->ethernet, app->ethernet->rx_buffer, MAX_FRAMELEN);
         if(len == 0) continue;
+
+        if(is_arp(app->ethernet->rx_buffer)) {
+            arp_reply_requested(
+                app->ethernet, app->ethernet->rx_buffer, app->ethernet->ip_address);
+            continue;
+        }
 
         if(!is_icmp(app->ethernet->rx_buffer)) continue;
 
@@ -53,221 +71,279 @@ static bool os_icmp_probe(App* app, uint8_t* target_ip, uint8_t* out_ttl, uint32
         if(icmp.type != ICMP_TYPE_ECHO_REPLY) continue;
 
         ipv4_header_t ip = ipv4_get_header(app->ethernet->rx_buffer);
-
         *out_ttl = ip.ttl;
-        *out_rtt = furi_get_tick() - start_time;
 
+        FURI_LOG_D(TAG, "ICMP reply: TTL=%u", ip.ttl);
         return true;
     }
 
+    FURI_LOG_D(TAG, "ICMP probe: no reply");
     return false;
 }
 
+/* ── TCP Options parser ──────────────────────────────────────── */
 
-/* 8 options:
- *  0~5: six options for SEQ/OPS/WIN/T1 probes.
- *  6:   ECN probe.
- *  7-12:   T2~T7 probes.
- *
- * option 0: WScale (10), Nop, MSS (1460), Timestamp, SackP
- * option 1: MSS (1400), WScale (0), SackP, T(0xFFFFFFFF,0x0), EOL
- * option 2: T(0xFFFFFFFF, 0x0), Nop, Nop, WScale (5), Nop, MSS (640)
- * option 3: SackP, T(0xFFFFFFFF,0x0), WScale (10), EOL
- * option 4: MSS (536), SackP, T(0xFFFFFFFF,0x0), WScale (10), EOL
- * option 5: MSS (265), SackP, T(0xFFFFFFFF,0x0)
- * option 6: WScale (10), Nop, MSS (1460), SackP, Nop, Nop
- * option 7-11: WScale (10), Nop, MSS (265), T(0xFFFFFFFF,0x0), SackP
- * option 12: WScale (15), Nop, MSS (265), T(0xFFFFFFFF,0x0), SackP
- */
-static struct {
-    uint8_t* val;
-    uint16_t len;
-} prbOpts[OPTS_LEN] = {
-    {(uint8_t*)"\x03\x03\x0A\x01\x02\x04\x05\xb4\x08\x0A\xff\xff\xff\xff\x00\x00\x00\x00\x04\x02",
-     20},
-    {(uint8_t*)"\x02\x04\x05\x78\x03\x03\x00\x04\x02\x08\x0A\xff\xff\xff\xff\x00\x00\x00\x00\x00",
-     20},
-    {(uint8_t*)"\x08\x0A\xff\xff\xff\xff\x00\x00\x00\x00\x01\x01\x03\x03\x05\x01\x02\x04\x02\x80",
-     20},
-    {(uint8_t*)"\x04\x02\x08\x0A\xff\xff\xff\xff\x00\x00\x00\x00\x03\x03\x0A\x00", 16},
-    {(uint8_t*)"\x02\x04\x02\x18\x04\x02\x08\x0A\xff\xff\xff\xff\x00\x00\x00\x00\x03\x03\x0A\x00",
-     20},
-    {(uint8_t*)"\x02\x04\x01\x09\x04\x02\x08\x0A\xff\xff\xff\xff\x00\x00\x00\x00", 16},
-    {(uint8_t*)"\x03\x03\x0A\x01\x02\x04\x05\xb4\x04\x02\x01\x01", 12},
-    {(uint8_t*)"\x03\x03\x0A\x01\x02\x04\x01\x09\x08\x0A\xff\xff\xff\xff\x00\x00\x00\x00\x04\x02",
-     20},
-    {(uint8_t*)"\x03\x03\x0A\x01\x02\x04\x01\x09\x08\x0A\xff\xff\xff\xff\x00\x00\x00\x00\x04\x02",
-     20},
-    {(uint8_t*)"\x03\x03\x0A\x01\x02\x04\x01\x09\x08\x0A\xff\xff\xff\xff\x00\x00\x00\x00\x04\x02",
-     20},
-    {(uint8_t*)"\x03\x03\x0A\x01\x02\x04\x01\x09\x08\x0A\xff\xff\xff\xff\x00\x00\x00\x00\x04\x02",
-     20},
-    {(uint8_t*)"\x03\x03\x0A\x01\x02\x04\x01\x09\x08\x0A\xff\xff\xff\xff\x00\x00\x00\x00\x04\x02",
-     20},
-    {(uint8_t*)"\x03\x03\x0f\x01\x02\x04\x01\x09\x08\x0A\xff\xff\xff\xff\x00\x00\x00\x00\x04\x02",
-     20}};
+typedef struct {
+    uint8_t kinds[OS_MAX_TCP_OPTS]; /* sequence of option kind values */
+    uint8_t count; /* how many options found         */
+    uint16_t mss; /* MSS value (0 if absent)        */
+    uint8_t wscale; /* Window Scale value (0 if absent) */
+} TcpOptSignature;
 
-/* TCP Window sizes. Numbering is the same as for prbOpts[] */
-uint16_t prbWindowSz[] = {1, 63, 4, 4, 16, 512, 3, 128, 256, 1024, 31337, 32768, 65535};
+static void parse_tcp_options(tcp_header_t* hdr, TcpOptSignature* sig) {
+    memset(sig, 0, sizeof(*sig));
 
-uint8_t seq_act = OFP_UNSET;
+    uint8_t data_offset = (hdr->data_offset_flags[0] >> 4) * 4;
+    if(data_offset <= TCP_HEADER_LEN) return;
 
-void ofp_tseq(App* app, uint8_t* target_ip);
+    uint8_t opts_len = data_offset - TCP_HEADER_LEN;
+    uint8_t* opts = hdr->options;
+    uint8_t i = 0;
 
-void doSeqTests(App* app, uint8_t* target_ip) {
-    if(seq_act == OFP_UNSET) return;
+    while(i < opts_len && sig->count < OS_MAX_TCP_OPTS) {
+        uint8_t kind = opts[i];
 
-    switch(seq_act) {
-    case OFP_TSEQ:
-        ofp_tseq(app, target_ip);
-        break;
-    default:
-        break;
+        if(kind == TCP_EOL) {
+            break;
+        }
+        if(kind == TCP_NOP) {
+            sig->kinds[sig->count++] = TCP_NOP;
+            i++;
+            continue;
+        }
+
+        /* All other options have a length byte at opts[i+1]. */
+        if((i + 1) >= opts_len) break;
+        uint8_t olen = opts[i + 1];
+        if(olen < 2 || (i + olen) > opts_len) break;
+
+        sig->kinds[sig->count++] = kind;
+
+        if(kind == TCP_MSS && olen == 4) {
+            sig->mss = (uint16_t)(opts[i + 2] << 8) | opts[i + 3];
+        } else if(kind == TCP_WS && olen == 3) {
+            sig->wscale = opts[i + 2];
+        }
+
+        i += olen;
     }
 }
 
-/*void make_tseq_packet(
-    uint8_t* source_mac,
-    uint8_t* target_mac,
-    uint8_t* source_ip,
-    uint8_t* target_ip,
-    uint8_t* source_port,
-    uint8_t* target_port) {
-    set_tcp_header_tseq(
-        app->ethernet->tx_buffer + ETHERNET_HEADER_LEN + IP_HEADER_LEN,
-        app->ethernet->ip_address,
-        target_ip,
-        source_port + 1,
-        target_port,
-        sequence,
-        ack_number,
-        prbWindowSz[i],
-        0,
-        &prbOpts[i].len,
-        prbOpts[i].val,
-        &tcp_len);
+/* Compare a parsed signature against an expected pattern.
+ * `expected` is a zero-terminated array of option kinds.
+ * Returns true if sig->kinds matches exactly. */
+static bool opts_match(const TcpOptSignature* sig, const uint8_t* expected, uint8_t expected_len) {
+    if(sig->count != expected_len) return false;
+    return memcmp(sig->kinds, expected, expected_len) == 0;
+}
 
-    set_ipv4_header(
-        app->ethernet->tx_buffer + ETHERNET_HEADER_LEN,
-        6, // Protocolo TCP
-        tcp_len,
-        app->ethernet->ip_address,
-        target_ip);
+/* ── TCP SYN probe ───────────────────────────────────────────── */
 
-    set_ethernet_header(app->ethernet->tx_buffer, app->ethernet->mac_address, target_mac, 0x0800);
+typedef struct {
+    bool got_reply;
+    uint8_t ttl;
+    uint16_t window_size;
+    bool df_set;
+    TcpOptSignature opts;
+} TcpProbeResult;
 
-    //send_packet(app->ethernet, app->ethernet->tx_buffer, ETHERNET_HEADER_LEN + IP_HEADER_LEN + tcp_len);
+static void os_tcp_probe(App* app, uint8_t* target_ip, uint8_t* target_mac, TcpProbeResult* res) {
+    memset(res, 0, sizeof(*res));
 
-    printf("BUFFER: ");
-    for(uint16_t j = 0; j < (ETHERNET_HEADER_LEN + IP_HEADER_LEN + tcp_len); j++) {
-        printf(
-            "%02X%c",
-            app->ethernet->tx_buffer[j],
-            j == (ETHERNET_HEADER_LEN + IP_HEADER_LEN + tcp_len - 1) ? '\n' : ' ');
-    }
-}*/
-
-void ofp_tseq(App* app, uint8_t* target_ip) {
-    printf("IMPRIMIR OPCIONES:\n");
-    for(uint8_t i = 0; i < OPTS_LEN; i++) {
-        printf("OPTIONS: %u: %u -> %u ", i, prbOpts[i].len, prbWindowSz[i]);
-        for(uint8_t j = 0; j < prbOpts[i].len; j++) {
-            printf("%02X%c", prbOpts[i].val[j], j == (prbOpts[i].len - 1) ? '\n' : ' ');
-        }
-    }
-
-    UNUSED(target_ip);
-    uint8_t source_mac[6] = {0x00, 0xE0, 0x4C, 0x68, 0x0E, 0xC5};
-    uint8_t target_mac[6] = {0xCC, 0x73, 0x14, 0x17, 0xA3, 0x45};
-    uint8_t source_ip[4] = {192, 168, 0, 105};
-    uint8_t target_ip_debug[4] = {192, 168, 0, 103};
-    uint16_t ip_id[6] = {63073, 63326, 35094, 25039, 36881, 19500};
-    uint16_t ip_flags_offset = 0;
-    uint8_t ttl_vec[6] = {55, 51, 38, 52, 50, 52};
-    uint16_t source_port = 63954;
-    uint16_t target_port = 2121;
-    uint32_t sequence = 1354199039;
-    uint32_t ack_number = 64547392;
-
-    uint16_t tcp_len = 0;
-
-    /*arp_get_specific_mac(
+    tcp_send_syn(
         app->ethernet,
-        app->ethernet->ip_address,
-        (*(uint32_t*)app->ethernet->ip_address & *(uint32_t*)app->ethernet->subnet_mask) ==
-                (*(uint32_t*)target_ip & *(uint32_t*)app->ethernet->subnet_mask) ?
-            target_ip :
-            app->ip_gateway,
         app->ethernet->mac_address,
-        target_mac);*/
+        app->ethernet->ip_address,
+        target_mac,
+        target_ip,
+        OS_TCP_SOURCE_PORT,
+        OS_TCP_PROBE_PORT,
+        1,
+        0);
 
-    for(uint8_t i = 0; i < OPTS_PROBES; i++) {
-        printf("No. SEQ: %lu -> %04lx\n", sequence + i, sequence + i);
+    uint32_t start = furi_get_tick();
 
-        set_tcp_header_tseq(
-            app->ethernet->tx_buffer + ETHERNET_HEADER_LEN + IP_HEADER_LEN,
-            source_ip,
-            target_ip_debug,
-            source_port + i,
-            target_port,
-            sequence + i,
-            ack_number,
-            prbWindowSz[i],
-            0,
-            &(prbOpts[i].len),
-            prbOpts[i].val,
-            &tcp_len);
+    while((furi_get_tick() - start) < OS_TCP_TIMEOUT_MS) {
+        uint16_t len = receive_packet(app->ethernet, app->ethernet->rx_buffer, MAX_FRAMELEN);
+        if(len == 0) continue;
 
-        set_ipv4_header(
-            app->ethernet->tx_buffer + ETHERNET_HEADER_LEN,
-            6,
-            tcp_len,
-            source_ip,
-            target_ip_debug,
-            ip_id[i],
-            ip_flags_offset,
-            ttl_vec[i]);
-
-        set_ethernet_header(app->ethernet->tx_buffer, source_mac, target_mac, 0x0800);
-
-        //send_packet(app->ethernet, app->ethernet->tx_buffer, ETHERNET_HEADER_LEN + IP_HEADER_LEN + tcp_len);
-
-        printf("BUFFER: ");
-        for(uint16_t j = 0; j < (ETHERNET_HEADER_LEN + IP_HEADER_LEN + tcp_len); j++) {
-            printf(
-                "%02x%c",
-                app->ethernet->tx_buffer[j],
-                j == (ETHERNET_HEADER_LEN + IP_HEADER_LEN + tcp_len - 1) ? '\n' : ' ');
+        if(is_arp(app->ethernet->rx_buffer)) {
+            arp_reply_requested(
+                app->ethernet, app->ethernet->rx_buffer, app->ethernet->ip_address);
+            continue;
         }
 
-        uint32_t sequences_vector[6] = {0};
-        uint16_t len_receive = receive_packet(app->ethernet, app->ethernet->rx_buffer, 1500);
-        UNUSED(len_receive);
-        if(is_tcp(app->ethernet->rx_buffer)) {
-            tcp_header_t tcp_header = tcp_get_header(app->ethernet->rx_buffer);
-            bytes_to_uint(sequences_vector + i, tcp_header.sequence, sizeof(uint32_t));
+        if(!is_tcp(app->ethernet->rx_buffer)) continue;
+        if(!packet_is_for_us(app->ethernet)) continue;
+
+        tcp_header_t tcp = tcp_get_header(app->ethernet->rx_buffer);
+
+        /* Check it's a SYN-ACK (or RST) from our target port. */
+        uint16_t flags = 0;
+        bytes_to_uint(&flags, tcp.data_offset_flags, sizeof(uint16_t));
+        flags &= 0x01FF;
+
+        uint16_t src_port = 0;
+        bytes_to_uint(&src_port, tcp.source_port, sizeof(uint16_t));
+
+        if(src_port != OS_TCP_PROBE_PORT) continue;
+
+        /* RST means port closed – still useful for TTL. */
+        if(flags & TCP_RST) {
+            ipv4_header_t ip = ipv4_get_header(app->ethernet->rx_buffer);
+            res->got_reply = true;
+            res->ttl = ip.ttl;
+            FURI_LOG_D(TAG, "TCP RST: TTL=%u", ip.ttl);
+            return;
+        }
+
+        if((flags & (TCP_SYN | TCP_ACK)) == (TCP_SYN | TCP_ACK)) {
+            ipv4_header_t ip = ipv4_get_header(app->ethernet->rx_buffer);
+
+            res->got_reply = true;
+            res->ttl = ip.ttl;
+
+            uint16_t flags_offset = 0;
+            bytes_to_uint(&flags_offset, ip.flags_offset, sizeof(uint16_t));
+            res->df_set = (flags_offset & 0x4000) != 0;
+
+            bytes_to_uint(&res->window_size, tcp.window_size, sizeof(uint16_t));
+
+            parse_tcp_options(&tcp, &res->opts);
+
+            FURI_LOG_D(
+                TAG,
+                "SYN-ACK: TTL=%u Win=%u DF=%u OptCount=%u",
+                res->ttl,
+                res->window_size,
+                res->df_set,
+                res->opts.count);
+
+            return;
         }
     }
+
+    FURI_LOG_D(TAG, "TCP probe: no reply");
 }
 
-void os_scan(void* context, uint8_t* target_ip) {
+/* ── Classifier ──────────────────────────────────────────────── */
+
+/* Known TCP option signatures (order of kinds in SYN-ACK). */
+
+/* Windows 10/11: MSS, NOP, WScale, NOP, NOP, Timestamp, NOP, NOP, SACK-Permitted */
+static const uint8_t OPTS_WIN10[] =
+    {TCP_MSS, TCP_NOP, TCP_WS, TCP_NOP, TCP_NOP, TCP_TS, TCP_NOP, TCP_NOP, TCP_SACK_P};
+#define OPTS_WIN10_LEN 9
+
+/* Windows 7/XP: MSS, NOP, NOP, SACK-Permitted, NOP, WScale */
+static const uint8_t OPTS_WIN7[] = {TCP_MSS, TCP_NOP, TCP_NOP, TCP_SACK_P, TCP_NOP, TCP_WS};
+#define OPTS_WIN7_LEN 6
+
+/* Linux (modern): MSS, SACK-Permitted, Timestamp, NOP, WScale */
+static const uint8_t OPTS_LINUX[] = {TCP_MSS, TCP_SACK_P, TCP_TS, TCP_NOP, TCP_WS};
+#define OPTS_LINUX_LEN 5
+
+/* macOS / iOS: MSS, NOP, WScale, NOP, NOP, Timestamp, SACK-Permitted, EOL */
+static const uint8_t OPTS_MACOS[] =
+    {TCP_MSS, TCP_NOP, TCP_WS, TCP_NOP, TCP_NOP, TCP_TS, TCP_SACK_P};
+#define OPTS_MACOS_LEN 7
+
+/* FreeBSD: MSS, NOP, WScale, SACK-Permitted, Timestamp */
+static const uint8_t OPTS_FREEBSD[] = {TCP_MSS, TCP_NOP, TCP_WS, TCP_SACK_P, TCP_TS};
+#define OPTS_FREEBSD_LEN 5
+
+static OsType classify_os(uint8_t icmp_ttl, bool icmp_ok, TcpProbeResult* tcp) {
+    /* No responses at all. */
+    if(!icmp_ok && !tcp->got_reply) return OS_UNKNOWN;
+
+    /* Determine best available TTL source. */
+    uint8_t ttl = tcp->got_reply ? tcp->ttl : icmp_ttl;
+    uint16_t init_ttl = infer_initial_ttl(ttl);
+
+    FURI_LOG_I(TAG, "Classification: InitTTL=%u WinSize=%u", init_ttl, tcp->window_size);
+
+    /* Network equipment typically uses TTL 255. */
+    if(init_ttl == 255) return OS_NETWORK_DEVICE;
+
+    /* If we only have ICMP (port 80 filtered/closed with no useful TCP options). */
+    if(!tcp->got_reply || tcp->opts.count == 0) {
+        if(init_ttl == 128) return OS_WINDOWS;
+        if(init_ttl == 64) return OS_LINUX; /* best guess */
+        return OS_UNKNOWN;
+    }
+
+    /* ── TTL ~128 family: Windows variants ─────────────────── */
+    if(init_ttl == 128) {
+        if(opts_match(&tcp->opts, OPTS_WIN10, OPTS_WIN10_LEN)) return OS_WINDOWS;
+        if(opts_match(&tcp->opts, OPTS_WIN7, OPTS_WIN7_LEN)) return OS_WINDOWS;
+        /* Unknown Windows variant – still Windows by TTL. */
+        return OS_WINDOWS;
+    }
+
+    /* ── TTL ~64 family: Linux / macOS / FreeBSD / Android ── */
+    if(init_ttl == 64) {
+        /* macOS/iOS: very distinctive option order. */
+        if(opts_match(&tcp->opts, OPTS_MACOS, OPTS_MACOS_LEN)) return OS_MACOS;
+
+        /* FreeBSD: MSS, NOP, WS, SACK, TS. */
+        if(opts_match(&tcp->opts, OPTS_FREEBSD, OPTS_FREEBSD_LEN)) return OS_FREEBSD;
+
+        /* Linux pattern: MSS, SACK, TS, NOP, WS. */
+        if(opts_match(&tcp->opts, OPTS_LINUX, OPTS_LINUX_LEN)) {
+            /* Android vs generic Linux heuristic:
+             * Android commonly uses window sizes 14600, 26883, 28960.
+             * Modern Linux kernels typically use 29200 or 65535. */
+            if(tcp->window_size == 14600 || tcp->window_size == 26883 ||
+               tcp->window_size == 28960) {
+                return OS_ANDROID;
+            }
+            return OS_LINUX;
+        }
+
+        /* Fallback for TTL 64 with unrecognised options. */
+        return OS_LINUX;
+    }
+
+    return OS_UNKNOWN;
+}
+
+/* ── Public API ──────────────────────────────────────────────── */
+
+void os_scan(void* context, uint8_t* target_ip, OsResult* result) {
     App* app = context;
 
-    UNUSED(target_ip);
+    result->type = OS_UNKNOWN;
+    result->ttl = 0;
+    result->window_size = 0;
 
-    // TSEQ unabled
-    seq_act = OFP_UNSET;
+    /* Step 1: Resolve target MAC via ARP. */
+    uint8_t target_mac[6] = {0};
+    bool same_subnet = (*(uint32_t*)app->ip_gateway & *(uint32_t*)app->ethernet->subnet_mask) ==
+                       (*(uint32_t*)target_ip & *(uint32_t*)app->ethernet->subnet_mask);
 
-    uint8_t ttl = 0;
-    uint32_t rtt = 0;
-
-    printf("[OS] ICMP probe started\n");
-
-    if(os_icmp_probe(app, target_ip, &ttl, &rtt)) {
-        printf("[OS] ICMP reply received\n");
-        printf("[OS] TTL: %u\n", ttl);
-        printf("[OS] RTT: %lu ms\n", rtt);
-    } else {
-        printf("[OS] ICMP probe failed\n");
+    if(!arp_get_specific_mac(
+           app->ethernet,
+           app->ethernet->ip_address,
+           same_subnet ? target_ip : app->ip_gateway,
+           app->ethernet->mac_address,
+           target_mac)) {
+        FURI_LOG_E(TAG, "ARP resolution failed");
+        return;
     }
+
+    /* Step 2: ICMP probe – get TTL and verify host is alive. */
+    uint8_t icmp_ttl = 0;
+    bool icmp_ok = os_icmp_probe(app, target_ip, target_mac, &icmp_ttl);
+
+    /* Step 3: TCP SYN probe – get TTL, Window Size, Options, DF. */
+    TcpProbeResult tcp = {0};
+    os_tcp_probe(app, target_ip, target_mac, &tcp);
+
+    /* Step 4: Classify. */
+    result->type = classify_os(icmp_ttl, icmp_ok, &tcp);
+    result->ttl = tcp.got_reply ? tcp.ttl : icmp_ttl;
+    result->window_size = tcp.window_size;
+
+    FURI_LOG_I(
+        TAG, "Result: type=%u ttl=%u win=%u", result->type, result->ttl, result->window_size);
 }

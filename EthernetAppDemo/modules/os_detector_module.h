@@ -3,13 +3,20 @@
 #include <furi.h>
 
 typedef enum {
-    OFP_UNSET,
-    OFP_TSEQ,
-    OFP_TOPS,
-    OFP_TECN,
-    OFP_T1_7,
-    OFP_TICMP,
-    OFP_TUDP,
-} OFP_PROBES_TYPE;
+    OS_WINDOWS,
+    OS_LINUX,
+    OS_MACOS,
+    OS_FREEBSD,
+    OS_ANDROID,
+    OS_NETWORK_DEVICE,
+    OS_UNKNOWN,
+    OS_TYPE_COUNT,
+} OsType;
 
-void os_scan(void* context, uint8_t* target_ip);
+typedef struct {
+    OsType type;
+    uint8_t ttl;
+    uint16_t window_size;
+} OsResult;
+
+void os_scan(void* context, uint8_t* target_ip, OsResult* result);
