@@ -7,8 +7,62 @@
 #include "../libraries/protocol_tools/ethernet_protocol.h"
 #include "tcp_module.h"
 
+#include "../libraries/protocol_tools/icmp.h"
+
+#include "../modules/ping_module.h"
+
+
 #define OPTS_LEN    13
 #define OPTS_PROBES 6
+
+static bool os_icmp_probe(App* app, uint8_t* target_ip, uint8_t* out_ttl, uint32_t* out_rtt) {
+    uint32_t start_time = furi_get_tick();
+
+    uint8_t packet[MAX_FRAMELEN] = {0};
+    uint8_t target_mac[6] = {0};
+
+    arp_get_specific_mac(
+        app->ethernet,
+        app->ethernet->ip_address,
+        target_ip,
+        app->ethernet->mac_address,
+        target_mac);
+
+    uint16_t packet_len = create_flipper_ping_packet(
+        packet,
+        app->ethernet->mac_address,
+        target_mac,
+        app->ethernet->ip_address,
+        target_ip,
+        0xBEEF,
+        1,
+        (uint8_t*)"OSPROBE",
+        7);
+
+    if(packet_len == 0) return false;
+
+    send_packet(app->ethernet, packet, packet_len);
+
+    while((furi_get_tick() - start_time) < 1000) {
+        uint16_t len = receive_packet(app->ethernet, app->ethernet->rx_buffer, MAX_FRAMELEN);
+        if(len == 0) continue;
+
+        if(!is_icmp(app->ethernet->rx_buffer)) continue;
+
+        icmp_header_t icmp = icmp_get_header(app->ethernet->rx_buffer);
+        if(icmp.type != ICMP_TYPE_ECHO_REPLY) continue;
+
+        ipv4_header_t ip = ipv4_get_header(app->ethernet->rx_buffer);
+
+        *out_ttl = ip.ttl;
+        *out_rtt = furi_get_tick() - start_time;
+
+        return true;
+    }
+
+    return false;
+}
+
 
 /* 8 options:
  *  0~5: six options for SEQ/OPS/WIN/T1 probes.
@@ -61,9 +115,13 @@ uint8_t seq_act = OFP_UNSET;
 void ofp_tseq(App* app, uint8_t* target_ip);
 
 void doSeqTests(App* app, uint8_t* target_ip) {
+    if(seq_act == OFP_UNSET) return;
+
     switch(seq_act) {
     case OFP_TSEQ:
         ofp_tseq(app, target_ip);
+        break;
+    default:
         break;
     }
 }
@@ -195,7 +253,21 @@ void ofp_tseq(App* app, uint8_t* target_ip) {
 void os_scan(void* context, uint8_t* target_ip) {
     App* app = context;
 
-    seq_act = OFP_TSEQ;
+    UNUSED(target_ip);
 
-    doSeqTests(app, target_ip);
+    // TSEQ unabled
+    seq_act = OFP_UNSET;
+
+    uint8_t ttl = 0;
+    uint32_t rtt = 0;
+
+    printf("[OS] ICMP probe started\n");
+
+    if(os_icmp_probe(app, target_ip, &ttl, &rtt)) {
+        printf("[OS] ICMP reply received\n");
+        printf("[OS] TTL: %u\n", ttl);
+        printf("[OS] RTT: %lu ms\n", rtt);
+    } else {
+        printf("[OS] ICMP probe failed\n");
+    }
 }
