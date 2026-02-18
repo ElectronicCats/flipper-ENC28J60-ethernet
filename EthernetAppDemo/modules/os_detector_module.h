@@ -1,6 +1,12 @@
 #pragma once
+#include <stdint.h>
 
-#include <furi.h>
+typedef enum {
+    WINDOWS,
+    LINUX,
+    IOS,
+    NO_DETECTED,
+} OS_DETECTOR_OS;
 
 typedef enum {
     OFP_UNSET,
@@ -12,4 +18,4 @@ typedef enum {
     OFP_TUDP,
 } OFP_PROBES_TYPE;
 
-void os_scan(void* context, uint8_t* target_ip);
+int32_t os_scan(void* context, uint8_t* target_ip);

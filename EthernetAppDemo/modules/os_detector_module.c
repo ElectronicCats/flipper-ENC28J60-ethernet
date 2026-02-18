@@ -1,19 +1,61 @@
 #include "os_detector_module.h"
-
 #include "app_user.h"
-
 #include "../libraries/protocol_tools/tcp.h"
 #include "../libraries/protocol_tools/ipv4.h"
+#include "../libraries/protocol_tools/arp.h"
 #include "../libraries/protocol_tools/ethernet_protocol.h"
 #include "tcp_module.h"
-
 #include "../libraries/protocol_tools/icmp.h"
-
 #include "../modules/ping_module.h"
+#define OPTS_LEN     13
+#define OPTS_PROBES  6
+#define packet_count 20
 
+// diferencia de IPID con manejo de wrap-around de 16 bits
+int32_t ipid_diff(uint16_t prev, uint16_t curr) {
+    int32_t diff = (int32_t)curr - (int32_t)prev;
 
-#define OPTS_LEN    13
-#define OPTS_PROBES 6
+    // corrección por wrap-around
+    if(diff < -32768) {
+        diff += 65536;
+    } else if(diff > 32767) {
+        diff -= 65536;
+    }
+    return diff;
+}
+
+double varianza(int32_t* d, int len) {
+    double suma = 0.0, suma2 = 0.0;
+    for(int i = 0; i < len; i++) {
+        suma += d[i];
+        suma2 += (double)d[i] * (double)d[i];
+    }
+    double media = suma / len;
+    return (suma2 / len) - (media * media);
+}
+
+void clasificar_ipid(uint16_t* id, int n, uint8_t* value_ptr) {
+    int32_t d[100];
+    int positivos = 0, negativos = 0;
+
+    for(int i = 0; i < n - 1; i++) {
+        d[i] = ipid_diff(id[i], id[i + 1]);
+
+        if(d[i] > 0)
+            positivos++;
+        else
+            negativos++;
+    }
+
+    double var = varianza(d, n - 1);
+
+    // regla simple para clasificar
+    if(positivos >= 0.75 * (n - 1) && var < 5000) {
+        *value_ptr = LINUX;
+    } else {
+        *value_ptr = IOS;
+    }
+}
 
 static bool os_icmp_probe(App* app, uint8_t* target_ip, uint8_t* out_ttl, uint32_t* out_rtt) {
     uint32_t start_time = furi_get_tick();
@@ -63,7 +105,6 @@ static bool os_icmp_probe(App* app, uint8_t* target_ip, uint8_t* out_ttl, uint32
     return false;
 }
 
-
 /* 8 options:
  *  0~5: six options for SEQ/OPS/WIN/T1 probes.
  *  6:   ECN probe.
@@ -79,6 +120,7 @@ static bool os_icmp_probe(App* app, uint8_t* target_ip, uint8_t* out_ttl, uint32
  * option 7-11: WScale (10), Nop, MSS (265), T(0xFFFFFFFF,0x0), SackP
  * option 12: WScale (15), Nop, MSS (265), T(0xFFFFFFFF,0x0), SackP
  */
+
 static struct {
     uint8_t* val;
     uint16_t len;
@@ -191,16 +233,6 @@ void ofp_tseq(App* app, uint8_t* target_ip) {
 
     uint16_t tcp_len = 0;
 
-    /*arp_get_specific_mac(
-        app->ethernet,
-        app->ethernet->ip_address,
-        (*(uint32_t*)app->ethernet->ip_address & *(uint32_t*)app->ethernet->subnet_mask) ==
-                (*(uint32_t*)target_ip & *(uint32_t*)app->ethernet->subnet_mask) ?
-            target_ip :
-            app->ip_gateway,
-        app->ethernet->mac_address,
-        target_mac);*/
-
     for(uint8_t i = 0; i < OPTS_PROBES; i++) {
         printf("No. SEQ: %lu -> %04lx\n", sequence + i, sequence + i);
 
@@ -250,7 +282,7 @@ void ofp_tseq(App* app, uint8_t* target_ip) {
     }
 }
 
-void os_scan(void* context, uint8_t* target_ip) {
+int32_t os_scan(void* context, uint8_t* target_ip) {
     App* app = context;
 
     UNUSED(target_ip);
@@ -261,6 +293,113 @@ void os_scan(void* context, uint8_t* target_ip) {
     uint8_t ttl = 0;
     uint32_t rtt = 0;
 
+    uint8_t value = NO_DETECTED;
+
+    uint16_t ids[packet_count] = {0};
+    bool respuestas[packet_count] = {0};
+    uint16_t ids_an[packet_count] = {0};
+
+    uint8_t target_mac[6] = {0};
+
+    arp_get_specific_mac(
+        app->ethernet,
+        app->ethernet->ip_address,
+        (*(uint32_t*)app->ip_gateway & *(uint32_t*)app->ethernet->subnet_mask) ==
+                (*(uint32_t*)target_ip & *(uint32_t*)app->ethernet->subnet_mask) ?
+            target_ip :
+            app->ip_gateway,
+        app->ethernet->mac_address,
+        target_mac);
+
+    uint32_t sequence = 1;
+    uint32_t ack_number = 0;
+
+    uint32_t last_time;
+
+    uint8_t attemp = 0;
+    ipv4_header_t ipv4_header;
+    tcp_header_t tcp_header;
+    while(attemp != packet_count) {
+        tcp_send_syn(
+            app->ethernet,
+            app->ethernet->mac_address,
+            app->ethernet->ip_address,
+            target_mac,
+            target_ip,
+            5005,
+            80,
+            sequence,
+            ack_number);
+
+        last_time = furi_get_tick();
+        while(!(furi_get_tick() - last_time > 3000)) {
+            uint16_t packen_len = 0;
+
+            packen_len = receive_packet(app->ethernet, app->ethernet->rx_buffer, 1500);
+
+            if(packen_len) {
+                if(is_arp(app->ethernet->rx_buffer)) {
+                    arp_reply_requested(
+                        app->ethernet, app->ethernet->rx_buffer, app->ethernet->ip_address);
+                } else if(is_tcp(app->ethernet->rx_buffer)) {
+                    if((*(uint16_t*)(app->ethernet->mac_address + 4) ==
+                        *(uint16_t*)(app->ethernet->rx_buffer + 4)) &&
+                       (*(uint32_t*)app->ethernet->mac_address ==
+                        *(uint32_t*)app->ethernet->rx_buffer)) {
+                        ipv4_header = ipv4_get_header(app->ethernet->rx_buffer);
+                        tcp_header = tcp_get_header(app->ethernet->rx_buffer);
+
+                        uint16_t id;
+                        uint16_t windows_size;
+                        uint16_t ipid;
+
+                        bytes_to_uint(&id, ipv4_header.identification, sizeof(uint16_t));
+                        bytes_to_uint(&windows_size, tcp_header.window_size, sizeof(uint16_t));
+                        bytes_to_uint(&ipid, ipv4_header.identification, sizeof(uint16_t));
+
+                        printf("WINDOWS SIZE: %u\n", windows_size);
+                        printf("TTL: %u\n", ipv4_header.ttl);
+                        printf("IPID: %u\n", ipid);
+
+                        ids[attemp] = id;
+                        respuestas[attemp] = true;
+
+                        printf("PACKET: ");
+                        for(uint16_t i = 0; i < packen_len; i++) {
+                            printf(
+                                "%02X%c",
+                                app->ethernet->rx_buffer[i],
+                                i == (packen_len - 1) ? '\n' : ' ');
+                        }
+
+                        break;
+                    }
+                }
+            }
+        }
+        attemp++;
+    }
+
+    if(ipv4_header.ttl > 64 && ipv4_header.ttl <= 128) {
+        value = WINDOWS;
+    } else {
+        uint8_t sum_true = 0;
+        uint8_t an_index = 0;
+        for(uint8_t i = 0; i < packet_count; i++) {
+            sum_true += respuestas[i] ? 1 : 0;
+            if(respuestas[i]) {
+                ids_an[an_index] = ids[i];
+                an_index++;
+            }
+        }
+
+        if(sum_true) {
+            clasificar_ipid(ids_an, sum_true, &value);
+        } else {
+            value = NO_DETECTED;
+        }
+    }
+
     printf("[OS] ICMP probe started\n");
 
     if(os_icmp_probe(app, target_ip, &ttl, &rtt)) {
@@ -270,4 +409,6 @@ void os_scan(void* context, uint8_t* target_ip) {
     } else {
         printf("[OS] ICMP probe failed\n");
     }
+
+    return value;
 }
