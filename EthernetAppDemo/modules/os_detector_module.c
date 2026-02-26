@@ -285,8 +285,6 @@ void ofp_tseq(App* app, uint8_t* target_ip) {
 int32_t os_scan(void* context, uint8_t* target_ip) {
     App* app = context;
 
-    UNUSED(target_ip);
-
     // TSEQ unabled
     seq_act = OFP_UNSET;
 
@@ -294,6 +292,12 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
     uint32_t rtt = 0;
 
     uint8_t value = NO_DETECTED;
+
+    bool ttl_valid = false;
+    uint8_t ttl_tcp = 0;
+
+    bool icmp_valid = false;
+    uint8_t ttl_icmp = 0;
 
     uint16_t ids[packet_count] = {0};
     bool respuestas[packet_count] = {0};
@@ -320,6 +324,8 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
     ipv4_header_t ipv4_header;
     tcp_header_t tcp_header;
     while(attemp != packet_count) {
+        memset(app->ethernet->rx_buffer, 0, 1500);
+
         tcp_send_syn(
             app->ethernet,
             app->ethernet->mac_address,
@@ -332,7 +338,7 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
             ack_number);
 
         last_time = furi_get_tick();
-        while(!(furi_get_tick() - last_time > 3000)) {
+        while(furi_get_tick() - last_time < 300) {
             uint16_t packen_len = 0;
 
             packen_len = receive_packet(app->ethernet, app->ethernet->rx_buffer, 1500);
@@ -347,22 +353,79 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
                        (*(uint32_t*)app->ethernet->mac_address ==
                         *(uint32_t*)app->ethernet->rx_buffer)) {
                         ipv4_header = ipv4_get_header(app->ethernet->rx_buffer);
+
+                        if(memcmp(ipv4_header.source_ip, target_ip, 4) != 0) {
+                            continue;
+                        }
+
                         tcp_header = tcp_get_header(app->ethernet->rx_buffer);
 
-                        uint16_t id;
+                        /* ---- VALIDACIÓN DE FLAGS AQUÍ ---- */
+                        uint8_t flags = ((uint8_t*)&tcp_header)[13];
+
+                        bool is_synack = (flags & 0x12) == 0x12; // SYN + ACK
+                        bool is_rstack = (flags & 0x14) == 0x14; // RST + ACK
+
+                        if(!(is_synack || is_rstack)) {
+                            continue; // ignora paquetes que no sean respuesta válida al SYN
+                        }
+
+                        uint32_t ack_recv;
+                        bytes_to_uint(&ack_recv, tcp_header.ack_number, sizeof(uint32_t));
+
+                        if(ack_recv != (sequence + 1)) {
+                            continue; // no es respuesta a nuestro SYN
+                        }
+                        /* ---- VALIDACIÓN PUERTO DESTINO (NUESTRO 5005) ---- */
+                        uint16_t dst_port;
+                        bytes_to_uint(&dst_port, tcp_header.dest_port, sizeof(uint16_t));
+
+                        if(dst_port != 5005) {
+                            continue;
+                        }
+
+                        /* ----------------------------------- */
+
+                        ttl_tcp = ipv4_header.ttl;
+                        ttl_valid = true;
+
                         uint16_t windows_size;
                         uint16_t ipid;
 
-                        bytes_to_uint(&id, ipv4_header.identification, sizeof(uint16_t));
                         bytes_to_uint(&windows_size, tcp_header.window_size, sizeof(uint16_t));
                         bytes_to_uint(&ipid, ipv4_header.identification, sizeof(uint16_t));
+
+                        /* ---- CONTROL DE DUPLICADOS ---- */
+                        bool duplicated = false;
+                        for(uint8_t i = 0; i < attemp; i++) {
+                            if(respuestas[i] && ids[i] == ipid) {
+                                duplicated = true;
+                                break;
+                            }
+                        }
+
+                        if(duplicated) {
+                            continue; // ignorar IPID repetido
+                        }
+                        /* -------------------------------- */
 
                         printf("WINDOWS SIZE: %u\n", windows_size);
                         printf("TTL: %u\n", ipv4_header.ttl);
                         printf("IPID: %u\n", ipid);
 
-                        ids[attemp] = id;
+                        ids[attemp] = ipid;
                         respuestas[attemp] = true;
+
+                        uint8_t count_valid = 0;
+                        for(uint8_t i = 0; i <= attemp; i++) {
+                            if(respuestas[i]) {
+                                count_valid++;
+                            }
+                        }
+
+                        if(count_valid >= 6) {
+                            break;
+                        }
 
                         printf("PACKET: ");
                         for(uint16_t i = 0; i < packen_len; i++) {
@@ -380,7 +443,21 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
         attemp++;
     }
 
-    if(ipv4_header.ttl > 64 && ipv4_header.ttl <= 128) {
+    printf("[OS] ICMP probe started\n");
+
+    if(os_icmp_probe(app, target_ip, &ttl, &rtt)) {
+        ttl_icmp = ttl;
+        icmp_valid = true;
+        printf("[OS] ICMP reply received\n");
+        printf("[OS] TTL: %u\n", ttl);
+        printf("[OS] RTT: %lu ms\n", rtt);
+    } else {
+        printf("[OS] ICMP probe failed\n");
+    }
+
+    if(ttl_valid && ttl_tcp > 64 && ttl_tcp <= 128) {
+        value = WINDOWS;
+    } else if(!ttl_valid && icmp_valid && ttl_icmp > 64 && ttl_icmp <= 128) {
         value = WINDOWS;
     } else {
         uint8_t sum_true = 0;
@@ -398,16 +475,6 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
         } else {
             value = NO_DETECTED;
         }
-    }
-
-    printf("[OS] ICMP probe started\n");
-
-    if(os_icmp_probe(app, target_ip, &ttl, &rtt)) {
-        printf("[OS] ICMP reply received\n");
-        printf("[OS] TTL: %u\n", ttl);
-        printf("[OS] RTT: %lu ms\n", rtt);
-    } else {
-        printf("[OS] ICMP probe failed\n");
     }
 
     return value;
