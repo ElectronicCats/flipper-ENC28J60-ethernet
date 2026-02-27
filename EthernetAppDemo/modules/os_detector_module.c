@@ -57,6 +57,40 @@ void clasificar_ipid(uint16_t* id, int n, uint8_t* value_ptr) {
     }
 }
 
+void clasificar_window(uint16_t* win, int n, uint8_t* value_ptr) {
+    if(n == 0) return;
+
+    // Buscar valor más frecuente (modo simple)
+    int max_count = 0;
+    uint16_t valor_dominante = 0;
+
+    for(int i = 0; i < n; i++) {
+        int count = 0;
+        for(int j = 0; j < n; j++) {
+            if(win[j] == win[i]) {
+                count++;
+            }
+        }
+
+        if(count > max_count) {
+            max_count = count;
+            valor_dominante = win[i];
+        }
+    }
+
+    // Si el 70% o más coincide → patrón fuerte
+    if(max_count >= (0.7 * n)) {
+        // Clasificación por rangos (más robusto)
+        if(valor_dominante >= 64000) {
+            *value_ptr = WINDOWS;
+        } else if(valor_dominante >= 5800 && valor_dominante <= 6000) {
+            *value_ptr = LINUX;
+        } else if(valor_dominante >= 29000 && valor_dominante <= 30000) {
+            *value_ptr = LINUX;
+        }
+    }
+}
+
 static bool os_icmp_probe(App* app, uint8_t* target_ip, uint8_t* out_ttl, uint32_t* out_rtt) {
     uint32_t start_time = furi_get_tick();
 
@@ -300,6 +334,7 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
     uint8_t ttl_icmp = 0;
 
     uint16_t ids[packet_count] = {0};
+    uint16_t windows[packet_count] = {0};
     bool respuestas[packet_count] = {0};
     uint16_t ids_an[packet_count] = {0};
 
@@ -414,6 +449,7 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
                         printf("IPID: %u\n", ipid);
 
                         ids[attemp] = ipid;
+                        windows[attemp] = windows_size;
                         respuestas[attemp] = true;
 
                         uint8_t count_valid = 0;
@@ -471,7 +507,23 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
         }
 
         if(sum_true) {
-            clasificar_ipid(ids_an, sum_true, &value);
+            uint8_t value_ipid = NO_DETECTED;
+            uint8_t value_win = NO_DETECTED;
+            uint8_t value_ttl = NO_DETECTED;
+
+            clasificar_ipid(ids_an, sum_true, &value_ipid);
+            clasificar_window(windows, sum_true, &value_win);
+
+            // Heurística combinada simple
+            if(value_win == value_ttl && value_win != NO_DETECTED) {
+                value = value_win; // Coincidencia fuerte
+            } else if(value_win != NO_DETECTED) {
+                value = value_win; // Window pesa más
+            } else if(value_ttl != NO_DETECTED) {
+                value = value_ttl;
+            } else {
+                value = value_ipid;
+            }
         } else {
             value = NO_DETECTED;
         }
