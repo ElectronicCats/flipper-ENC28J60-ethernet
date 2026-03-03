@@ -34,26 +34,80 @@ double varianza(int32_t* d, int len) {
     return (suma2 / len) - (media * media);
 }
 
-void clasificar_ipid(uint16_t* id, int n, uint8_t* value_ptr) {
-    int32_t d[100];
-    int positivos = 0, negativos = 0;
+static ipid_pattern_t detectar_patron_ipid(uint16_t* ids, int n) {
+    if(n < 3) return IPID_UNKNOWN;
+
+    // ---- Detectar todos cero ----
+    bool all_zero = true;
+    for(int i = 0; i < n; i++) {
+        if(ids[i] != 0) {
+            all_zero = false;
+            break;
+        }
+    }
+    if(all_zero) return IPID_ZERO;
+
+    // ---- Detectar constante ----
+    bool constante = true;
+    for(int i = 1; i < n; i++) {
+        if(ids[i] != ids[0]) {
+            constante = false;
+            break;
+        }
+    }
+    if(constante) return IPID_CONSTANT;
+
+    // ---- Calcular diferencias ----
+    int32_t diffs[100] = {0};
+    int positivos = 0;
+    int pequenos = 0;
+    int grandes = 0;
 
     for(int i = 0; i < n - 1; i++) {
-        d[i] = ipid_diff(id[i], id[i + 1]);
+        diffs[i] = ipid_diff(ids[i], ids[i + 1]);
 
-        if(d[i] > 0)
-            positivos++;
-        else
-            negativos++;
+        if(diffs[i] > 0) positivos++;
+
+        if(diffs[i] > 0 && diffs[i] < 1000) pequenos++;
+
+        if(diffs[i] >= 1000) grandes++;
     }
 
-    double var = varianza(d, n - 1);
+    double var = varianza(diffs, n - 1);
 
-    // regla simple para clasificar
-    if(positivos >= 0.75 * (n - 1) && var < 5000) {
-        *value_ptr = LINUX;
-    } else {
-        *value_ptr = IOS;
+    // ---- Incremental pequeño (Linux clásico) ----
+    if(positivos >= 0.8 * (n - 1) && pequenos >= 0.7 * (n - 1) && var < 20000) {
+        return IPID_INCREMENTAL;
+    }
+
+    // ---- Incremental con saltos grandes ----
+    if(positivos >= 0.8 * (n - 1) && grandes >= 0.5 * (n - 1)) {
+        return IPID_INCREMENTAL_LARGE;
+    }
+
+    // ---- Random ----
+    if(var > 500000) {
+        return IPID_RANDOM;
+    }
+
+    return IPID_UNKNOWN;
+}
+
+static uint8_t clasificar_ipid_por_patron(ipid_pattern_t pattern) {
+    switch(pattern) {
+    case IPID_ZERO:
+    case IPID_CONSTANT:
+        return WINDOWS;
+
+    case IPID_INCREMENTAL:
+    case IPID_INCREMENTAL_LARGE:
+        return LINUX;
+
+    case IPID_RANDOM:
+        return IOS;
+
+    default:
+        return NO_DETECTED;
     }
 }
 
@@ -316,7 +370,61 @@ void ofp_tseq(App* app, uint8_t* target_ip) {
     }
 }
 
+static void os_scoreboard_init(os_scoreboard_t* sb) {
+    sb->windows_score = 0;
+    sb->linux_score = 0;
+    sb->ios_score = 0;
+}
+
+static void os_score_add(os_scoreboard_t* sb, OS_DETECTOR_OS os, int weight) {
+    switch(os) {
+    case WINDOWS:
+        sb->windows_score += weight;
+        break;
+    case LINUX:
+        sb->linux_score += weight;
+        break;
+    case IOS:
+        sb->ios_score += weight;
+        break;
+    default:
+        break;
+    }
+}
+
+static OS_DETECTOR_OS os_score_resolve(os_scoreboard_t* sb) {
+    printf("Resolving...\n");
+
+    if(sb->windows_score == sb->linux_score && sb->linux_score == sb->ios_score)
+        return NO_DETECTED;
+
+    int max = sb->windows_score;
+    OS_DETECTOR_OS result = WINDOWS;
+
+    if(sb->linux_score > max) {
+        max = sb->linux_score;
+        result = LINUX;
+    }
+
+    if(sb->ios_score > max) {
+        max = sb->ios_score;
+        result = IOS;
+    }
+
+    // empate parcial
+    if((result == WINDOWS && sb->windows_score == sb->linux_score) ||
+       (result == LINUX && sb->linux_score == sb->ios_score) ||
+       (result == WINDOWS && sb->windows_score == sb->ios_score))
+        return NO_DETECTED;
+
+    if(max < 5) return NO_DETECTED;
+
+    return result;
+}
+
 int32_t os_scan(void* context, uint8_t* target_ip) {
+    os_scoreboard_t sb;
+    os_scoreboard_init(&sb);
     App* app = context;
 
     // TSEQ unabled
@@ -324,8 +432,6 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
 
     uint8_t ttl = 0;
     uint32_t rtt = 0;
-
-    uint8_t value = NO_DETECTED;
 
     bool ttl_valid = false;
     uint8_t ttl_tcp = 0;
@@ -491,43 +597,89 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
         printf("[OS] ICMP probe failed\n");
     }
 
-    if(ttl_valid && ttl_tcp > 64 && ttl_tcp <= 128) {
-        value = WINDOWS;
-    } else if(!ttl_valid && icmp_valid && ttl_icmp > 64 && ttl_icmp <= 128) {
-        value = WINDOWS;
-    } else {
-        uint8_t sum_true = 0;
-        uint8_t an_index = 0;
-        for(uint8_t i = 0; i < packet_count; i++) {
-            sum_true += respuestas[i] ? 1 : 0;
-            if(respuestas[i]) {
-                ids_an[an_index] = ids[i];
-                an_index++;
-            }
-        }
-
-        if(sum_true) {
-            uint8_t value_ipid = NO_DETECTED;
-            uint8_t value_win = NO_DETECTED;
-            uint8_t value_ttl = NO_DETECTED;
-
-            clasificar_ipid(ids_an, sum_true, &value_ipid);
-            clasificar_window(windows, sum_true, &value_win);
-
-            // Heurística combinada simple
-            if(value_win == value_ttl && value_win != NO_DETECTED) {
-                value = value_win; // Coincidencia fuerte
-            } else if(value_win != NO_DETECTED) {
-                value = value_win; // Window pesa más
-            } else if(value_ttl != NO_DETECTED) {
-                value = value_ttl;
-            } else {
-                value = value_ipid;
-            }
-        } else {
-            value = NO_DETECTED;
+    uint8_t sum_true = 0;
+    uint8_t an_index = 0;
+    for(uint8_t i = 0; i < packet_count; i++) {
+        sum_true += respuestas[i] ? 1 : 0;
+        if(respuestas[i]) {
+            ids_an[an_index] = ids[i];
+            an_index++;
         }
     }
 
-    return value;
+    if(sum_true) {
+        /* ---------- TTL SCORING ---------- */
+
+        uint8_t ttl_guess = 0;
+        uint8_t ttl_weight = 0;
+
+        if(ttl_valid) {
+            /* Estimación de TTL inicial */
+            if(ttl_tcp <= 64) {
+                ttl_guess = 64;
+            }
+
+            else if(ttl_tcp <= 128) {
+                ttl_guess = 128;
+            }
+
+            else {
+                ttl_guess = 255;
+            }
+
+            ttl_weight = 5; // TCP pesa más
+        } else if(icmp_valid) {
+            if(ttl_icmp <= 64)
+                ttl_guess = 64;
+            else if(ttl_icmp <= 128)
+                ttl_guess = 128;
+            else
+                ttl_guess = 255;
+
+            ttl_weight = 3; // ICMP pesa menos
+        }
+
+        /* Asignación de puntuación */
+        if(ttl_guess == 64) {
+            os_score_add(&sb, LINUX, ttl_weight);
+        }
+
+        else if(ttl_guess == 128) {
+            os_score_add(&sb, WINDOWS, ttl_weight);
+        }
+
+        else if(ttl_guess == 255) {
+            os_score_add(&sb, IOS, ttl_weight);
+        }
+
+        /* ---------- IPID SCORING ---------- */
+        ipid_pattern_t pattern = detectar_patron_ipid(ids_an, sum_true);
+        uint8_t ipid_guess = clasificar_ipid_por_patron(pattern);
+        if(ipid_guess == ttl_guess && ipid_guess != NO_DETECTED) {
+            os_score_add(&sb, ipid_guess, 2);
+        }
+        if(ipid_guess != NO_DETECTED) {
+            os_score_add(&sb, ipid_guess, 3);
+        }
+        const char* ipid_names[] = {
+            "UNKNOWN", "CONSTANT", "INCREMENTAL", "INCREMENTAL_LARGE", "RANDOM", "ZERO"};
+
+        printf("[IPID] Pattern: %s\n", ipid_names[pattern]);
+
+        /* ---------- WINDOW SCORING ---------- */
+        uint8_t value_win = NO_DETECTED;
+        clasificar_window(windows, sum_true, &value_win);
+
+        if(value_win == LINUX)
+            os_score_add(&sb, LINUX, 4);
+        else if(value_win == WINDOWS)
+            os_score_add(&sb, WINDOWS, 4);
+    }
+
+    printf("\n[SCORE]\n");
+    printf("WINDOWS: %d\n", sb.windows_score);
+    printf("LINUX:   %d\n", sb.linux_score);
+    printf("IOS:     %d\n\n", sb.ios_score);
+
+    return os_score_resolve(&sb);
 }

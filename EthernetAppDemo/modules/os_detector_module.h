@@ -18,4 +18,19 @@ typedef enum {
     OFP_TUDP,
 } OFP_PROBES_TYPE;
 
+typedef enum {
+    IPID_UNKNOWN = 0,
+    IPID_CONSTANT,
+    IPID_INCREMENTAL,
+    IPID_INCREMENTAL_LARGE,
+    IPID_RANDOM,
+    IPID_ZERO
+} ipid_pattern_t;
+
+typedef struct {
+    int windows_score;
+    int linux_score;
+    int ios_score;
+} os_scoreboard_t;
+
 int32_t os_scan(void* context, uint8_t* target_ip);
