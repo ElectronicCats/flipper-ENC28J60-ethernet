@@ -33,4 +33,19 @@ typedef struct {
     int ios_score;
 } os_scoreboard_t;
 
+typedef struct {
+    bool has_mss;
+    bool has_sack;
+    bool has_ws;
+    bool has_ts;
+    bool has_nop;
+
+    uint8_t order[16];
+    uint8_t count;
+
+    uint16_t mss_value;
+    uint8_t ws_value;
+
+} tcp_opts_t;
+
 int32_t os_scan(void* context, uint8_t* target_ip);
