@@ -5,13 +5,13 @@
 #include "../libraries/protocol_tools/ipv4.h"
 #include "../libraries/protocol_tools/arp.h"
 #include "../libraries/protocol_tools/ethernet_protocol.h"
-#include "tcp_module.h"
+#include "../modules/tcp_module.h"
 #include "../libraries/protocol_tools/icmp.h"
 #include "../modules/ping_module.h"
 #define OPTS_LEN     13
 #define OPTS_PROBES  6
 #define packet_count 20
-#define TCP_OPTS_MAX 10
+#define TCP_OPTS_MAX 20
 
 const char* os_names[] = {"WINDOWS", "LINUX", "IOS", "NO_DETECTED"};
 
@@ -28,6 +28,25 @@ static const char* ipid_pattern_str(ipid_pattern_t p) {
 
     case IPID_CONSTANT:
         return "CONSTANT";
+
+    default:
+        return "UNKNOWN";
+    }
+}
+
+static const char* seq_pattern_to_string(uint8_t pattern) {
+    switch(pattern) {
+    case 0:
+        return "CONSTANT";
+
+    case 1:
+        return "INCREMENTAL";
+
+    case 2:
+        return "RANDOM";
+
+    case 3:
+        return "LOW_VARIANCE";
 
     default:
         return "UNKNOWN";
@@ -87,10 +106,10 @@ static ipid_pattern_t detectar_patron_ipid(uint16_t* ids, int n) {
     int pequenos = 0;
     int grandes = 0;
 
+    if(n > 100) n = 100;
+
     for(int i = 0; i < n - 1; i++) {
         diffs[i] = ipid_diff(ids[i], ids[i + 1]);
-
-        if(n > 100) n = 100;
 
         if(diffs[i] > 0) positivos++;
 
@@ -119,6 +138,13 @@ static ipid_pattern_t detectar_patron_ipid(uint16_t* ids, int n) {
     return IPID_UNKNOWN;
 }
 
+typedef enum {
+    SEQ_UNKNOWN,
+    SEQ_CONSTANT,
+    SEQ_INCREMENTAL,
+    SEQ_RANDOM
+} seq_pattern_t;
+
 static uint8_t clasificar_ipid_por_patron(ipid_pattern_t pattern) {
     switch(pattern) {
     case IPID_ZERO:
@@ -136,6 +162,74 @@ static uint8_t clasificar_ipid_por_patron(ipid_pattern_t pattern) {
     default:
         return NO_DETECTED;
     }
+}
+
+static seq_pattern_t detectar_patron_seq(uint32_t* seq, int n) {
+    if(n < 4) return SEQ_UNKNOWN;
+
+    int32_t diffs[100];
+
+    for(int i = 0; i < n - 1; i++) {
+        diffs[i] = (int32_t)(seq[i + 1] - seq[i]);
+    }
+
+    double var = varianza(diffs, n - 1);
+
+    bool all_same = true;
+
+    for(int i = 1; i < n; i++) {
+        if(seq[i] != seq[0]) {
+            all_same = false;
+            break;
+        }
+    }
+
+    if(all_same) return SEQ_CONSTANT;
+
+    int small_steps = 0;
+
+    for(int i = 0; i < n - 1; i++) {
+        if(diffs[i] > 0 && diffs[i] < 100000) small_steps++;
+    }
+
+    if(small_steps > (n - 1) * 0.7 && var < 100000000) return SEQ_INCREMENTAL;
+
+    if(var > 1000000000) return SEQ_RANDOM;
+
+    return SEQ_UNKNOWN;
+}
+
+static uint8_t clasificar_seq(seq_pattern_t p) {
+    switch(p) {
+    case SEQ_CONSTANT:
+        return WINDOWS;
+
+    case SEQ_INCREMENTAL:
+        return LINUX;
+
+    case SEQ_RANDOM:
+        return IOS;
+
+    default:
+        return NO_DETECTED;
+    }
+}
+
+static uint8_t detectar_ts_rate(uint32_t* ts, int n) {
+    if(n < 4) return NO_DETECTED;
+
+    int32_t diffs[100];
+
+    for(int i = 0; i < n - 1; i++)
+        diffs[i] = ts[i + 1] - ts[i];
+
+    double var = varianza(diffs, n - 1);
+
+    if(var < 10000) return LINUX;
+
+    if(var > 1000000) return WINDOWS;
+
+    return NO_DETECTED;
 }
 
 void clasificar_window(uint16_t* win, int n, uint8_t* value_ptr) {
@@ -162,7 +256,9 @@ void clasificar_window(uint16_t* win, int n, uint8_t* value_ptr) {
     // Si el 70% o más coincide → patrón fuerte
     if(max_count >= (0.7 * n)) {
         // Clasificación por rangos (más robusto)
-        if(valor_dominante >= 64000) {
+        if(valor_dominante == 65535) {
+            *value_ptr = IOS;
+        } else if(valor_dominante >= 64000) {
             *value_ptr = WINDOWS;
         } else if(valor_dominante >= 5800 && valor_dominante <= 6000) {
             *value_ptr = LINUX;
@@ -240,6 +336,7 @@ static void parse_tcp_options(const uint8_t* tcp_start, uint8_t tcp_header_len, 
     memset(opts, 0, sizeof(tcp_opts_t));
 
     uint8_t opts_len = tcp_header_len - 20;
+    opts->options_length = opts_len;
 
     if(opts_len == 0) return;
 
@@ -249,7 +346,8 @@ static void parse_tcp_options(const uint8_t* tcp_start, uint8_t tcp_header_len, 
     while(i < opts_len) {
         uint8_t kind = ptr[i];
 
-        if(kind == 0) { // End of Option List
+        if(kind == 0) {
+            if(opts->count < TCP_OPTS_MAX) opts->order[opts->count++] = 0;
             break;
         }
 
@@ -270,27 +368,36 @@ static void parse_tcp_options(const uint8_t* tcp_start, uint8_t tcp_header_len, 
         case 2: // MSS
             opts->has_mss = true;
             opts->mss_value = (ptr[i + 2] << 8) | ptr[i + 3];
-            opts->order[opts->count++] = 2;
+            if(opts->count < TCP_OPTS_MAX) opts->order[opts->count++] = 2;
             break;
 
         case 3: // Window Scale
             opts->has_ws = true;
             opts->ws_value = ptr[i + 2];
-            opts->order[opts->count++] = 3;
+            if(opts->count < TCP_OPTS_MAX) opts->order[opts->count++] = 3;
             break;
 
         case 4: // SACK Permitted
             opts->has_sack = true;
-            opts->order[opts->count++] = 4;
+            if(opts->count < TCP_OPTS_MAX) opts->order[opts->count++] = 4;
+            break;
+
+        case 5: // SACK blocks
+            opts->has_sack = true;
+
+            if(opts->count < TCP_OPTS_MAX) opts->order[opts->count++] = 5;
+
             break;
 
         case 8: // Timestamp
             opts->has_ts = true;
-            opts->order[opts->count++] = 8;
-            break;
 
-        default:
-            if(opts->count < TCP_OPTS_MAX) opts->order[opts->count++] = kind;
+            opts->tsval = (ptr[i + 2] << 24) | (ptr[i + 3] << 16) | (ptr[i + 4] << 8) | ptr[i + 5];
+
+            opts->tsecr = (ptr[i + 6] << 24) | (ptr[i + 7] << 16) | (ptr[i + 8] << 8) | ptr[i + 9];
+
+            if(opts->count < TCP_OPTS_MAX) opts->order[opts->count++] = 8;
+
             break;
         }
 
@@ -301,26 +408,59 @@ static void parse_tcp_options(const uint8_t* tcp_start, uint8_t tcp_header_len, 
 static uint8_t clasificar_tcp_options(const tcp_opts_t* opts) {
     if(opts->count < 3) return NO_DETECTED;
 
-    /*
-    Firmas típicas SYN-ACK reales:
-
-    Linux común:
-    MSS(2) NOP(1) NOP(1) SACK(4) NOP(1) WS(3)
-
-    Windows común:
-    MSS(2) SACK(4) WS(3)
-    */
-
-    if(opts->order[0] == 2) {
-        /* Linux clásico */
-        if(opts->count >= 4 && opts->order[1] == 1 && opts->order[2] == 1 && opts->order[3] == 4) {
-            return LINUX;
-        }
-
-        /* Windows típico */
-        if(opts->count >= 3 && opts->order[1] == 4 && opts->order[2] == 3) {
+    /* ---- Firma Windows común ---- */
+    if(opts->count >= 4) {
+        if(opts->order[0] == 2 && opts->order[1] == 4 && opts->order[2] == 8 &&
+           opts->order[3] == 3) {
             return WINDOWS;
         }
+    }
+
+    /* ---- Firma Linux clásica ---- */
+    if(opts->count >= 7) {
+        if(opts->order[0] == 2 && // MSS
+           opts->order[1] == 1 && // NOP
+           opts->order[2] == 1 && // NOP
+           opts->order[3] == 4 && // SACK
+           opts->order[4] == 8 && // TS
+           opts->order[5] == 1 && // NOP
+           opts->order[6] == 3) // WS
+        {
+            return LINUX;
+        }
+    }
+
+    /* Apple / BSD */
+    if(opts->count >= 6 && opts->order[1] == 1 && opts->order[2] == 3 && opts->order[3] == 1 &&
+       opts->order[4] == 1 && opts->order[5] == 8) {
+        return IOS;
+    }
+
+    /* ---- heurística fallback ---- */
+
+    if(opts->has_mss && opts->has_ws && opts->has_ts && opts->has_sack) {
+        if(opts->ws_value == 8) return WINDOWS;
+
+        if(opts->ws_value == 7 || opts->ws_value == 6) return LINUX;
+    }
+
+    if(opts->has_mss && opts->has_ws && opts->has_ts) {
+        if(opts->ws_value == 6) return IOS;
+    }
+
+    /* ---- heurística por longitud de opciones ---- */
+
+    if(opts->options_length == 20 && opts->has_mss && opts->has_ws && opts->has_ts &&
+       opts->has_sack) {
+        if(opts->ws_value == 7) return LINUX;
+
+        if(opts->ws_value == 8) return WINDOWS;
+    }
+
+    /* ---- timestamp fuerte para iOS ---- */
+
+    if(opts->has_ts && opts->ws_value == 6) {
+        return IOS;
     }
 
     return NO_DETECTED;
@@ -357,7 +497,7 @@ static struct {
 /* TCP Window sizes. Numbering is the same as for prbOpts[] */
 uint16_t prbWindowSz[] = {1, 63, 4, 4, 16, 512, 3, 128, 256, 1024, 31337, 32768, 65535};
 
-uint8_t seq_act = OFP_UNSET;
+uint8_t seq_act = OFP_TSEQ;
 
 void ofp_tseq(App* app, uint8_t* target_ip);
 
@@ -372,47 +512,6 @@ void doSeqTests(App* app, uint8_t* target_ip) {
         break;
     }
 }
-
-/*void make_tseq_packet(
-    uint8_t* source_mac,
-    uint8_t* target_mac,
-    uint8_t* source_ip,
-    uint8_t* target_ip,
-    uint8_t* source_port,
-    uint8_t* target_port) {
-    set_tcp_header_tseq(
-        app->ethernet->tx_buffer + ETHERNET_HEADER_LEN + IP_HEADER_LEN,
-        app->ethernet->ip_address,
-        target_ip,
-        source_port + 1,
-        target_port,
-        sequence,
-        ack_number,
-        prbWindowSz[i],
-        0,
-        &prbOpts[i].len,
-        prbOpts[i].val,
-        &tcp_len);
-
-    set_ipv4_header(
-        app->ethernet->tx_buffer + ETHERNET_HEADER_LEN,
-        6, // Protocolo TCP
-        tcp_len,
-        app->ethernet->ip_address,
-        target_ip);
-
-    set_ethernet_header(app->ethernet->tx_buffer, app->ethernet->mac_address, target_mac, 0x0800);
-
-    //send_packet(app->ethernet, app->ethernet->tx_buffer, ETHERNET_HEADER_LEN + IP_HEADER_LEN + tcp_len);
-
-    printf("BUFFER: ");
-    for(uint16_t j = 0; j < (ETHERNET_HEADER_LEN + IP_HEADER_LEN + tcp_len); j++) {
-        printf(
-            "%02X%c",
-            app->ethernet->tx_buffer[j],
-            j == (ETHERNET_HEADER_LEN + IP_HEADER_LEN + tcp_len - 1) ? '\n' : ' ');
-    }
-}*/
 
 void ofp_tseq(App* app, uint8_t* target_ip) {
     printf("IMPRIMIR OPCIONES:\n");
@@ -467,7 +566,10 @@ void ofp_tseq(App* app, uint8_t* target_ip) {
 
         set_ethernet_header(app->ethernet->tx_buffer, source_mac, target_mac, 0x0800);
 
-        //send_packet(app->ethernet, app->ethernet->tx_buffer, ETHERNET_HEADER_LEN + IP_HEADER_LEN + tcp_len);
+        send_packet(
+            app->ethernet,
+            app->ethernet->tx_buffer,
+            ETHERNET_HEADER_LEN + IP_HEADER_LEN + tcp_len);
 
         printf("BUFFER: ");
         for(uint16_t j = 0; j < (ETHERNET_HEADER_LEN + IP_HEADER_LEN + tcp_len); j++) {
@@ -551,19 +653,16 @@ static OS_DETECTOR_OS os_score_resolve(os_scoreboard_t* sb) {
         return NO_DETECTED;
     }
 
-    printf("SCORING END.\n");
+    printf("//////////// SCORING END ////////////\n");
     return result;
 }
 
 int32_t os_scan(void* context, uint8_t* target_ip) {
-    printf("OS DETECTOR INITIALIZED:\n");
+    printf("////// OS DETECTOR INITIALIZED //////\n");
     printf("- Target IP: %u.%u.%u.%u\n", target_ip[0], target_ip[1], target_ip[2], target_ip[3]);
     os_scoreboard_t sb = {0};
     os_scoreboard_init(&sb);
     App* app = context;
-
-    // TSEQ unabled
-    seq_act = OFP_UNSET;
 
     uint8_t ttl = 0;
     uint32_t rtt = 0;
@@ -581,10 +680,13 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
 
     uint16_t ids[packet_count] = {0};
     uint16_t windows[packet_count] = {0};
+    uint32_t sequences[packet_count] = {0};
     bool respuestas[packet_count] = {0};
     uint16_t ids_an[packet_count] = {0};
 
     uint8_t target_mac[6] = {0};
+
+    uint32_t ts_vals[packet_count] = {0};
 
     arp_get_specific_mac(
         app->ethernet,
@@ -595,6 +697,9 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
             app->ip_gateway,
         app->ethernet->mac_address,
         target_mac);
+
+    seq_act = OFP_TSEQ;
+    doSeqTests(app, target_ip);
 
     uint32_t sequence = 1;
     uint32_t ack_number = 0;
@@ -622,7 +727,7 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
                 ack_number);
 
             last_time = furi_get_tick();
-            while(furi_get_tick() - last_time < 300) {
+            while(furi_get_tick() - last_time < 800) {
                 uint16_t packen_len = 0;
 
                 packen_len = receive_packet(app->ethernet, app->ethernet->rx_buffer, 1500);
@@ -632,10 +737,10 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
                         arp_reply_requested(
                             app->ethernet, app->ethernet->rx_buffer, app->ethernet->ip_address);
                     } else if(is_tcp(app->ethernet->rx_buffer)) {
-                        if((*(uint16_t*)(app->ethernet->mac_address + 4) ==
-                            *(uint16_t*)(app->ethernet->rx_buffer + 4)) &&
-                           (*(uint32_t*)app->ethernet->mac_address ==
-                            *(uint32_t*)app->ethernet->rx_buffer)) {
+                        if(memcmp(app->ethernet->rx_buffer, app->ethernet->mac_address, 6) != 0) {
+                            continue;
+                        }
+                        {
                             ipv4_header = ipv4_get_header(app->ethernet->rx_buffer);
 
                             if(memcmp(ipv4_header.source_ip, target_ip, 4) != 0) {
@@ -644,13 +749,24 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
 
                             tcp_header = tcp_get_header(app->ethernet->rx_buffer);
 
+                            uint8_t flags_debug = ((uint8_t*)&tcp_header)[13];
+
+                            uint16_t win_debug;
+                            bytes_to_uint(&win_debug, tcp_header.window_size, sizeof(uint16_t));
+
+                            printf(
+                                "TCP RESP -> FLAGS:%02X TTL:%u WIN:%u\n",
+                                flags_debug,
+                                ipv4_header.ttl,
+                                win_debug);
+
                             /* ---- VALIDACIÓN DE FLAGS AQUÍ ---- */
                             uint8_t flags = ((uint8_t*)&tcp_header)[13];
 
                             bool is_synack = (flags & 0x12) == 0x12; // SYN + ACK
                             bool is_rstack = (flags & 0x14) == 0x14; // RST + ACK
 
-                            if(is_rstack && ttl_tcp == 128) {
+                            if(is_rstack && ipv4_header.ttl == 128) {
                                 os_score_add(&sb, WINDOWS, 2);
                             }
 
@@ -700,13 +816,37 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
                             if(is_synack) {
                                 uint8_t tcp_header_len = (((uint8_t*)&tcp_header)[12] >> 4) * 4;
 
-                                parse_tcp_options(
-                                    (uint8_t*)&tcp_header, tcp_header_len, &tcp_opts);
+                                uint16_t src_port;
+                                bytes_to_uint(&src_port, tcp_header.source_port, sizeof(uint16_t));
 
-                                printf("[TCP OPTS] Count: %u\n", tcp_opts.count);
+                                uint16_t dst_port;
+                                bytes_to_uint(&dst_port, tcp_header.dest_port, sizeof(uint16_t));
+
+                                uint32_t server_seq;
+                                bytes_to_uint(&server_seq, tcp_header.sequence, sizeof(uint32_t));
+                                sequences[attemp] = server_seq;
+
+                                parse_tcp_options(
+                                    app->ethernet->rx_buffer + ETHERNET_HEADER_LEN + IP_HEADER_LEN,
+                                    tcp_header_len,
+                                    &tcp_opts_vec[attemp]);
+
+                                printf("[TCP OPTS] Count: %u\n", tcp_opts_vec[attemp].count);
+                                printf(
+                                    "[TCP OPTS] LEN: %u\n", tcp_opts_vec[attemp].options_length);
+
+                                if(tcp_opts_vec[attemp].has_ts) {
+                                    ts_vals[attemp] = tcp_opts_vec[attemp].tsval;
+
+                                    printf(
+                                        "[TCP OPTS] TSval:%lu TSecr:%lu\n",
+                                        tcp_opts_vec[attemp].tsval,
+                                        tcp_opts_vec[attemp].tsecr);
+                                }
+
                                 printf("[TCP OPTS] Order: ");
-                                for(uint8_t k = 0; k < tcp_opts.count; k++) {
-                                    printf("%u ", tcp_opts.order[k]);
+                                for(uint8_t k = 0; k < tcp_opts_vec[attemp].count; k++) {
+                                    printf("%u ", tcp_opts_vec[attemp].order[k]);
                                 }
                                 printf("\n");
                             }
@@ -716,6 +856,20 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
 
                             bytes_to_uint(&windows_size, tcp_header.window_size, sizeof(uint16_t));
                             bytes_to_uint(&ipid, ipv4_header.identification, sizeof(uint16_t));
+
+                            /* Heurística fuerte Linux */
+
+                            if(windows_size == 29200 && ipv4_header.ttl <= 64) {
+                                os_score_add(&sb, LINUX, 12);
+                                printf("[HEURISTIC] Linux window signature (29200)\n");
+                            }
+
+                            if(tcp_opts_vec[attemp].has_ts && tcp_opts_vec[attemp].has_ws &&
+                               tcp_opts_vec[attemp].ws_value == 6 && windows_size == 65535) {
+                                os_score_add(&sb, IOS, 6);
+
+                                printf("[HEURISTIC] Apple/BSD TCP signature\n");
+                            }
 
                             /* ---- CONTROL DE DUPLICADOS ---- */
                             bool duplicated = false;
@@ -740,8 +894,6 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
                             ids[attemp] = ipid;
                             windows[attemp] = windows_size;
                             respuestas[attemp] = true;
-
-                            tcp_opts_vec[attemp] = tcp_opts;
 
                             uint8_t count_valid = 0;
                             for(uint8_t i = 0; i <= attemp; i++) {
@@ -795,7 +947,6 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
 
     if(sum_true || icmp_valid) {
         /* ---------- TTL SCORING ---------- */
-
         if(ttl_valid) {
             /* Estimación de TTL inicial */
             if(ttl_tcp <= 64) {
@@ -806,33 +957,24 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
                 ttl_guess = 128;
             }
 
-            else {
-                ttl_guess = 255;
-            }
-
             ttl_weight = 10; // TCP pesa más
         } else if(icmp_valid) {
             if(ttl_icmp <= 64)
                 ttl_guess = 64;
             else if(ttl_icmp <= 128)
                 ttl_guess = 128;
-            else
-                ttl_guess = 255;
 
             ttl_weight = 10; // ICMP pesa menos
         }
 
         /* Asignación de puntuación */
         if(ttl_guess == 64) {
-            os_score_add(&sb, LINUX, ttl_weight);
+            os_score_add(&sb, LINUX, ttl_weight - 3);
+            os_score_add(&sb, IOS, 3);
         }
 
         else if(ttl_guess == 128) {
             os_score_add(&sb, WINDOWS, ttl_weight);
-        }
-
-        else if(ttl_guess == 255) {
-            os_score_add(&sb, IOS, ttl_weight);
         }
 
         /* ---------- IPID SCORING ---------- */
@@ -854,6 +996,13 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
             case IOS:
                 sb.ios_score += 3;
                 break;
+            }
+
+            /* Heurística Apple/BSD adicional */
+
+            if(pattern == IPID_RANDOM && ttl_guess == 64) {
+                os_score_add(&sb, IOS, 8);
+                printf("[HEURISTIC] Apple/BSD IPID + TTL signature\n");
             }
 
             /* Calcular varianza manual para peso dinámico */
@@ -891,9 +1040,13 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
                 break;
 
             case IPID_RANDOM:
-                if(var > 500000) {
-                    os_score_add(&sb, IOS, 15);
+
+                if(ttl_guess == 64 && var > 500000) {
+                    os_score_add(&sb, IOS, 18);
+                } else {
+                    os_score_add(&sb, IOS, 10);
                 }
+
                 break;
 
             case IPID_CONSTANT:
@@ -918,12 +1071,14 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
 
         int linux_opt = 0;
         int windows_opt = 0;
+        int ios_opt = 0;
 
         for(uint8_t i = 0; i < sum_true; i++) {
             uint8_t guess = clasificar_tcp_options(&tcp_opts_vec[i]);
 
             if(guess == LINUX) linux_opt++;
             if(guess == WINDOWS) windows_opt++;
+            if(guess == IOS) ios_opt++;
         }
 
         if(linux_opt >= 3) {
@@ -936,6 +1091,40 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
             printf("[TCP OPTS] Majority Windows signature\n");
         }
 
+        if(ios_opt >= 3) {
+            os_score_add(&sb, IOS, 20);
+            printf("[TCP OPTS] Majority Apple/BSD signature\n");
+        }
+
+        /* ---------- TCP SEQUENCE SCORING ---------- */
+
+        if(sum_true >= 4) {
+            seq_pattern_t seq_pattern = detectar_patron_seq(sequences, sum_true);
+
+            printf("[SEQ] Pattern: %d (%s)\n", seq_pattern, seq_pattern_to_string(seq_pattern));
+
+            uint8_t seq_os = clasificar_seq(seq_pattern);
+
+            if(seq_os == WINDOWS)
+                os_score_add(&sb, WINDOWS, 10);
+
+            else if(seq_os == LINUX)
+                os_score_add(&sb, LINUX, 10);
+
+            else if(seq_os == IOS)
+                os_score_add(&sb, IOS, 10);
+        }
+
+        /* ---------- TCP TIMESTAMP SCORING ---------- */
+
+        uint8_t ts_guess = detectar_ts_rate(ts_vals, sum_true);
+
+        if(ts_guess == LINUX) os_score_add(&sb, LINUX, 5);
+
+        if(ts_guess == WINDOWS) os_score_add(&sb, WINDOWS, 5);
+
+        if(ts_guess == IOS) os_score_add(&sb, IOS, 5);
+
         /* ---------- CONSISTENCY BONUS ---------- */
 
         if(linux_opt >= 5) {
@@ -943,6 +1132,9 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
         }
         if(windows_opt >= 5) {
             os_score_add(&sb, WINDOWS, 10);
+        }
+        if(ios_opt >= 5) {
+            os_score_add(&sb, IOS, 10);
         }
 
         /* ---------- WINDOW SCORING ---------- */
@@ -953,20 +1145,27 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
             os_score_add(&sb, LINUX, 10);
         else if(value_win == WINDOWS)
             os_score_add(&sb, WINDOWS, 10);
+        else if(value_win == IOS)
+            os_score_add(&sb, IOS, 10);
     }
 
     /* ---------- CROSS SIGNAL CONSISTENCY ---------- */
 
-    if(ttl_guess == 64 && sb.linux_score > sb.windows_score) os_score_add(&sb, LINUX, 5);
+    if(ttl_guess == 64 && sb.linux_score > sb.windows_score) {
+        os_score_add(&sb, LINUX, 5);
+    }
 
-    if(ttl_guess == 128 && sb.windows_score > sb.linux_score) os_score_add(&sb, WINDOWS, 5);
+    if(ttl_guess == 128 && sb.windows_score > sb.linux_score) {
+        os_score_add(&sb, WINDOWS, 5);
+    }
 
-    if(ttl_guess == 255 && sb.ios_score > sb.linux_score) os_score_add(&sb, IOS, 5);
+    if(ttl_guess == 64 && sb.ios_score > sb.windows_score && sb.ios_score > sb.linux_score) {
+        os_score_add(&sb, IOS, 5);
+    }
 
     printf("\n[SCORE]\n");
     printf("WINDOWS: %d\n", sb.windows_score);
     printf("LINUX:   %d\n", sb.linux_score);
     printf("IOS:     %d\n\n", sb.ios_score);
-
     return os_score_resolve(&sb);
 }

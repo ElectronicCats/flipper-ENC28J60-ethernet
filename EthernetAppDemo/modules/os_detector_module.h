@@ -40,6 +40,10 @@ typedef struct {
     bool has_ts;
     bool has_nop;
 
+    uint8_t options_length; // longitud total de opciones TCP
+    uint32_t tsval; // timestamp value
+    uint32_t tsecr; // timestamp echo reply
+
     uint8_t order[16];
     uint8_t count;
 
