@@ -709,12 +709,21 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
     uint8_t attemp = 0;
     ipv4_header_t ipv4_header;
     tcp_header_t tcp_header;
-    uint16_t probe_ports[] = {80, 443};
-    uint8_t probe_port_count = 2;
+    uint16_t probe_ports[] = {22, 80, 135, 139, 443, 6668, 8000, 49152, 62078};
+    uint8_t probe_port_count = 8;
+
+    /* Estado de puertos */
+    bool port_closed[8] = {false};
+
     while(attemp != packet_count) {
         memset(app->ethernet->rx_buffer, 0, 1500);
 
         for(uint8_t p = 0; p < probe_port_count; p++) {
+            /* Saltar puertos ya descartados */
+            if(port_closed[p]) {
+                continue;
+            }
+
             tcp_send_syn(
                 app->ethernet,
                 app->ethernet->mac_address,
@@ -766,12 +775,32 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
                             bool is_synack = (flags & 0x12) == 0x12; // SYN + ACK
                             bool is_rstack = (flags & 0x14) == 0x14; // RST + ACK
 
+                            /* ---- PUERTO CERRADO (RST+ACK) ---- */
+
                             if(is_rstack && ipv4_header.ttl == 128) {
                                 os_score_add(&sb, WINDOWS, 2);
                             }
 
-                            if(!(is_synack || is_rstack)) {
-                                continue; // ignora paquetes que no sean respuesta válida al SYN
+                            if(is_rstack) {
+                                uint16_t src_port;
+                                bytes_to_uint(&src_port, tcp_header.source_port, sizeof(uint16_t));
+
+                                printf("[PORT CLOSED] %u -> RST-ACK\n", src_port);
+
+                                /* marcar puerto como cerrado */
+                                for(uint8_t k = 0; k < probe_port_count; k++) {
+                                    if(probe_ports[k] == src_port) {
+                                        port_closed[k] = true;
+                                        break;
+                                    }
+                                }
+
+                                /* saltar al siguiente puerto */
+                                break;
+                            }
+
+                            if(!is_synack) {
+                                continue;
                             }
 
                             uint32_t ack_recv;
@@ -920,6 +949,21 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
                 }
             }
         }
+
+        bool all_closed = true;
+
+        for(uint8_t i = 0; i < probe_port_count; i++) {
+            if(!port_closed[i]) {
+                all_closed = false;
+                break;
+            }
+        }
+
+        if(all_closed) {
+            printf("[SCAN] All probe ports closed\n");
+            break;
+        }
+
         attemp++;
     }
 
