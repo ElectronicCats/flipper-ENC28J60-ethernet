@@ -113,7 +113,7 @@ void app_scene_os_detector_on_enter(void* context) {
     variable_item_list_set_enter_callback(app->varList, variable_list_os_detector_callback, app);
 
     scene_manager_set_scene_state(
-        app->scene_manager, app_scene_ports_scanner_option, PORTS_SCANNER_SCENE_MENU);
+        app->scene_manager, app_scene_os_detector_option, PORTS_SCANNER_SCENE_MENU);
 
     view_dispatcher_switch_to_view(app->view_dispatcher, VarListView);
 }
