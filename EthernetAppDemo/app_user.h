@@ -28,6 +28,9 @@
 #include "modules/capture_module.h"
 #include "modules/analysis_module.h"
 #include "modules/ping_module.h"
+#include "modules/os_detector_module.h"
+
+#define MAX_OS_SCAN_PORTS 16
 
 #include "libraries/functions/functions.h"
 
@@ -35,7 +38,7 @@
 
 // Version of the app
 #define APP_NAME    "ETHERNET APP"
-#define APP_VERSION "v1.1.1.1"
+#define APP_VERSION "v1.1.1.0"
 
 // Path for the files
 #define PATHAPP    "apps_data/ethernet" // Path
@@ -99,6 +102,11 @@ typedef struct {
 
     FuriThread* thread; // For the threads
     FuriThread* thread_alternative; // For the threads
+
+    port_result_t ports[MAX_OS_SCAN_PORTS];
+    uint8_t ports_count;
+    bool os_guess;
+    uint16_t src_port;
 } App;
 
 // Views in the App

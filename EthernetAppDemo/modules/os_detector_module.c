@@ -10,9 +10,9 @@
 #include "../modules/ping_module.h"
 #define OPTS_LEN     13
 #define OPTS_PROBES  6
-#define packet_count 20
-#define TCP_OPTS_MAX 20
-#define MAX_RETRIES  20
+#define packet_count 21
+#define TCP_OPTS_MAX 21
+#define MAX_RETRIES  21
 
 const char* os_names[] = {"WINDOWS", "LINUX", "IOS", "NO_DETECTED"};
 
@@ -670,11 +670,11 @@ int get_port_index(uint16_t port, uint16_t* probe_ports, uint8_t count) {
 }
 
 int32_t os_scan(void* context, uint8_t* target_ip) {
+    App* app = context;
     printf("////// OS DETECTOR INITIALIZED //////\n");
     printf("- Target IP: %u.%u.%u.%u\n", target_ip[0], target_ip[1], target_ip[2], target_ip[3]);
     os_scoreboard_t sb = {0};
     os_scoreboard_init(&sb);
-    App* app = context;
 
     uint8_t ttl = 0;
     uint32_t rtt = 0;
@@ -705,9 +705,9 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
 
     uint16_t src_port = 40000 + (furi_hal_random_get() % 20000);
     uint16_t current_src_port = src_port;
+    app->src_port = src_port;
     uint16_t resp_src_port;
 
-    uint32_t sequence = rand();
     uint32_t ack_number = 0;
 
     arp_get_specific_mac(
@@ -734,15 +734,28 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
     bool port_responded[11] = {false};
     bool port_filtered[11] = {false};
     uint8_t port_retries[11] = {0};
+    uint32_t seq_per_port[11];
+
+    port_result_t port_results[probe_port_count];
+    for(uint8_t i = 0; i < probe_port_count; i++) {
+        port_results[i].port = probe_ports[i];
+        port_results[i].state = PORT_UNKNOWN;
+        port_results[i].last_sequence = 0;
+        port_results[i].window_size = 0;
+        port_results[i].ttl = 0;
+    }
 
     while(attemp != packet_count) {
         memset(app->ethernet->rx_buffer, 0, 1500);
 
         for(uint8_t p = 0; p < probe_port_count; p++) {
-            /* Saltar puertos ya descartados */
             if(port_closed[p] || port_responded[p] || port_filtered[p]) {
                 continue;
             }
+
+            uint32_t sequence = furi_hal_random_get() ^ (furi_get_tick() << 16) ^ (p * 1000);
+
+            seq_per_port[p] = sequence;
 
             tcp_send_syn(
                 app->ethernet,
@@ -754,10 +767,12 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
                 probe_ports[p],
                 sequence,
                 ack_number);
+
+            furi_delay_ms(5 + (furi_hal_random_get() % 10));
         }
 
         uint32_t start_time = furi_get_tick();
-        while(furi_get_tick() - start_time < 300) {
+        while(furi_get_tick() - start_time < 800) {
             uint16_t packen_len = 0;
 
             packen_len = receive_packet(app->ethernet, app->ethernet->rx_buffer, 1500);
@@ -795,6 +810,7 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
 
                         bool is_synack = (flags & 0x12) == 0x12; // SYN + ACK
                         bool is_rstack = (flags & 0x14) == 0x14; // RST + ACK
+                        bool is_rst = (flags & 0x04) == 0x04; // RST
 
                         /* ---- PUERTO CERRADO (RST+ACK) ---- */
 
@@ -804,7 +820,7 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
 
                         uint16_t resp_port;
 
-                        if(is_rstack) {
+                        if(is_rstack || is_rst) {
                             bytes_to_uint(&resp_port, tcp_header.source_port, sizeof(uint16_t));
 
                             printf("[PORT CLOSED] %u -> RST-ACK\n", resp_port);
@@ -824,12 +840,6 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
                             continue;
                         }
 
-                        uint32_t ack_recv;
-                        bytes_to_uint(&ack_recv, tcp_header.ack_number, sizeof(uint32_t));
-
-                        if(ack_recv != (sequence + 1)) {
-                            continue; // no es respuesta a nuestro SYN
-                        }
                         /* ---- VALIDACIÓN PUERTO DESTINO (NUESTRO 5005) ---- */
 
                         bytes_to_uint(&dst_port, tcp_header.dest_port, sizeof(uint16_t));
@@ -848,10 +858,9 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
                             continue; // puerto que no estamos escaneando
                         }
 
-                        if(port_responded[port_idx]) {
-                            continue;
-                        }
+                        uint32_t ack_recv;
 
+                        printf(">>> DEBUG: probe packet received <<<\n");
                         printf("Source Port: %u\n", resp_src_port);
                         printf("Server Port: %u\n", src_port);
                         printf("Dest Port (ours): %u\n", dst_port);
@@ -864,6 +873,34 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
                         printf(")\n");
 
                         printf("ACK Number: %lu\n", ack_recv);
+
+                        if(port_idx >= 0) {
+                            port_results[port_idx].last_sequence = ack_recv;
+                            port_results[port_idx].window_size = win_debug;
+                            port_results[port_idx].ttl = ipv4_header.ttl;
+
+                            if(is_rstack || is_rst) {
+                                port_results[port_idx].state = PORT_CLOSED;
+                                port_closed[port_idx] = true;
+                                port_retries[port_idx] = 0;
+                            } else if(is_synack) {
+                                port_results[port_idx].state = PORT_OPEN;
+                                port_responded[port_idx] = true;
+                            } else {
+                                port_results[port_idx].state = PORT_FILTERED;
+                                port_filtered[port_idx] = true;
+                            }
+                        }
+
+                        bytes_to_uint(&ack_recv, tcp_header.ack_number, sizeof(uint32_t));
+
+                        if(ack_recv != (seq_per_port[port_idx] + 1)) {
+                            continue;
+                        }
+
+                        if(port_responded[port_idx]) {
+                            continue;
+                        }
 
                         ttl_tcp = ipv4_header.ttl;
                         ttl_valid = true;
@@ -1000,9 +1037,78 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
 
             printf("[RETRY] Port %u -> attempt %u\n", probe_ports[p], port_retries[p]);
 
+            uint32_t seq = furi_hal_random_get();
+
+            tcp_send_syn(
+                app->ethernet,
+                app->ethernet->mac_address,
+                app->ethernet->ip_address,
+                target_mac,
+                target_ip,
+                src_port,
+                probe_ports[p],
+                seq,
+                0);
+
+            if(port_retries[p] > 0 && (port_retries[p] % 3) == 0) {
+                uint32_t seq = furi_hal_random_get();
+
+                tcp_send_null_probe(
+                    app->ethernet,
+                    app->ethernet->mac_address,
+                    app->ethernet->ip_address,
+                    target_mac,
+                    target_ip,
+                    src_port,
+                    probe_ports[p],
+                    seq);
+
+                furi_delay_ms(3 + (furi_hal_random_get() % 5));
+
+                tcp_send_fin_probe(
+                    app->ethernet,
+                    app->ethernet->mac_address,
+                    app->ethernet->ip_address,
+                    target_mac,
+                    target_ip,
+                    src_port,
+                    probe_ports[p],
+                    seq + 1);
+
+                furi_delay_ms(3 + (furi_hal_random_get() % 5));
+
+                tcp_send_xmas_probe(
+                    app->ethernet,
+                    app->ethernet->mac_address,
+                    app->ethernet->ip_address,
+                    target_mac,
+                    target_ip,
+                    src_port,
+                    probe_ports[p],
+                    seq + 2);
+
+                furi_delay_ms(3 + (furi_hal_random_get() % 5));
+
+                tcp_send_ack_probe(
+                    app->ethernet,
+                    app->ethernet->mac_address,
+                    app->ethernet->ip_address,
+                    target_mac,
+                    target_ip,
+                    src_port,
+                    probe_ports[p],
+                    seq + 3);
+
+                furi_delay_ms(3 + (furi_hal_random_get() % 5));
+
+                printf("[ADV PROBE] %u -> NULL FIN XMAS ACK\n", probe_ports[p]);
+            }
+
             if(port_retries[p] >= MAX_RETRIES) {
                 continue;
             }
+
+            furi_delay_ms(20 + (furi_hal_random_get() % 30));
         }
 
         bool all_done = true;
@@ -1032,6 +1138,19 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
         }
 
         printf("[FILTER] Total filtered ports: %u\n", filtered_count);
+    }
+
+    for(uint8_t i = 0; i < probe_port_count; i++) {
+        printf(
+            "Port %u -> State: %s, TTL: %u, Window: %u, Seq: %lu\n",
+            port_results[i].port,
+            port_results[i].state == PORT_OPEN     ? "OPEN" :
+            port_results[i].state == PORT_CLOSED   ? "CLOSED" :
+            port_results[i].state == PORT_FILTERED ? "FILTERED" :
+                                                     "UNKNOWN",
+            port_results[i].ttl,
+            port_results[i].window_size,
+            port_results[i].last_sequence);
     }
 
     printf("[OS] ICMP probe started\n");
@@ -1449,9 +1568,59 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
         os_score_add(&sb, IOS, 5);
     }
 
+    app->ports_count = probe_port_count;
+
+    for(uint8_t i = 0; i < probe_port_count; i++) {
+        app->ports[i] = port_results[i];
+    }
+
     printf("\n[SCORE]\n");
     printf("WINDOWS: %d\n", sb.windows_score);
     printf("LINUX:   %d\n", sb.linux_score);
     printf("IOS:     %d\n\n", sb.ios_score);
+
+    /* ---------- SCORE ANALYSIS ---------- */
+
+    int best = sb.windows_score;
+    int second = sb.linux_score;
+    uint8_t result = WINDOWS;
+
+    if(sb.linux_score > best) {
+        second = best;
+        best = sb.linux_score;
+        result = LINUX;
+    } else {
+        second = sb.linux_score;
+    }
+
+    if(sb.ios_score > best) {
+        second = best;
+        best = sb.ios_score;
+        result = IOS;
+    } else if(sb.ios_score > second) {
+        second = sb.ios_score;
+    }
+
+    /* ---------- DETECTION STRENGTH ---------- */
+
+#define STRONG_OS_THRESHOLD 25
+#define GUESS_OS_THRESHOLD  10
+
+    if(best >= STRONG_OS_THRESHOLD) {
+        app->os_guess = false;
+        return result;
+
+    }
+
+    else if(best >= GUESS_OS_THRESHOLD) {
+        app->os_guess = true;
+        return result;
+
+    }
+
+    else {
+        app->os_guess = false;
+        return NO_DETECTED;
+    }
     return os_score_resolve(&sb);
 }

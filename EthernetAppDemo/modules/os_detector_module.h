@@ -52,4 +52,19 @@ typedef struct {
 
 } tcp_opts_t;
 
+typedef enum {
+    PORT_UNKNOWN = 0,
+    PORT_OPEN,
+    PORT_CLOSED,
+    PORT_FILTERED
+} port_state_t;
+
+typedef struct {
+    uint16_t port;
+    port_state_t state;
+    uint32_t last_sequence;
+    uint16_t window_size;
+    uint8_t ttl;
+} port_result_t;
+
 int32_t os_scan(void* context, uint8_t* target_ip);

@@ -17,11 +17,6 @@ uint8_t target_port_bytes[2] = {0x00, 0x50};
 uint8_t range_port_bytes[2] = {0x00, 0x01};
 
 typedef enum {
-    PORT_OPEN,
-    PORT_CLOSED,
-} PORTS_SCANNER_STATE;
-
-typedef enum {
     START,
     TARGET_IP,
     TARGET_PORT,

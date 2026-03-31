@@ -58,7 +58,64 @@ void variable_list_os_detector_callback(void* context, uint32_t index) {
             furi_thread_join(app->thread_alternative);
 
             uint32_t value = furi_thread_get_return_code(app->thread_alternative);
-            draw_text(app, os_texts[value]);
+
+            furi_string_reset(app->text);
+
+            furi_string_cat_printf(app->text, "OS DETECTOR RESULT:\n\n");
+
+            furi_string_cat_printf(
+                app->text,
+                "Target: %u.%u.%u.%u\n\n",
+                target_ip[0],
+                target_ip[1],
+                target_ip[2],
+                target_ip[3]);
+
+            if(value == NO_DETECTED) {
+                furi_string_cat_printf(app->text, "*OS NOT DETECTED*\n");
+
+            } else if(app->os_guess) {
+                furi_string_cat_printf(app->text, "OS Guessed:%s\n", os_texts[value]);
+
+            } else {
+                furi_string_cat_printf(app->text, "OS Detected:%s\n", os_texts[value]);
+            }
+
+            furi_string_cat_printf(app->text, "\nBase Source Port:\n%u\n", app->src_port);
+
+            furi_string_cat_printf(app->text, "\nPorts Scanned:\n");
+
+            for(uint8_t i = 0; i < app->ports_count; i++) {
+                const char* state = "UNKNOWN";
+
+                switch(app->ports[i].state) {
+                case PORT_OPEN:
+                    state = "OPEN";
+                    break;
+
+                case PORT_CLOSED:
+                    state = "CLOSED";
+                    break;
+
+                case PORT_FILTERED:
+                    state = "FILTERED";
+                    break;
+
+                case PORT_UNKNOWN:
+                default:
+                    state = "UNKNOWN";
+                    break;
+                }
+
+                furi_string_cat_printf(app->text, "%u : %s\n", app->ports[i].port, state);
+            }
+
+            widget_reset(app->widget);
+
+            widget_add_text_scroll_element(
+                app->widget, 0, 0, 128, 64, furi_string_get_cstr(app->text));
+
+            view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
 
             furi_thread_free(app->thread_alternative);
 
