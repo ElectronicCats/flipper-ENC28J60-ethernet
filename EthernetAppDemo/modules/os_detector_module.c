@@ -10,9 +10,9 @@
 #include "../modules/ping_module.h"
 #define OPTS_LEN     13
 #define OPTS_PROBES  6
-#define packet_count 21
-#define TCP_OPTS_MAX 21
-#define MAX_RETRIES  21
+#define packet_count 9
+#define TCP_OPTS_MAX 9
+#define MAX_RETRIES  9
 
 const char* os_names[] = {"WINDOWS", "LINUX", "IOS", "NO_DETECTED"};
 
@@ -515,12 +515,9 @@ void doSeqTests(App* app, uint8_t* target_ip) {
 }
 
 void ofp_tseq(App* app, uint8_t* target_ip) {
-    printf("IMPRIMIR OPCIONES:\n");
     for(uint8_t i = 0; i < OPTS_LEN; i++) {
-        printf("OPTIONS: %u: %u -> %u ", i, prbOpts[i].len, prbWindowSz[i]);
-        for(uint8_t j = 0; j < prbOpts[i].len; j++) {
-            printf("%02X%c", prbOpts[i].val[j], j == (prbOpts[i].len - 1) ? '\n' : ' ');
-        }
+        for(uint8_t j = 0; j < prbOpts[i].len; j++)
+            ;
     }
 
     UNUSED(target_ip);
@@ -543,8 +540,6 @@ void ofp_tseq(App* app, uint8_t* target_ip) {
     uint16_t tcp_len = 0;
 
     for(uint8_t i = 0; i < OPTS_PROBES; i++) {
-        printf("No. SEQ: %lu -> %04lx\n", sequence + i, sequence + i);
-
         set_tcp_header_tseq(
             app->ethernet->tx_buffer + ETHERNET_HEADER_LEN + IP_HEADER_LEN,
             source_ip,
@@ -576,13 +571,8 @@ void ofp_tseq(App* app, uint8_t* target_ip) {
             app->ethernet->tx_buffer,
             ETHERNET_HEADER_LEN + IP_HEADER_LEN + tcp_len);
 
-        printf("BUFFER: ");
-        for(uint16_t j = 0; j < (ETHERNET_HEADER_LEN + IP_HEADER_LEN + tcp_len); j++) {
-            printf(
-                "%02x%c",
-                app->ethernet->tx_buffer[j],
-                j == (ETHERNET_HEADER_LEN + IP_HEADER_LEN + tcp_len - 1) ? '\n' : ' ');
-        }
+        for(uint16_t j = 0; j < (ETHERNET_HEADER_LEN + IP_HEADER_LEN + tcp_len); j++)
+            ;
 
         uint32_t sequences_vector[6] = {0};
         uint16_t len_receive = receive_packet(app->ethernet, app->ethernet->rx_buffer, 1500);
@@ -617,10 +607,6 @@ static void os_score_add(os_scoreboard_t* sb, OS_DETECTOR_OS os, int weight) {
 }
 
 static OS_DETECTOR_OS os_score_resolve(os_scoreboard_t* sb) {
-    printf("Scoring Feedback\n");
-
-    printf("Final Scores -> W:%d L:%d I:%d\n", sb->windows_score, sb->linux_score, sb->ios_score);
-
     int max = sb->windows_score;
     OS_DETECTOR_OS result = WINDOWS;
 
@@ -637,11 +623,7 @@ static OS_DETECTOR_OS os_score_resolve(os_scoreboard_t* sb) {
         result = IOS;
     }
 
-    printf("Max score: %d\n", max);
-    printf("Proposed result: %s\n", os_names[result]);
-
     if(sb->windows_score == sb->linux_score && sb->linux_score == sb->ios_score) {
-        printf("All scores equal -> NO_DETECTED\n");
         return NO_DETECTED;
     }
 
@@ -649,16 +631,13 @@ static OS_DETECTOR_OS os_score_resolve(os_scoreboard_t* sb) {
     if((result == WINDOWS && sb->windows_score == sb->linux_score) ||
        (result == LINUX && sb->linux_score == sb->ios_score) ||
        (result == WINDOWS && sb->windows_score == sb->ios_score)) {
-        printf("Tie detected -> NO_DETECTED\n");
         return NO_DETECTED;
     }
 
     if(max < 25) {
-        printf("Below confidence threshold (5) -> NO_DETECTED\n");
         return NO_DETECTED;
     }
 
-    printf("//////////// SCORING END ////////////\n");
     return result;
 }
 
@@ -671,8 +650,6 @@ int get_port_index(uint16_t port, uint16_t* probe_ports, uint8_t count) {
 
 int32_t os_scan(void* context, uint8_t* target_ip) {
     App* app = context;
-    printf("////// OS DETECTOR INITIALIZED //////\n");
-    printf("- Target IP: %u.%u.%u.%u\n", target_ip[0], target_ip[1], target_ip[2], target_ip[3]);
     os_scoreboard_t sb = {0};
     os_scoreboard_init(&sb);
 
@@ -794,16 +771,8 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
 
                         tcp_header = tcp_get_header(app->ethernet->rx_buffer);
 
-                        uint8_t flags_debug = ((uint8_t*)&tcp_header)[13];
-
                         uint16_t win_debug;
                         bytes_to_uint(&win_debug, tcp_header.window_size, sizeof(uint16_t));
-
-                        printf(
-                            "TCP RESP -> FLAGS:%02X TTL:%u WIN:%u\n",
-                            flags_debug,
-                            ipv4_header.ttl,
-                            win_debug);
 
                         /* ---- VALIDACIÓN DE FLAGS AQUÍ ---- */
                         uint8_t flags = ((uint8_t*)&tcp_header)[13];
@@ -822,8 +791,6 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
 
                         if(is_rstack || is_rst) {
                             bytes_to_uint(&resp_port, tcp_header.source_port, sizeof(uint16_t));
-
-                            printf("[PORT CLOSED] %u -> RST-ACK\n", resp_port);
 
                             for(uint8_t k = 0; k < probe_port_count; k++) {
                                 if(probe_ports[k] == resp_port) {
@@ -850,8 +817,6 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
 
                         bytes_to_uint(&resp_src_port, tcp_header.source_port, sizeof(uint16_t));
 
-                        printf("\n[TCP SYN RESPONSE]\n");
-
                         int port_idx =
                             get_port_index(resp_src_port, probe_ports, probe_port_count);
                         if(port_idx < 0) {
@@ -859,20 +824,6 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
                         }
 
                         uint32_t ack_recv;
-
-                        printf(">>> DEBUG: probe packet received <<<\n");
-                        printf("Source Port: %u\n", resp_src_port);
-                        printf("Server Port: %u\n", src_port);
-                        printf("Dest Port (ours): %u\n", dst_port);
-
-                        printf("Flags: 0x%02X (", flags);
-                        if(flags & 0x02) printf("SYN ");
-                        if(flags & 0x10) printf("ACK ");
-                        if(flags & 0x04) printf("RST ");
-                        if(flags & 0x01) printf("FIN ");
-                        printf(")\n");
-
-                        printf("ACK Number: %lu\n", ack_recv);
 
                         if(port_idx >= 0) {
                             port_results[port_idx].last_sequence = ack_recv;
@@ -933,23 +884,12 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
                                 tcp_header_len,
                                 &tcp_opts_vec[attemp]);
 
-                            printf("[TCP OPTS] Count: %u\n", tcp_opts_vec[attemp].count);
-                            printf("[TCP OPTS] LEN: %u\n", tcp_opts_vec[attemp].options_length);
-
                             if(tcp_opts_vec[attemp].has_ts) {
                                 ts_vals[attemp] = tcp_opts_vec[attemp].tsval;
-
-                                printf(
-                                    "[TCP OPTS] TSval:%lu TSecr:%lu\n",
-                                    tcp_opts_vec[attemp].tsval,
-                                    tcp_opts_vec[attemp].tsecr);
                             }
 
-                            printf("[TCP OPTS] Order: ");
-                            for(uint8_t k = 0; k < tcp_opts_vec[attemp].count; k++) {
-                                printf("%u ", tcp_opts_vec[attemp].order[k]);
-                            }
-                            printf("\n");
+                            for(uint8_t k = 0; k < tcp_opts_vec[attemp].count; k++)
+                                ;
                         }
 
                         uint16_t windows_size;
@@ -962,13 +902,11 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
 
                         if(windows_size == 29200 && ipv4_header.ttl <= 64) {
                             os_score_add(&sb, LINUX, 12);
-                            printf("[HEURISTIC] Linux window signature (29200)\n");
                         }
 
                         if(tcp_opts_vec[attemp].has_ts && tcp_opts_vec[attemp].ws_value == 6 &&
                            windows_size == 65535 && ttl_tcp <= 64) {
                             os_score_add(&sb, IOS, 15);
-                            printf("[HEURISTIC] Strong Apple TCP stack signature\n");
                         }
 
                         /* ---- CONTROL DE DUPLICADOS ---- */
@@ -987,16 +925,10 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
                         if(duplicated) {
                             continue;
                         }
-                        printf("- Windows Size: %u\n", windows_size);
-                        printf("- TTL: %u\n", ipv4_header.ttl);
-                        printf("- IPID: %u\n", ipid);
 
                         /* ---- MARCAR PUERTO COMO COMPLETADO (SYN-ACK) ---- */
                         port_retries[port_idx] = 0;
                         port_responded[port_idx] = true;
-                        printf(
-                            "[PORT OPEN] %u -> SYN-ACK captured, skipping further responses\n",
-                            resp_src_port);
 
                         ids[attemp] = ipid;
                         windows[attemp] = windows_size;
@@ -1013,13 +945,8 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
                             port_responded[port_idx] = true;
                         }
 
-                        printf("- Packet: ");
-                        for(uint16_t i = 0; i < packen_len; i++) {
-                            printf(
-                                "%02X%c",
-                                app->ethernet->rx_buffer[i],
-                                i == (packen_len - 1) ? '\n' : ' ');
-                        }
+                        for(uint16_t i = 0; i < packen_len; i++)
+                            ;
 
                         continue; // salir del while de espera para enviar nuevos SYN a puertos restantes
                     }
@@ -1034,8 +961,6 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
 
             // Si no hubo respuesta en esta ronda → retry
             port_retries[p]++;
-
-            printf("[RETRY] Port %u -> attempt %u\n", probe_ports[p], port_retries[p]);
 
             uint32_t seq = furi_hal_random_get();
 
@@ -1100,8 +1025,6 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
                     seq + 3);
 
                 furi_delay_ms(3 + (furi_hal_random_get() % 5));
-
-                printf("[ADV PROBE] %u -> NULL FIN XMAS ACK\n", probe_ports[p]);
             }
 
             if(port_retries[p] >= MAX_RETRIES) {
@@ -1121,7 +1044,6 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
         }
 
         if(all_done) {
-            printf("[SCAN] All probe ports resolved (open/closed/filtered)\n");
             break;
         }
         attemp++;
@@ -1132,12 +1054,8 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
             if(!port_responded[p] && port_retries[p] >= MAX_RETRIES) {
                 port_filtered[p] = true;
                 filtered_count++;
-
-                printf("[PORT FILTERED] %u -> NO RESPONSE\n", probe_ports[p]);
             }
         }
-
-        printf("[FILTER] Total filtered ports: %u\n", filtered_count);
     }
 
     for(uint8_t i = 0; i < probe_port_count; i++) {
@@ -1153,16 +1071,9 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
             port_results[i].last_sequence);
     }
 
-    printf("[OS] ICMP probe started\n");
-
     if(os_icmp_probe(app, target_ip, &ttl, &rtt)) {
         ttl_icmp = ttl;
         icmp_valid = true;
-        printf("[OS] ICMP reply received\n");
-        printf("[OS] TTL: %u\n", ttl);
-        printf("[OS] RTT: %lu ms\n", rtt);
-    } else {
-        printf("[OS] ICMP probe failed\n");
     }
 
     uint8_t sum_true = 0;
@@ -1192,45 +1103,37 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
         case 22:
             os_score_add(&sb, LINUX, 4);
             os_score_add(&sb, IOS, 2);
-            printf("[PORT] 22 -> Linux+ Apple+\n");
             break;
 
         case 135:
             os_score_add(&sb, WINDOWS, 5);
-            printf("[PORT] 135 -> Windows strong\n");
             break;
 
         case 139:
             os_score_add(&sb, WINDOWS, 3);
-            printf("[PORT] 139 -> Windows\n");
             break;
 
         case 445:
             os_score_add(&sb, WINDOWS, 6);
             os_score_add(&sb, LINUX, -2);
             os_score_add(&sb, IOS, -2);
-            printf("[PORT] 445 -> Windows strong, others penalized\n");
             break;
 
         case 3389:
             os_score_add(&sb, WINDOWS, 5);
-            printf("[PORT] 3389 -> Windows strong\n");
             break;
 
         case 49152:
             os_score_add(&sb, WINDOWS, 3);
-            printf("[PORT] 49152 -> Windows RPC dynamic\n");
             break;
 
         case 62078:
             os_score_add(&sb, IOS, 8);
-            printf("[PORT] 62078 -> Apple strong\n");
             break;
 
         case 5000: // AirPlay / RAOP
         case 7000: // AirPlay
             os_score_add(&sb, IOS, 5);
-            printf("[PORT] %u -> Apple (AirPlay)\n", port);
             break;
 
         default:
@@ -1244,7 +1147,6 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
     if(port_responded[get_port_index(135, probe_ports, probe_port_count)] &&
        port_responded[get_port_index(445, probe_ports, probe_port_count)]) {
         os_score_add(&sb, WINDOWS, 8);
-        printf("[RELATION] 135+445 -> Windows strong\n");
     }
 
     // Windows muy fuerte
@@ -1252,20 +1154,17 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
        port_responded[get_port_index(445, probe_ports, probe_port_count)] &&
        port_responded[get_port_index(3389, probe_ports, probe_port_count)]) {
         os_score_add(&sb, WINDOWS, 6);
-        printf("[RELATION] +3389 -> Windows very strong\n");
     }
 
     // Linux fuerte
     if(port_responded[get_port_index(22, probe_ports, probe_port_count)] &&
        port_closed[get_port_index(445, probe_ports, probe_port_count)]) {
         os_score_add(&sb, LINUX, 8);
-        printf("[RELATION] 22 open + 445 closed -> Linux\n");
     }
 
     // Apple fuerte (lockdownd)
     if(port_responded[get_port_index(62078, probe_ports, probe_port_count)]) {
         os_score_add(&sb, IOS, 10);
-        printf("[RELATION] 62078 open -> Apple strong\n");
     }
 
     /* ---------- APPLE AIRPLAY RELATIONS ---------- */
@@ -1277,19 +1176,16 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
     // 5000 + 7000 → Apple fuerte
     if(port_5000 && port_7000) {
         os_score_add(&sb, IOS, 6);
-        printf("[RELATION] 5000+7000 -> Apple AirPlay strong\n");
     }
 
     // 7000 + 62078 → Apple muy fuerte
     if(port_7000 && port_62078) {
         os_score_add(&sb, IOS, 6);
-        printf("[RELATION] 7000+62078 -> Apple very strong\n");
     }
 
     // 5000 + 62078 → también válido
     if(port_5000 && port_62078) {
         os_score_add(&sb, IOS, 5);
-        printf("[RELATION] 5000+62078 -> Apple strong\n");
     }
 
     /* ---------- APPLE STRONG SIGNATURE ---------- */
@@ -1299,12 +1195,10 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
 
     if(apple_ports && ttl_guess == 64 && windows[0] == 65535) {
         os_score_add(&sb, IOS, 10);
-        printf("[APPLE SIGNATURE] AirPlay + TTL + Window\n");
     }
 
     if(apple_ports) {
         os_score_add(&sb, LINUX, -5);
-        printf("[ANTI-LINUX] AirPlay detected\n");
     }
 
     if(sum_true || icmp_valid) {
@@ -1342,26 +1236,19 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
         /* ---------- FILTERED PORTS SCORING ---------- */
 
         if(filtered_count >= 3) {
-            printf("[FILTER] Multiple filtered ports detected (%u)\n", filtered_count);
-
             os_score_add(&sb, LINUX, 5);
             os_score_add(&sb, IOS, 5);
         }
 
         if(filtered_count >= 5 && ttl_guess == 64) {
             os_score_add(&sb, IOS, 5);
-            printf("[FILTER + TTL] Apple-like filtering behavior\n");
         }
 
         if(filtered_count >= 6) {
-            printf("[FILTER] Strong filtering behavior\n");
-
             os_score_add(&sb, LINUX, 8);
         }
 
         if(filtered_count == probe_port_count) {
-            printf("[FILTER] All ports filtered -> firewall detected\n");
-
             os_score_add(&sb, LINUX, 10);
             os_score_add(&sb, IOS, 10);
         }
@@ -1391,7 +1278,6 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
 
             if(pattern == IPID_RANDOM && ttl_guess == 64) {
                 os_score_add(&sb, IOS, 8);
-                printf("[HEURISTIC] Apple/BSD IPID + TTL signature\n");
             }
 
             /* Calcular varianza manual para peso dinámico */
@@ -1406,13 +1292,11 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
                 "UNKNOWN", "CONSTANT", "INCREMENTAL", "INCREMENTAL_LARGE", "RANDOM", "ZERO"};
 
             printf("[IPID] Pattern: %s\n", ipid_names[pattern]);
-            printf("[IPID] Variance: %.2f\n", var);
 
             switch(pattern) {
             case IPID_ZERO:
                 os_score_add(&sb, LINUX, 4);
                 os_score_add(&sb, IOS, 4);
-                printf("[IPID] ZERO -> Linux/Apple shared\n");
                 break;
 
             case IPID_INCREMENTAL:
@@ -1452,8 +1336,6 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
             if(ttl_valid) {
                 if(ttl_tcp <= 128 && pattern == IPID_CONSTANT) {
                     os_score_add(&sb, WINDOWS, 2);
-
-                    printf("[IPID] Pattern: %s\n", ipid_names[pattern]);
                 }
             }
         }
@@ -1474,17 +1356,14 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
 
         if(linux_opt >= 3) {
             os_score_add(&sb, LINUX, 20);
-            printf("[TCP OPTS] Majority Linux signature\n");
         }
 
         if(windows_opt >= 3) {
             os_score_add(&sb, WINDOWS, 20);
-            printf("[TCP OPTS] Majority Windows signature\n");
         }
 
         if(ios_opt >= 3) {
             os_score_add(&sb, IOS, 20);
-            printf("[TCP OPTS] Majority Apple/BSD signature\n");
         }
 
         /* ---------- TCP SEQUENCE SCORING ---------- */
@@ -1573,11 +1452,6 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
     for(uint8_t i = 0; i < probe_port_count; i++) {
         app->ports[i] = port_results[i];
     }
-
-    printf("\n[SCORE]\n");
-    printf("WINDOWS: %d\n", sb.windows_score);
-    printf("LINUX:   %d\n", sb.linux_score);
-    printf("IOS:     %d\n\n", sb.ios_score);
 
     /* ---------- SCORE ANALYSIS ---------- */
 

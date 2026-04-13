@@ -50,7 +50,7 @@ void variable_list_os_detector_callback(void* context, uint32_t index) {
             furi_thread_suspend(app->thread);
 
             app->thread_alternative =
-                furi_thread_alloc_ex("OS Detector", 10 * 1024, os_detector_thread, app);
+                furi_thread_alloc_ex("OS Detector", 5 * 1024, os_detector_thread, app);
 
             view_dispatcher_switch_to_view(app->view_dispatcher, LoadingView);
 
@@ -85,7 +85,7 @@ void variable_list_os_detector_callback(void* context, uint32_t index) {
 
             furi_string_cat_printf(app->text, "\nPorts Scanned:\n");
 
-            for(uint8_t i = 0; i < app->ports_count; i++) {
+            for(uint8_t i = 0; i < app->ports_count && i < 10; i++) {
                 const char* state = "UNKNOWN";
 
                 switch(app->ports[i].state) {
