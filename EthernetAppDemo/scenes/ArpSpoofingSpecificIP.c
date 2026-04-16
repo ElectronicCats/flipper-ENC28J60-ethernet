@@ -1,7 +1,6 @@
 #include "../app_user.h"
 
 enum {
-    SCAN_IP,
     ATTACK_IP,
     SET_IP
 } arp_ip_specific_options;
@@ -21,11 +20,6 @@ void arp_spoofing_menu_to_ip_callback(void* context, uint32_t index) {
         scene_manager_set_scene_state(
             app->scene_manager, app_scene_arp_spoofing_specific_ip_option, index);
         scene_manager_next_scene(app->scene_manager, app_scene_arp_spoofing_specific_ip_option);
-        break;
-
-    case SCAN_IP:
-        scene_manager_set_scene_state(app->scene_manager, app_scene_arp_scanner_menu_option, 2);
-        scene_manager_next_scene(app->scene_manager, app_scene_arp_scanner_menu_option);
         break;
 
     default:
@@ -51,9 +45,6 @@ void app_scene_arp_spoofing_specific_ip_menu_on_enter(void* context) {
         target_ip[3]);
 
     submenu_set_header(app->submenu, "ARP Spoofing To IP");
-
-    // Option Scan an IP
-    submenu_add_item(app->submenu, "Scan for IP", SCAN_IP, arp_spoofing_menu_to_ip_callback, app);
 
     // Option to run the ARP spoofing IP
     submenu_add_item(

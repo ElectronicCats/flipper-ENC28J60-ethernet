@@ -85,7 +85,7 @@ void variable_list_os_detector_callback(void* context, uint32_t index) {
 
             furi_string_cat_printf(app->text, "\nPorts Scanned:\n");
 
-            for(uint8_t i = 0; i < app->ports_count && i < 10; i++) {
+            for(uint8_t i = 0; i < app->ports_count && i < 11; i++) {
                 const char* state = "UNKNOWN";
 
                 switch(app->ports[i].state) {
