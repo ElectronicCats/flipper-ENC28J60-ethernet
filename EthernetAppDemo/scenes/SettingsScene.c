@@ -13,13 +13,18 @@
 
 // Enumeration
 enum {
-    MAC_OPTION_SETTING,
-    IP_OPTION_SETTING
+    IP_OPTION_SETTING,
+    MAC_OPTION_SETTING
 } Options;
 
 // Callback for the options
 void app_scene_settings_callback(void* context, uint32_t index) {
     App* app = (App*)context;
+
+    scene_manager_set_scene_state(
+        app->scene_manager, app_scene_settings_options_menu_option, index);
+
+    scene_manager_set_scene_state(app->scene_manager, app_scene_settings_option, index);
 
     scene_manager_set_scene_state(
         app->scene_manager, app_scene_settings_options_menu_option, index);
@@ -34,6 +39,24 @@ void app_scene_settings_on_enter(void* context) {
 
     // Set the submenu
     submenu_set_header(app->submenu, "DEVICE SETTINGS");
+
+    // Get the text for the label
+    furi_string_reset(app->text);
+    furi_string_cat_printf(
+        app->text,
+        "IP [%u:%u:%u:%0u]",
+        app->ethernet->ip_address[0],
+        app->ethernet->ip_address[1],
+        app->ethernet->ip_address[2],
+        app->ethernet->ip_address[3]);
+
+    // Add the Item to set the IP address of the device
+    submenu_add_item(
+        app->submenu,
+        furi_string_get_cstr(app->text),
+        IP_OPTION_SETTING,
+        app_scene_settings_callback,
+        app);
 
     // Get the text for the label
     furi_string_reset(app->text);
@@ -55,23 +78,9 @@ void app_scene_settings_on_enter(void* context) {
         app_scene_settings_callback,
         app);
 
-    // Get the text for the label
-    furi_string_reset(app->text);
-    furi_string_cat_printf(
-        app->text,
-        "IP [%u:%u:%u:%0u]",
-        app->ethernet->ip_address[0],
-        app->ethernet->ip_address[1],
-        app->ethernet->ip_address[2],
-        app->ethernet->ip_address[3]);
+    uint32_t state = scene_manager_get_scene_state(app->scene_manager, app_scene_settings_option);
 
-    // Add the Item to set the IP address of the device
-    submenu_add_item(
-        app->submenu,
-        furi_string_get_cstr(app->text),
-        IP_OPTION_SETTING,
-        app_scene_settings_callback,
-        app);
+    submenu_set_selected_item(app->submenu, state);
 
     view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);
 }

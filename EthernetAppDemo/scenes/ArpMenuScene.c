@@ -2,8 +2,8 @@
 
 // List for the menu options
 enum {
-    ARP_SPOOFING_TO_SPECIFIC_IP_OPTION,
     ARP_SPOOFING_OPTION,
+    ARP_SPOOFING_TO_SPECIFIC_IP_OPTION,
 } arp_action_menu_options;
 
 //  Callback for the Options on the main menu
@@ -33,14 +33,14 @@ void app_scene_arp_actions_menu_on_enter(void* context) {
     submenu_set_header(app->submenu, "ARP ACTIONS MENU");
 
     submenu_add_item(
+        app->submenu, "Arp Spoofing all", ARP_SPOOFING_OPTION, arp_actions_menu_callback, app);
+
+    submenu_add_item(
         app->submenu,
         "Arp Spoofing Specific IP",
         ARP_SPOOFING_TO_SPECIFIC_IP_OPTION,
         arp_actions_menu_callback,
         app);
-
-    submenu_add_item(
-        app->submenu, "Arp Spoofing all", ARP_SPOOFING_OPTION, arp_actions_menu_callback, app);
 
     submenu_set_selected_item(app->submenu, 0);
 

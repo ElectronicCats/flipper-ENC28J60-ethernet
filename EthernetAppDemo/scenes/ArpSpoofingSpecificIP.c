@@ -1,8 +1,8 @@
 #include "../app_user.h"
 
 enum {
-    ATTACK_IP,
-    SET_IP
+    SET_IP,
+    ATTACK_IP
 } arp_ip_specific_options;
 
 static uint8_t target_ip[4] = {0};
@@ -17,6 +17,9 @@ void arp_spoofing_menu_to_ip_callback(void* context, uint32_t index) {
     switch(index) {
     case ATTACK_IP:
     case SET_IP:
+        scene_manager_set_scene_state(
+            app->scene_manager, app_scene_arp_spoofing_specific_ip_option, index);
+
         scene_manager_set_scene_state(
             app->scene_manager, app_scene_arp_spoofing_specific_ip_option, index);
         scene_manager_next_scene(app->scene_manager, app_scene_arp_spoofing_specific_ip_option);
@@ -46,6 +49,10 @@ void app_scene_arp_spoofing_specific_ip_menu_on_enter(void* context) {
 
     submenu_set_header(app->submenu, "ARP Spoofing To IP");
 
+    // Option set an IP by manual
+    submenu_add_item(
+        app->submenu, "Set IP manually", SET_IP, arp_spoofing_menu_to_ip_callback, app);
+
     // Option to run the ARP spoofing IP
     submenu_add_item(
         app->submenu,
@@ -54,9 +61,10 @@ void app_scene_arp_spoofing_specific_ip_menu_on_enter(void* context) {
         arp_spoofing_menu_to_ip_callback,
         app);
 
-    // Option set an IP by manual
-    submenu_add_item(
-        app->submenu, "Set IP manually", SET_IP, arp_spoofing_menu_to_ip_callback, app);
+    uint32_t last_index = scene_manager_get_scene_state(
+        app->scene_manager, app_scene_arp_spoofing_specific_ip_option);
+
+    submenu_set_selected_item(app->submenu, last_index);
 
     // switch view to menu
     view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);

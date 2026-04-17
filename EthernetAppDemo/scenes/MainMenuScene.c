@@ -43,6 +43,8 @@ void draw_start(App* app) {
 void main_menu_options_callback(void* context, uint32_t index) {
     App* app = (App*)context;
 
+    scene_manager_set_scene_state(app->scene_manager, app_scene_main_menu_option, index);
+
     switch(index) {
 #if DEV_MODE
     case TESTING_OPTION:
@@ -147,6 +149,9 @@ void app_scene_main_menu_on_enter(void* context) {
 #endif
 
     view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);
+
+    uint32_t index = scene_manager_get_scene_state(app->scene_manager, app_scene_main_menu_option);
+    submenu_set_selected_item(app->submenu, index);
 }
 
 // Function for the main menu on event

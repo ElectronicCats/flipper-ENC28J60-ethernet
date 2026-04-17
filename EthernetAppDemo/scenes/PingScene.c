@@ -58,7 +58,6 @@ void app_scene_ping_menu_scene_on_enter(void* context) {
         app->text, "PING TO %u:%u:%u:%u", ip_ping[0], ip_ping[1], ip_ping[2], ip_ping[3]);
 
     submenu_set_header(app->submenu, furi_string_get_cstr(app->text));
-    submenu_add_item(app->submenu, "Ping", 0, menu_ping_options_callback, app);
 
     furi_string_reset(app->text);
 
@@ -67,6 +66,8 @@ void app_scene_ping_menu_scene_on_enter(void* context) {
 
     submenu_add_item(
         app->submenu, furi_string_get_cstr(app->text), 1, menu_ping_options_callback, app);
+
+    submenu_add_item(app->submenu, "Ping", 0, menu_ping_options_callback, app);
 
     view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);
 }
