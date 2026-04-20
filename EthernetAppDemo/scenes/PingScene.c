@@ -41,6 +41,13 @@ void menu_ping_options_callback(void* context, uint32_t index) {
         // Switch to the ping set IP scene
         scene_manager_next_scene(app->scene_manager, app_scene_ping_set_ip_option);
     }
+
+    if(index == 2) {
+        scene_manager_set_scene_state(
+            app->scene_manager, app_scene_arp_scanner_option, ARP_STATE_SHOW_LIST);
+
+        scene_manager_next_scene(app->scene_manager, app_scene_arp_scanner_option);
+    }
 }
 
 // Function for the testing scene on enter
@@ -60,6 +67,8 @@ void app_scene_ping_menu_scene_on_enter(void* context) {
     submenu_set_header(app->submenu, furi_string_get_cstr(app->text));
 
     furi_string_reset(app->text);
+
+    submenu_add_item(app->submenu, "View scanned IPs", 2, menu_ping_options_callback, app);
 
     furi_string_cat_printf(
         app->text, "IP to do ping %u:%u:%u:%u", ip_ping[0], ip_ping[1], ip_ping[2], ip_ping[3]);

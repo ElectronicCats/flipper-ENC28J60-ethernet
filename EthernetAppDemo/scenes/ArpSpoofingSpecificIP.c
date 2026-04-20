@@ -1,6 +1,7 @@
 #include "../app_user.h"
 
 enum {
+    VIEW_IP_LIST,
     SET_IP,
     ATTACK_IP
 } arp_ip_specific_options;
@@ -15,6 +16,13 @@ void arp_spoofing_menu_to_ip_callback(void* context, uint32_t index) {
     App* app = (App*)context;
 
     switch(index) {
+    case VIEW_IP_LIST:
+        scene_manager_set_scene_state(
+            app->scene_manager, app_scene_arp_scanner_option, ARP_STATE_SHOW_LIST);
+
+        scene_manager_next_scene(app->scene_manager, app_scene_arp_scanner_option);
+        break;
+
     case ATTACK_IP:
     case SET_IP:
         scene_manager_set_scene_state(
@@ -36,6 +44,14 @@ void app_scene_arp_spoofing_specific_ip_menu_on_enter(void* context) {
 
     submenu_reset(app->submenu);
 
+    // If an IP was selected from ARP, copy it
+    if(*(uint32_t*)app->ip_helper != 0) {
+        memcpy(target_ip, app->ip_helper, 4);
+
+        // Clear helper to avoid overwriting later
+        memset(app->ip_helper, 0, 4);
+    }
+
     if(*(uint32_t*)target_ip == 0) memcpy(target_ip, app->ip_gateway, 4);
     furi_string_reset(app->text);
 
@@ -48,6 +64,9 @@ void app_scene_arp_spoofing_specific_ip_menu_on_enter(void* context) {
         target_ip[3]);
 
     submenu_set_header(app->submenu, "ARP Spoofing To IP");
+
+    submenu_add_item(
+        app->submenu, "View scanned IPs", VIEW_IP_LIST, arp_spoofing_menu_to_ip_callback, app);
 
     // Option set an IP by manual
     submenu_add_item(

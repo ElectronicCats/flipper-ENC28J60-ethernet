@@ -5,8 +5,9 @@ static uint8_t target_ip[4] = {0};
 const char* os_texts[] = {"WINDOWS", "LINUX", "IOS/MAC OS", "NO DETECTED"};
 
 typedef enum {
-    START,
+    VIEW_RESULTS,
     TARGET_IP,
+    START,
 } OS_DETECTOR_OPTIONS;
 
 typedef enum {
@@ -45,6 +46,13 @@ void variable_list_os_detector_callback(void* context, uint32_t index) {
     UNUSED(app);
 
     switch(index) {
+    case VIEW_RESULTS:
+        scene_manager_set_scene_state(
+            app->scene_manager, app_scene_arp_scanner_option, ARP_STATE_SHOW_LIST);
+
+        scene_manager_next_scene(app->scene_manager, app_scene_arp_scanner_option);
+        break;
+
     case START:
         if(app->is_dora) {
             furi_thread_suspend(app->thread);
@@ -146,9 +154,8 @@ void app_scene_os_detector_on_enter(void* context) {
 
     VariableItem* item;
 
-    // Add the item to scan the network
-    item = variable_item_list_add(app->varList, "Detect OS", 0, NULL, app);
-    variable_item_set_current_value_text(item, "START");
+    // Add item to View Scanned IPs
+    item = variable_item_list_add(app->varList, "View scanned IPs", 0, NULL, app);
 
     // Add item to set the IP address
     if(*(uint32_t*)target_ip == 0) memcpy(target_ip, app->ip_gateway, 4);
@@ -165,6 +172,10 @@ void app_scene_os_detector_on_enter(void* context) {
 
     variable_item_set_current_value_text(
         item, furi_string_get_cstr(app->text)); // Set the varible item text
+
+    // Add the item to scan the network
+    item = variable_item_list_add(app->varList, "Detect OS", 0, NULL, app);
+    variable_item_set_current_value_text(item, "START");
 
     //Set the callback for the variable item list
     variable_item_list_set_enter_callback(app->varList, variable_list_os_detector_callback, app);
@@ -195,6 +206,7 @@ bool app_scene_os_detector_on_event(void* context, SceneManagerEvent event) {
             break;
         }
     }
+
     return consumed;
 }
 

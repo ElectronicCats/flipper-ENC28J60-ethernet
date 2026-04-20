@@ -38,7 +38,7 @@
 
 // Version of the app
 #define APP_NAME    "ETHERNET APP"
-#define APP_VERSION "v1.1.1.0"
+#define APP_VERSION "v1.1.1.2"
 
 // Path for the files
 #define PATHAPP    "apps_data/ethernet" // Path
@@ -121,6 +121,14 @@ typedef enum {
     IpAssignerView,
     LoadingView
 } scenesViews;
+
+typedef enum {
+    ARP_STATE_START_SCAN = 0,
+    ARP_STATE_SET_IP,
+    ARP_STATE_SHOW_LIST,
+    ARP_STATE_SPOOF,
+    ARP_STATE_SELECT_IP,
+} ARP_SCENE_STATES;
 
 // This functions works only to draw repetitive views in widgets
 void draw_in_development(App* app); // draws when something is on development
