@@ -9,8 +9,6 @@
 
 FuriString* text;
 
-static char port_input_buffer[6];
-
 uint8_t target_ip[4] = {0};
 uint16_t target_port = 80;
 uint16_t range_port = 1;
@@ -41,21 +39,16 @@ typedef enum {
 const char* protocols[] = {"TCP", "UDP"};
 uint8_t protocols_index = PORTS_SCANNER_TCP;
 
-void text_input_ports_callback(void* context) {
+void number_input_ports_callback(void* context, int32_t value) {
     App* app = context;
-
-    uint32_t value = atoi(port_input_buffer);
-
-    if(value == 0) value = 1;
-    if(value > 65535) value = 65535;
 
     uint32_t state =
         scene_manager_get_scene_state(app->scene_manager, app_scene_ports_scanner_option);
 
     if(state == TARGET_PORT) {
-        target_port = (uint16_t)value;
+        target_port = value;
     } else if(state == SOURCE_PORT) {
-        range_port = (uint16_t)value;
+        range_port = value;
     }
 
     scene_manager_set_scene_state(
@@ -183,24 +176,23 @@ void variable_list_ports_scanner_callback(void* context, uint32_t index) {
 
     case TARGET_PORT:
     case SOURCE_PORT: {
-        uint16_t current_value = (index == TARGET_PORT) ? target_port : range_port;
+        int32_t current = (index == TARGET_PORT) ? target_port : range_port;
 
-        snprintf(port_input_buffer, sizeof(port_input_buffer), "%u", current_value);
+        number_input_set_header_text(
+            app->number_input, index == TARGET_PORT ? "Set Target Port" : "Set Range");
 
-        text_input_set_header_text(
-            app->text_input, index == TARGET_PORT ? "Set Target Port" : "Set Range");
-
-        text_input_set_result_callback(
-            app->text_input,
-            text_input_ports_callback,
+        number_input_set_result_callback(
+            app->number_input,
+            number_input_ports_callback,
             app,
-            port_input_buffer,
-            sizeof(port_input_buffer),
-            true);
+            current,
+            1, // min
+            65535 // max
+        );
 
         scene_manager_set_scene_state(app->scene_manager, app_scene_ports_scanner_option, index);
 
-        view_dispatcher_switch_to_view(app->view_dispatcher, TextInputView);
+        view_dispatcher_switch_to_view(app->view_dispatcher, NumberInputView);
         break;
     }
     }

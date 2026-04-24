@@ -7,6 +7,7 @@
 #include <gui/modules/submenu.h>
 #include <gui/modules/text_box.h>
 #include <gui/modules/text_input.h>
+#include <gui/modules/number_input.h>
 #include <gui/modules/variable_item_list.h>
 #include <gui/modules/widget.h>
 #include <gui/modules/file_browser.h>
@@ -89,7 +90,7 @@ typedef struct {
     FileBrowser* file_browser;
     ip_assigner_t* ip_assigner;
     Loading* loading;
-    TextInput* text_input;
+    NumberInput* number_input;
 
     enc28j60_t* ethernet; // Instance for the enc28j60
 
@@ -119,7 +120,7 @@ typedef enum {
     TextBoxView,
     DialogInfoView,
     InputByteView,
-    TextInputView,
+    NumberInputView,
     FileBrowserView,
     IpAssignerView,
     LoadingView
