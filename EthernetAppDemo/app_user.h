@@ -89,6 +89,7 @@ typedef struct {
     FileBrowser* file_browser;
     ip_assigner_t* ip_assigner;
     Loading* loading;
+    TextInput* text_input;
 
     enc28j60_t* ethernet; // Instance for the enc28j60
 
@@ -118,6 +119,7 @@ typedef enum {
     TextBoxView,
     DialogInfoView,
     InputByteView,
+    TextInputView,
     FileBrowserView,
     IpAssignerView,
     LoadingView

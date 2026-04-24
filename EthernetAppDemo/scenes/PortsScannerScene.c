@@ -9,6 +9,8 @@
 
 FuriString* text;
 
+static char port_input_buffer[6];
+
 uint8_t target_ip[4] = {0};
 uint16_t target_port = 80;
 uint16_t range_port = 1;
@@ -38,6 +40,30 @@ typedef enum {
 
 const char* protocols[] = {"TCP", "UDP"};
 uint8_t protocols_index = PORTS_SCANNER_TCP;
+
+void text_input_ports_callback(void* context) {
+    App* app = context;
+
+    uint32_t value = atoi(port_input_buffer);
+
+    if(value == 0) value = 1;
+    if(value > 65535) value = 65535;
+
+    uint32_t state =
+        scene_manager_get_scene_state(app->scene_manager, app_scene_ports_scanner_option);
+
+    if(state == TARGET_PORT) {
+        target_port = (uint16_t)value;
+    } else if(state == SOURCE_PORT) {
+        range_port = (uint16_t)value;
+    }
+
+    scene_manager_set_scene_state(
+        app->scene_manager, app_scene_ports_scanner_option, PORTS_SCANNER_SCENE_MENU);
+
+    view_dispatcher_switch_to_view(app->view_dispatcher, VarListView);
+    app_scene_ports_scanner_on_enter(app);
+}
 
 //  Callback for the Input
 void settings_start_ip_address_ports_scanner(void* context) {
@@ -156,30 +182,27 @@ void variable_list_ports_scanner_callback(void* context, uint32_t index) {
         break;
 
     case TARGET_PORT:
-    case SOURCE_PORT:
+    case SOURCE_PORT: {
+        uint16_t current_value = (index == TARGET_PORT) ? target_port : range_port;
 
-        furi_string_cat_printf(
-            text, "%s", index == TARGET_PORT ? TARGET_PORT_TEXT : RANGE_PORT_TEXT);
+        snprintf(port_input_buffer, sizeof(port_input_buffer), "%u", current_value);
 
-        uint_to_bytes(&range_port, range_port_bytes, sizeof(uint16_t));
-        uint_to_bytes(&target_port, target_port_bytes, sizeof(uint16_t));
+        text_input_set_header_text(
+            app->text_input, index == TARGET_PORT ? "Set Target Port" : "Set Range");
 
-        byte_input_set_header_text(app->input_byte_value, furi_string_get_cstr(text));
-        byte_input_set_result_callback(
-            app->input_byte_value,
-            byte_input_ports_scanner_callback,
-            byte_change_ports_scanner,
+        text_input_set_result_callback(
+            app->text_input,
+            text_input_ports_callback,
             app,
-            index == TARGET_PORT ? target_port_bytes : range_port_bytes,
-            2);
+            port_input_buffer,
+            sizeof(port_input_buffer),
+            true);
 
-        furi_string_reset(text);
+        scene_manager_set_scene_state(app->scene_manager, app_scene_ports_scanner_option, index);
 
-        scene_manager_set_scene_state(
-            app->scene_manager, app_scene_ports_scanner_option, PORTS_SCANNER_SCENE_BYTE_INPUT);
-        view_dispatcher_switch_to_view(app->view_dispatcher, InputByteView);
-
+        view_dispatcher_switch_to_view(app->view_dispatcher, TextInputView);
         break;
+    }
     }
 }
 
