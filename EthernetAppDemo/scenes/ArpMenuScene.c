@@ -2,6 +2,7 @@
 
 // List for the menu options
 enum {
+    VIEW_IP_LIST_OPTION,
     ARP_SPOOFING_OPTION,
     ARP_SPOOFING_TO_SPECIFIC_IP_OPTION,
 } arp_action_menu_options;
@@ -11,6 +12,15 @@ void arp_actions_menu_callback(void* context, uint32_t index) {
     App* app = (App*)context;
 
     switch(index) {
+    case VIEW_IP_LIST_OPTION:
+
+        scene_manager_set_scene_state(
+            app->scene_manager, app_scene_arp_scanner_option, ARP_STATE_SHOW_LIST);
+
+        scene_manager_next_scene(app->scene_manager, app_scene_arp_scanner_option);
+
+        break;
+
     case ARP_SPOOFING_OPTION:
         scene_manager_next_scene(app->scene_manager, app_scene_arp_spoofing_option);
         break;
@@ -31,6 +41,9 @@ void app_scene_arp_actions_menu_on_enter(void* context) {
 
     submenu_reset(app->submenu);
     submenu_set_header(app->submenu, "ARP ACTIONS MENU");
+
+    submenu_add_item(
+        app->submenu, "View scanned IPs", VIEW_IP_LIST_OPTION, arp_actions_menu_callback, app);
 
     submenu_add_item(
         app->submenu, "Arp Spoofing all", ARP_SPOOFING_OPTION, arp_actions_menu_callback, app);

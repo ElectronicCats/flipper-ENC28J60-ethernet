@@ -17,6 +17,7 @@ uint8_t target_port_bytes[2] = {0x00, 0x50};
 uint8_t range_port_bytes[2] = {0x00, 0x01};
 
 typedef enum {
+    VIEW_IP_LIST,
     TARGET_IP,
     TARGET_PORT,
     SOURCE_PORT,
@@ -117,6 +118,15 @@ void variable_list_ports_scanner_callback(void* context, uint32_t index) {
     App* app = context;
 
     switch(index) {
+    case VIEW_IP_LIST:
+
+        scene_manager_set_scene_state(
+            app->scene_manager, app_scene_arp_scanner_option, ARP_STATE_SHOW_LIST);
+
+        scene_manager_next_scene(app->scene_manager, app_scene_arp_scanner_option);
+
+        break;
+
     case START:
 
         if(app->is_dora) {
@@ -208,10 +218,16 @@ void variable_item_change_protocol_callback(VariableItem* item) {
 void app_scene_ports_scanner_on_enter(void* context) {
     App* app = (App*)context;
 
+    submenu_reset(app->submenu);
+    submenu_set_header(app->submenu, "ARP ACTIONS MENU");
+
     text = furi_string_alloc();
     variable_item_list_reset(app->varList);
 
     VariableItem* item;
+
+    item = variable_item_list_add(app->varList, "View scanned IPs", 0, NULL, app);
+    variable_item_set_current_value_text(item, "OPEN");
 
     // Add item to set the IP address
     if(*(uint32_t*)target_ip == 0) memcpy(target_ip, app->ip_gateway, 4);
