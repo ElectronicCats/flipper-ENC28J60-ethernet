@@ -107,6 +107,7 @@ typedef struct {
     uint8_t ports_count;
     bool os_guess;
     uint16_t src_port;
+    uint16_t selected_menu_index;
 } App;
 
 // Views in the App

@@ -19,9 +19,13 @@ typedef enum {
 //  Callback for the Input
 void settings_start_ip_address_os_detector(void* context) {
     App* app = (App*)context;
-    //scene_manager_previous_scene(app->scene_manager);
+
+    app->selected_menu_index = TARGET_IP;
+
+    scene_manager_set_scene_state(
+        app->scene_manager, app_scene_os_detector_option, PORTS_SCANNER_SCENE_MENU);
+
     view_dispatcher_switch_to_view(app->view_dispatcher, VarListView);
-    app_scene_os_detector_on_enter(app);
 }
 
 // Function to set the IP address
@@ -44,6 +48,8 @@ int32_t os_detector_thread(void* context) {
 void variable_list_os_detector_callback(void* context, uint32_t index) {
     App* app = context;
     UNUSED(app);
+
+    app->selected_menu_index = index;
 
     switch(index) {
     case VIEW_RESULTS:
@@ -138,11 +144,10 @@ void variable_list_os_detector_callback(void* context, uint32_t index) {
         break;
 
     case TARGET_IP:
-
         scene_manager_set_scene_state(
             app->scene_manager, app_scene_os_detector_option, PORTS_SCANNER_SCENE_IP_INPUT);
-        set_ip_address_os_detector(app);
 
+        set_ip_address_os_detector(app);
         break;
     }
 }
@@ -150,38 +155,44 @@ void variable_list_os_detector_callback(void* context, uint32_t index) {
 void app_scene_os_detector_on_enter(void* context) {
     App* app = context;
 
+    uint32_t state =
+        scene_manager_get_scene_state(app->scene_manager, app_scene_os_detector_option);
+
+    if(state == PORTS_SCANNER_SCENE_IP_INPUT) {
+        set_ip_address_os_detector(app);
+        return;
+    }
+
+    if(state == PORTS_SCANNER_SCENE_WIDGET) {
+        view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
+        return;
+    }
+
+    scene_manager_set_scene_state(
+        app->scene_manager, app_scene_os_detector_option, PORTS_SCANNER_SCENE_MENU);
+
     variable_item_list_reset(app->varList);
 
     VariableItem* item;
 
-    // Add item to View Scanned IPs
     item = variable_item_list_add(app->varList, "View scanned IPs", 0, NULL, app);
 
-    // Add item to set the IP address
     if(*(uint32_t*)target_ip == 0) memcpy(target_ip, app->ip_gateway, 4);
+
     item = variable_item_list_add(app->varList, "Target IP", 0, NULL, app);
 
-    furi_string_reset(app->text); // Reset the text
+    furi_string_reset(app->text);
     furi_string_cat_printf(
-        app->text,
-        "%u.%u.%u.%u",
-        target_ip[0],
-        target_ip[1],
-        target_ip[2],
-        target_ip[3]); // Set the text with the IP address
+        app->text, "%u.%u.%u.%u", target_ip[0], target_ip[1], target_ip[2], target_ip[3]);
 
-    variable_item_set_current_value_text(
-        item, furi_string_get_cstr(app->text)); // Set the varible item text
+    variable_item_set_current_value_text(item, furi_string_get_cstr(app->text));
 
-    // Add the item to scan the network
     item = variable_item_list_add(app->varList, "Detect OS", 0, NULL, app);
     variable_item_set_current_value_text(item, "START");
 
-    //Set the callback for the variable item list
     variable_item_list_set_enter_callback(app->varList, variable_list_os_detector_callback, app);
 
-    scene_manager_set_scene_state(
-        app->scene_manager, app_scene_os_detector_option, PORTS_SCANNER_SCENE_MENU);
+    variable_item_list_set_selected_item(app->varList, app->selected_menu_index);
 
     view_dispatcher_switch_to_view(app->view_dispatcher, VarListView);
 }
@@ -193,16 +204,24 @@ bool app_scene_os_detector_on_event(void* context, SceneManagerEvent event) {
 
     if(event.type == SceneManagerEventTypeBack) {
         switch(scene_manager_get_scene_state(app->scene_manager, app_scene_os_detector_option)) {
-        case PORTS_SCANNER_SCENE_IP_INPUT:
         case PORTS_SCANNER_SCENE_WIDGET:
 
             scene_manager_set_scene_state(
                 app->scene_manager, app_scene_os_detector_option, PORTS_SCANNER_SCENE_MENU);
-            app_scene_os_detector_on_enter(app);
             view_dispatcher_switch_to_view(app->view_dispatcher, VarListView);
 
             consumed = true;
 
+            break;
+
+        case PORTS_SCANNER_SCENE_IP_INPUT:
+
+            scene_manager_set_scene_state(
+                app->scene_manager, app_scene_os_detector_option, PORTS_SCANNER_SCENE_MENU);
+
+            view_dispatcher_switch_to_view(app->view_dispatcher, VarListView);
+
+            consumed = true;
             break;
         }
     }
