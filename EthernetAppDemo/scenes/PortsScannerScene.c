@@ -17,10 +17,11 @@ uint8_t target_port_bytes[2] = {0x00, 0x50};
 uint8_t range_port_bytes[2] = {0x00, 0x01};
 
 typedef enum {
-    START,
     TARGET_IP,
     TARGET_PORT,
     SOURCE_PORT,
+    PROTOCOL,
+    START,
 } PORTS_SCANNER_OPTIONS;
 
 typedef enum {
@@ -212,10 +213,6 @@ void app_scene_ports_scanner_on_enter(void* context) {
 
     VariableItem* item;
 
-    // Add the item to scan the network
-    item = variable_item_list_add(app->varList, "Start Scanner", 0, NULL, app);
-    variable_item_set_current_value_text(item, "START");
-
     // Add item to set the IP address
     if(*(uint32_t*)target_ip == 0) memcpy(target_ip, app->ip_gateway, 4);
     item = variable_item_list_add(app->varList, "Target IP", 0, NULL, app);
@@ -256,6 +253,10 @@ void app_scene_ports_scanner_on_enter(void* context) {
         app->varList, "Protocol", 2, variable_item_change_protocol_callback, NULL);
     variable_item_set_current_value_index(item, protocols_index);
     variable_item_set_current_value_text(item, protocols[protocols_index]);
+
+    // Add the item to scan the network
+    item = variable_item_list_add(app->varList, "Start Scanner", 0, NULL, app);
+    variable_item_set_current_value_text(item, "START");
 
     //Set the callback for the variable item list
     variable_item_list_set_enter_callback(app->varList, variable_list_ports_scanner_callback, app);
