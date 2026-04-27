@@ -7,11 +7,9 @@
 #define TARGET_PORT_TEXT TARGET_TEXT PORT_TEXT
 #define RANGE_PORT_TEXT  RANGE_TEXT PORT_TEXT
 
-FuriString* text;
-
 uint8_t target_ip[4] = {0};
-uint16_t target_port = 80;
-uint16_t range_port = 1;
+uint16_t target_port = 22;
+uint16_t range_port = 1000;
 
 uint8_t target_port_bytes[2] = {0x00, 0x50};
 uint8_t range_port_bytes[2] = {0x00, 0x01};
@@ -56,7 +54,7 @@ void number_input_ports_callback(void* context, int32_t value) {
     scene_manager_set_scene_state(
         app->scene_manager, app_scene_ports_scanner_option, PORTS_SCANNER_SCENE_MENU);
 
-    view_dispatcher_switch_to_view(app->view_dispatcher, VarListView);
+    view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);
     app_scene_ports_scanner_on_enter(app);
 }
 
@@ -64,7 +62,7 @@ void number_input_ports_callback(void* context, int32_t value) {
 void settings_start_ip_address_ports_scanner(void* context) {
     App* app = (App*)context;
     //scene_manager_previous_scene(app->scene_manager);
-    view_dispatcher_switch_to_view(app->view_dispatcher, VarListView);
+    view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);
     app_scene_ports_scanner_on_enter(app);
 }
 
@@ -87,7 +85,7 @@ void byte_input_ports_scanner_callback(void* context) {
 
     scene_manager_set_scene_state(
         app->scene_manager, app_scene_ports_scanner_option, PORTS_SCANNER_SCENE_MENU);
-    view_dispatcher_switch_to_view(app->view_dispatcher, VarListView);
+    view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);
 
     app_scene_ports_scanner_on_enter(app);
 }
@@ -219,69 +217,69 @@ void app_scene_ports_scanner_on_enter(void* context) {
     App* app = (App*)context;
 
     submenu_reset(app->submenu);
-    submenu_set_header(app->submenu, "ARP ACTIONS MENU");
+    submenu_set_header(app->submenu, "PORT SCANNER");
 
-    text = furi_string_alloc();
-    variable_item_list_reset(app->varList);
+    // VIEW IP LIST
+    submenu_add_item(
+        app->submenu, "View scanned IPs", VIEW_IP_LIST, variable_list_ports_scanner_callback, app);
 
-    VariableItem* item;
-
-    item = variable_item_list_add(app->varList, "View scanned IPs", 0, NULL, app);
-    variable_item_set_current_value_text(item, "OPEN");
-
-    // Add item to set the IP address
+    // TARGET IP
     if(*(uint32_t*)target_ip == 0) memcpy(target_ip, app->ip_gateway, 4);
-    item = variable_item_list_add(app->varList, "Target IP", 0, NULL, app);
 
-    furi_string_reset(app->text); // Reset the text
+    furi_string_reset(app->text);
     furi_string_cat_printf(
         app->text,
-        "%u.%u.%u.%u",
+        "Target IP [%u.%u.%u.%u]",
         target_ip[0],
         target_ip[1],
         target_ip[2],
-        target_ip[3]); // Set the text with the IP address
+        target_ip[3]);
 
-    variable_item_set_current_value_text(
-        item, furi_string_get_cstr(app->text)); // Set the varible item text
+    submenu_add_item(
+        app->submenu,
+        furi_string_get_cstr(app->text),
+        TARGET_IP,
+        variable_list_ports_scanner_callback,
+        app);
 
-    // Add item to set the range of the target port
-    item = variable_item_list_add(app->varList, TARGET_PORT_TEXT, 0, NULL, &target_port);
+    // TARGET PORT
+    furi_string_reset(app->text);
+    furi_string_cat_printf(app->text, "Target Port [%u]", target_port);
 
-    furi_string_reset(app->text); // Reset the text
-    furi_string_cat_printf(
-        app->text, "%u", target_port); // Set the text with the total number of IP addresses
+    submenu_add_item(
+        app->submenu,
+        furi_string_get_cstr(app->text),
+        TARGET_PORT,
+        variable_list_ports_scanner_callback,
+        app);
 
-    variable_item_set_current_value_text(
-        item, furi_string_get_cstr(app->text)); // Set the varible item text
+    // RANGE PORT
+    furi_string_reset(app->text);
+    furi_string_cat_printf(app->text, "Range [%u]", range_port);
 
-    // Add item to set the range of the source port
-    item = variable_item_list_add(app->varList, RANGE_PORT_TEXT, 0, NULL, &range_port);
+    submenu_add_item(
+        app->submenu,
+        furi_string_get_cstr(app->text),
+        SOURCE_PORT,
+        variable_list_ports_scanner_callback,
+        app);
 
-    furi_string_reset(app->text); // Reset the text
-    furi_string_cat_printf(
-        app->text, "%u", range_port); // Set the text with the total number of IP addresses
+    // PROTOCOL
+    furi_string_reset(app->text);
+    furi_string_cat_printf(app->text, "Protocol [%s]", protocols[protocols_index]);
 
-    variable_item_set_current_value_text(
-        item, furi_string_get_cstr(app->text)); // Set the varible item text
+    submenu_add_item(
+        app->submenu,
+        furi_string_get_cstr(app->text),
+        PROTOCOL,
+        variable_list_ports_scanner_callback,
+        app);
 
-    item = variable_item_list_add(
-        app->varList, "Protocol", 2, variable_item_change_protocol_callback, NULL);
-    variable_item_set_current_value_index(item, protocols_index);
-    variable_item_set_current_value_text(item, protocols[protocols_index]);
+    // START
+    submenu_add_item(
+        app->submenu, "Start Scanner", START, variable_list_ports_scanner_callback, app);
 
-    // Add the item to scan the network
-    item = variable_item_list_add(app->varList, "Start Scanner", 0, NULL, app);
-    variable_item_set_current_value_text(item, "START");
-
-    //Set the callback for the variable item list
-    variable_item_list_set_enter_callback(app->varList, variable_list_ports_scanner_callback, app);
-
-    scene_manager_set_scene_state(
-        app->scene_manager, app_scene_ports_scanner_option, PORTS_SCANNER_SCENE_MENU);
-
-    // Switch to the variable list view
-    view_dispatcher_switch_to_view(app->view_dispatcher, VarListView);
+    view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);
 }
 
 bool app_scene_ports_scanner_on_event(void* context, SceneManagerEvent event) {
@@ -303,7 +301,7 @@ bool app_scene_ports_scanner_on_event(void* context, SceneManagerEvent event) {
             scene_manager_set_scene_state(
                 app->scene_manager, app_scene_ports_scanner_option, PORTS_SCANNER_SCENE_MENU);
             app_scene_ports_scanner_on_enter(app);
-            view_dispatcher_switch_to_view(app->view_dispatcher, VarListView);
+            view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);
 
             consumed = true;
 
@@ -315,7 +313,6 @@ bool app_scene_ports_scanner_on_event(void* context, SceneManagerEvent event) {
 
 void app_scene_ports_scanner_on_exit(void* context) {
     App* app = (App*)context;
-    furi_string_reset(text);
-    text = NULL;
+
     variable_item_list_reset(app->varList);
 }
