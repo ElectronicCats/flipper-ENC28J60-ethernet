@@ -25,7 +25,7 @@ void settings_start_ip_address_os_detector(void* context) {
     scene_manager_set_scene_state(
         app->scene_manager, app_scene_os_detector_option, PORTS_SCANNER_SCENE_MENU);
 
-    view_dispatcher_switch_to_view(app->view_dispatcher, VarListView);
+    view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);
 }
 
 // Function to set the IP address
@@ -155,46 +155,34 @@ void variable_list_os_detector_callback(void* context, uint32_t index) {
 void app_scene_os_detector_on_enter(void* context) {
     App* app = context;
 
-    uint32_t state =
-        scene_manager_get_scene_state(app->scene_manager, app_scene_os_detector_option);
+    submenu_reset(app->submenu);
+    submenu_set_header(app->submenu, "OS DETECTOR");
 
-    if(state == PORTS_SCANNER_SCENE_IP_INPUT) {
-        set_ip_address_os_detector(app);
-        return;
-    }
+    // VIEW IP LIST
+    submenu_add_item(
+        app->submenu, "View scanned IPs", VIEW_RESULTS, variable_list_os_detector_callback, app);
 
-    if(state == PORTS_SCANNER_SCENE_WIDGET) {
-        view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
-        return;
-    }
-
-    scene_manager_set_scene_state(
-        app->scene_manager, app_scene_os_detector_option, PORTS_SCANNER_SCENE_MENU);
-
-    variable_item_list_reset(app->varList);
-
-    VariableItem* item;
-
-    item = variable_item_list_add(app->varList, "View scanned IPs", 0, NULL, app);
-
+    // TARGET IP
     if(*(uint32_t*)target_ip == 0) memcpy(target_ip, app->ip_gateway, 4);
 
-    item = variable_item_list_add(app->varList, "Target IP", 0, NULL, app);
-
+    // TARGET IP
     furi_string_reset(app->text);
+
     furi_string_cat_printf(
-        app->text, "%u.%u.%u.%u", target_ip[0], target_ip[1], target_ip[2], target_ip[3]);
+        app->text, "Target [%u.%u.%u.%u]", target_ip[0], target_ip[1], target_ip[2], target_ip[3]);
 
-    variable_item_set_current_value_text(item, furi_string_get_cstr(app->text));
+    submenu_add_item(
+        app->submenu,
+        furi_string_get_cstr(app->text),
+        TARGET_IP,
+        variable_list_os_detector_callback,
+        app);
 
-    item = variable_item_list_add(app->varList, "Detect OS", 0, NULL, app);
-    variable_item_set_current_value_text(item, "START");
+    // START
+    submenu_add_item(
+        app->submenu, "Start Detection", START, variable_list_os_detector_callback, app);
 
-    variable_item_list_set_enter_callback(app->varList, variable_list_os_detector_callback, app);
-
-    variable_item_list_set_selected_item(app->varList, app->selected_menu_index);
-
-    view_dispatcher_switch_to_view(app->view_dispatcher, VarListView);
+    view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);
 }
 
 bool app_scene_os_detector_on_event(void* context, SceneManagerEvent event) {
@@ -208,7 +196,7 @@ bool app_scene_os_detector_on_event(void* context, SceneManagerEvent event) {
 
             scene_manager_set_scene_state(
                 app->scene_manager, app_scene_os_detector_option, PORTS_SCANNER_SCENE_MENU);
-            view_dispatcher_switch_to_view(app->view_dispatcher, VarListView);
+            view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);
 
             consumed = true;
 
@@ -219,7 +207,7 @@ bool app_scene_os_detector_on_event(void* context, SceneManagerEvent event) {
             scene_manager_set_scene_state(
                 app->scene_manager, app_scene_os_detector_option, PORTS_SCANNER_SCENE_MENU);
 
-            view_dispatcher_switch_to_view(app->view_dispatcher, VarListView);
+            view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);
 
             consumed = true;
             break;
