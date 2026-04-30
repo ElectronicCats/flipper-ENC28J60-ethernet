@@ -25,8 +25,6 @@ void arp_spoofing_menu_to_ip_callback(void* context, uint32_t index) {
 
     case ATTACK_IP:
     case SET_IP:
-        scene_manager_set_scene_state(
-            app->scene_manager, app_scene_arp_spoofing_specific_ip_option, index);
 
         scene_manager_set_scene_state(
             app->scene_manager, app_scene_arp_spoofing_specific_ip_option, index);
@@ -174,11 +172,14 @@ void app_scene_arp_spoofing_specific_ip_on_enter(void* context) {
 
 // Function for the spoofing scene on event
 bool app_scene_arp_spoofing_specific_ip_on_event(void* context, SceneManagerEvent event) {
-    bool consumed = false;
     App* app = (App*)context;
-    UNUSED(app);
-    UNUSED(event);
-    return consumed;
+
+    if(event.type == SceneManagerEventTypeBack) {
+        scene_manager_previous_scene(app->scene_manager);
+        return true;
+    }
+
+    return false;
 }
 
 // Function for the arp spoofing scene on exit
@@ -202,8 +203,22 @@ void app_scene_arp_spoofing_specific_ip_on_exit(void* context) {
 // Function to draw if getting the MAC from IP failed
 void draw_process_failed(App* app) {
     widget_reset(app->widget);
+
     widget_add_string_multiline_element(
-        app->widget, 64, 32, AlignCenter, AlignCenter, FontPrimary, "Failed getting MAC");
+        app->widget,
+        64,
+        24,
+        AlignCenter,
+        AlignCenter,
+        FontPrimary,
+        "Failed getting MAC");
+
+    widget_add_button_element(
+        app->widget,
+        GuiButtonTypeLeft,
+        "Back",
+        NULL,
+        NULL);
 }
 
 // Function to display the view to attack an IP
