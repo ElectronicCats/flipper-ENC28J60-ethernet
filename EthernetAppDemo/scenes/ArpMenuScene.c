@@ -48,12 +48,14 @@ void app_scene_arp_actions_menu_on_enter(void* context) {
     submenu_add_item(
         app->submenu, "Arp Spoofing all", ARP_SPOOFING_OPTION, arp_actions_menu_callback, app);
 
+#if DEV_MODE
     submenu_add_item(
         app->submenu,
         "Arp Spoofing Specific IP",
         ARP_SPOOFING_TO_SPECIFIC_IP_OPTION,
         arp_actions_menu_callback,
         app);
+#endif
 
     submenu_set_selected_item(app->submenu, 0);
 

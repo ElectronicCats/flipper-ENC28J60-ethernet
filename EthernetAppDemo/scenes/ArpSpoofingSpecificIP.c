@@ -205,20 +205,9 @@ void draw_process_failed(App* app) {
     widget_reset(app->widget);
 
     widget_add_string_multiline_element(
-        app->widget,
-        64,
-        24,
-        AlignCenter,
-        AlignCenter,
-        FontPrimary,
-        "Failed getting MAC");
+        app->widget, 64, 24, AlignCenter, AlignCenter, FontPrimary, "Failed getting MAC");
 
-    widget_add_button_element(
-        app->widget,
-        GuiButtonTypeLeft,
-        "Back",
-        NULL,
-        NULL);
+    widget_add_button_element(app->widget, GuiButtonTypeLeft, "Back", NULL, NULL);
 }
 
 // Function to display the view to attack an IP
