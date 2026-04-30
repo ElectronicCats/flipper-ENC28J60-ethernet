@@ -1,5 +1,12 @@
 #include "../app_user.h"
 
+typedef enum {
+    SET_IP = 0,
+    SET_RANGE,
+    START_SCANNER,
+    VIEW_RESULTS,
+} ARP_MENU_OPTIONS;
+
 /**
  * This file contains the functions to display and work with the ARP SCANNER
  * It shows the IP list and saves it in a array
@@ -7,29 +14,45 @@
 
 // Variables for the ARP Scanner
 uint8_t ip_start[4] = {0, 0, 0, 0}; // The IP address to start the scan
-uint8_t range_ip = 1; // The count of the IP addresses to scan
+uint8_t range_ip = 30; // The count of the IP addresses to scan
 
 /**
  * Menu To select the options and range of the Scanner
  */
 
+uint32_t next_state;
+
 // Callback for to enter when the variable item is pressed
 void variable_list_enter_callback(void* context, uint32_t index) {
     App* app = (App*)context;
 
-    if(index == 2) {
+    switch(index) {
+    case SET_IP:
+        next_state = ARP_STATE_SET_IP;
+        break;
+
+    case SET_RANGE:
+        return;
+
+    case START_SCANNER:
+        next_state = ARP_STATE_START_SCAN;
+
+        if(scene_manager_get_scene_state(app->scene_manager, app_scene_arp_scanner_menu_option) ==
+           2) {
+            next_state = ARP_STATE_SPOOF;
+        }
+        break;
+
+    case VIEW_RESULTS:
+        next_state = ARP_STATE_SHOW_LIST;
+        break;
+
+    default:
         return;
     }
 
-    if(index == 0 &&
-       scene_manager_get_scene_state(app->scene_manager, app_scene_arp_scanner_menu_option) == 2) {
-        index = 3;
-    }
+    scene_manager_set_scene_state(app->scene_manager, app_scene_arp_scanner_option, next_state);
 
-    // Set the state of the scene to the index
-    scene_manager_set_scene_state(app->scene_manager, app_scene_arp_scanner_option, index);
-
-    // Go to the next arp scanner
     scene_manager_next_scene(app->scene_manager, app_scene_arp_scanner_option);
 }
 
@@ -54,51 +77,93 @@ void change_value_callback(VariableItem* item) {
     variable_item_set_current_value_text(item, furi_string_get_cstr(app->text));
 }
 
+void range_input_callback(void* context, int32_t value) {
+    App* app = (App*)context;
+
+    if(value < 1) value = 1;
+    if(value > 255) value = 255;
+
+    range_ip = (uint8_t)value;
+
+    scene_manager_previous_scene(app->scene_manager);
+}
+
+void set_range_value(App* app) {
+    number_input_set_header_text(app->number_input, "Set Range");
+
+    number_input_set_result_callback(
+        app->number_input, range_input_callback, app, range_ip, 1, 255);
+
+    view_dispatcher_switch_to_view(app->view_dispatcher, NumberInputView);
+}
+
+void arp_menu_callback(void* context, uint32_t index) {
+    App* app = (App*)context;
+
+    uint32_t next_state = 0;
+
+    switch(index) {
+    case SET_IP:
+        next_state = ARP_STATE_SET_IP;
+        break;
+
+    case SET_RANGE:
+        next_state = ARP_STATE_SET_RANGE;
+        break;
+
+    case START_SCANNER:
+        next_state = ARP_STATE_START_SCAN;
+
+        if(scene_manager_get_scene_state(app->scene_manager, app_scene_arp_scanner_menu_option) ==
+           2) {
+            next_state = ARP_STATE_SPOOF;
+        }
+        break;
+
+    case VIEW_RESULTS:
+        next_state = ARP_STATE_SHOW_LIST;
+        break;
+
+    default:
+        return;
+    }
+
+    scene_manager_set_scene_state(app->scene_manager, app_scene_arp_scanner_option, next_state);
+
+    scene_manager_next_scene(app->scene_manager, app_scene_arp_scanner_option);
+}
+
 // function for the arp menu scene on enter
 void app_scene_arp_scanner_menu_on_enter(void* context) {
     App* app = (App*)context;
 
-    variable_item_list_reset(app->varList);
+    submenu_reset(app->submenu);
 
-    VariableItem* item;
+    submenu_set_header(app->submenu, "IP SCANNER");
 
-    // Add the item to scan the network
-    item = variable_item_list_add(app->varList, "Start Scanner", 0, NULL, app);
-    variable_item_set_current_value_text(item, "START");
-
-    // Add item to set the IP address
+    // SET IP
+    furi_string_reset(app->text);
     if(*(uint32_t*)ip_start == 0) memcpy(ip_start, app->ip_gateway, 4);
-    item = variable_item_list_add(app->varList, "Set IP Address", 0, NULL, app);
-
-    furi_string_reset(app->text); // Reset the text
     furi_string_cat_printf(
-        app->text,
-        "%u.%u.%u.%u",
-        ip_start[0],
-        ip_start[1],
-        ip_start[2],
-        ip_start[3]); // Set the text with the IP address
+        app->text, "Set IP [%u.%u.%u.%u]", ip_start[0], ip_start[1], ip_start[2], ip_start[3]);
 
-    variable_item_set_current_value_text(
-        item, furi_string_get_cstr(app->text)); // Set the varible item text
+    submenu_add_item(
+        app->submenu, furi_string_get_cstr(app->text), SET_IP, arp_menu_callback, app);
 
-    // Add item to set the range of the scan
-    item = variable_item_list_add(app->varList, "Set Range", 255, change_value_callback, app);
+    // SET RANGE
+    furi_string_reset(app->text);
+    furi_string_cat_printf(app->text, "Range [%u]", range_ip);
 
-    variable_item_set_current_value_index(item, range_ip); // Set the current value
+    submenu_add_item(
+        app->submenu, furi_string_get_cstr(app->text), SET_RANGE, arp_menu_callback, app);
 
-    furi_string_reset(app->text); // Reset the text
-    furi_string_cat_printf(
-        app->text, "%u", range_ip); // Set the text with the total number of IP addresses
+    // START
+    submenu_add_item(app->submenu, "Start Scanner", START_SCANNER, arp_menu_callback, app);
 
-    variable_item_set_current_value_text(
-        item, furi_string_get_cstr(app->text)); // Set the varible item text
+    // VIEW RESULTS
+    submenu_add_item(app->submenu, "View Results", VIEW_RESULTS, arp_menu_callback, app);
 
-    // set the callback for the variable item list
-    variable_item_list_set_enter_callback(app->varList, variable_list_enter_callback, app);
-
-    // Switch to the variable list view
-    view_dispatcher_switch_to_view(app->view_dispatcher, VarListView);
+    view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);
 }
 
 // function for the arp menu scene on event
@@ -123,16 +188,19 @@ void app_scene_arp_scanner_menu_on_exit(void* context) {
 // Function for the thread
 int32_t arp_scanner_thread(void* context);
 
+// Function to view the IP results
+void build_ip_submenu(App* app, uint32_t selection);
+
 // Function to set the thread and the view
 void draw_the_arp_list(App* app) {
     furi_thread_suspend(furi_thread_get_id(app->thread));
 
     app->thread_alternative =
         furi_thread_alloc_ex("ARP SCANNER", 10 * 1024, arp_scanner_thread, app);
+
     furi_thread_start(app->thread_alternative);
 
-    // Switch the view of the flipper
-    widget_reset(app->widget);
+    view_dispatcher_switch_to_view(app->view_dispatcher, LoadingView);
 }
 
 // Function to draw to finished the thread
@@ -161,6 +229,7 @@ void set_ip_address(App* app) {
 
 // Function to show the list of IP
 void show_current_arp_list(App* app) {
+    build_ip_submenu(app, ARP_STATE_START_SCAN);
     view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);
 }
 
@@ -169,35 +238,44 @@ void app_scene_arp_scanner_on_enter(void* context) {
     App* app = (App*)context;
 
     switch(scene_manager_get_scene_state(app->scene_manager, app_scene_arp_scanner_option)) {
-    case 0:
-    case 3:
-        // If the scene is in state 0, starts the thread and show ip list
+    case ARP_STATE_START_SCAN:
+    case ARP_STATE_SPOOF:
         draw_the_arp_list(app);
-        view_dispatcher_switch_to_view(app->view_dispatcher, LoadingView);
         break;
 
-    case 1:
-        // Starts the set IP view (input byte view)
+    case ARP_STATE_SET_IP:
         set_ip_address(app);
         break;
 
-    case 2:
-        // Show the IP list in this scene
-        show_current_arp_list(app);
+    case ARP_STATE_SET_RANGE:
+        set_range_value(app);
         break;
 
-    default:
+    case ARP_STATE_SHOW_LIST:
+        show_current_arp_list(app);
         break;
     }
 }
 
 // function on event for the arp scanner scene
 bool app_scene_arp_scanner_on_event(void* context, SceneManagerEvent event) {
-    bool consumed = false;
     App* app = (App*)context;
-    UNUSED(app);
-    UNUSED(event);
-    return consumed;
+
+    if(event.type == SceneManagerEventTypeCustom) {
+        if(event.event == 1) {
+            finished_arp_thread(app);
+
+            scene_manager_set_scene_state(
+                app->scene_manager, app_scene_arp_scanner_option, ARP_STATE_SHOW_LIST);
+
+            // Redibujar directamente sin apilar escena
+            show_current_arp_list(app);
+
+            return true;
+        }
+    }
+
+    return false;
 }
 
 // function on exit for the arp scanner scene
@@ -206,10 +284,8 @@ void app_scene_arp_scanner_on_exit(void* context) {
 
     // If scene is in state 0 it finished the
     switch(scene_manager_get_scene_state(app->scene_manager, app_scene_arp_scanner_option)) {
-    case 0:
-    case 3:
-        finished_arp_thread(app);
-        break;
+    case ARP_STATE_START_SCAN:
+    case ARP_STATE_SPOOF:
 
     default:
         break;
@@ -252,7 +328,8 @@ void app_scene_arp_ip_show_details_on_enter(void* context) {
     App* app = (App*)context;
 
     // Change state of the previous scene to only show the Submenu view
-    scene_manager_set_scene_state(app->scene_manager, app_scene_arp_scanner_option, 2);
+    scene_manager_set_scene_state(
+        app->scene_manager, app_scene_arp_scanner_option, ARP_STATE_SHOW_LIST);
 
     // Get the index in the arp ip list
     uint32_t index =
@@ -327,6 +404,44 @@ void app_scene_arp_ip_show_details_on_exit(void* context) {
     UNUSED(app);
 }
 
+void build_ip_submenu(App* app, uint32_t selection) {
+    submenu_reset(app->submenu);
+    submenu_set_header(app->submenu, "SCANNED IPs");
+
+    for(uint8_t i = 0; i < app->ip_counter; i++) {
+        furi_string_reset(app->text);
+        furi_string_cat_printf(
+            app->text,
+            "%u.%u.%u.%u",
+            app->ip_list[i].ip[0],
+            app->ip_list[i].ip[1],
+            app->ip_list[i].ip[2],
+            app->ip_list[i].ip[3]);
+
+        if(is_duplicated_ip(app->ip_list[i].ip, app->ip_list, app->ip_counter)) {
+            furi_string_cat_printf(app->text, " (D)");
+        }
+
+        if(selection == ARP_STATE_START_SCAN) {
+            submenu_add_item(
+                app->submenu, furi_string_get_cstr(app->text), i, ip_list_callback, app);
+        } else {
+            submenu_add_item(
+                app->submenu, furi_string_get_cstr(app->text), i, ip_list_spoofing_callback, app);
+        }
+    }
+}
+
+void ip_list_select_callback(void* context, uint32_t index) {
+    App* app = (App*)context;
+
+    // Save IP selected in the helper global variable
+    memcpy(app->ip_helper, app->ip_list[index].ip, 4);
+
+    // Go to the previous scene
+    scene_manager_previous_scene(app->scene_manager);
+}
+
 /**
  * Thread for the ARP Scanner
  */
@@ -338,57 +453,16 @@ int32_t arp_scanner_thread(void* context) {
 
     bool start = app->enc28j60_connected;
 
-    uint32_t selection =
-        scene_manager_get_scene_state(app->scene_manager, app_scene_arp_scanner_option);
-
     if(!start) {
-        start = enc28j60_start(ethernet) != 0xff; // Start the enc28j60
-        app->enc28j60_connected = start; // Update the connection status
+        start = enc28j60_start(ethernet) != 0xff;
+        app->enc28j60_connected = start;
     }
 
-    if(!start) {
-        draw_device_no_connected(app);
-    }
-
-    if(!is_the_network_connected(ethernet) && start) {
-        draw_network_not_connected(app);
-        start = false;
-    }
-
-    if(start) {
+    if(start && is_the_network_connected(ethernet)) {
         arp_scan_network(ethernet, app->ip_list, ip_start, &app->ip_counter, range_ip);
-
-        submenu_reset(app->submenu);
-        view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);
-
-        submenu_set_header(app->submenu, "IP LIST");
-
-        for(uint8_t i = 0; i < app->ip_counter; i++) {
-            furi_string_reset(app->text);
-            furi_string_cat_printf(
-                app->text,
-                "%u.%u.%u.%u",
-                app->ip_list[i].ip[0],
-                app->ip_list[i].ip[1],
-                app->ip_list[i].ip[2],
-                app->ip_list[i].ip[3]);
-
-            if(is_duplicated_ip(app->ip_list[i].ip, app->ip_list, app->ip_counter)) {
-                furi_string_cat_printf(app->text, " (D)");
-            }
-            if(selection == 0) {
-                submenu_add_item(
-                    app->submenu, furi_string_get_cstr(app->text), i, ip_list_callback, app);
-            } else if(selection == 3) {
-                submenu_add_item(
-                    app->submenu,
-                    furi_string_get_cstr(app->text),
-                    i,
-                    ip_list_spoofing_callback,
-                    app);
-            }
-        }
     }
+
+    view_dispatcher_send_custom_event(app->view_dispatcher, 1);
 
     return 0;
 }

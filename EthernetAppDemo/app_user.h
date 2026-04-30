@@ -7,6 +7,7 @@
 #include <gui/modules/submenu.h>
 #include <gui/modules/text_box.h>
 #include <gui/modules/text_input.h>
+#include <gui/modules/number_input.h>
 #include <gui/modules/variable_item_list.h>
 #include <gui/modules/widget.h>
 #include <gui/modules/file_browser.h>
@@ -28,6 +29,9 @@
 #include "modules/capture_module.h"
 #include "modules/analysis_module.h"
 #include "modules/ping_module.h"
+#include "modules/os_detector_module.h"
+
+#define MAX_OS_SCAN_PORTS 16
 
 #include "libraries/functions/functions.h"
 
@@ -35,7 +39,7 @@
 
 // Version of the app
 #define APP_NAME    "ETHERNET APP"
-#define APP_VERSION "v1.1.1.1"
+#define APP_VERSION "v1.1.1.2"
 
 // Path for the files
 #define PATHAPP    "apps_data/ethernet" // Path
@@ -86,6 +90,7 @@ typedef struct {
     FileBrowser* file_browser;
     ip_assigner_t* ip_assigner;
     Loading* loading;
+    NumberInput* number_input;
 
     enc28j60_t* ethernet; // Instance for the enc28j60
 
@@ -99,6 +104,12 @@ typedef struct {
 
     FuriThread* thread; // For the threads
     FuriThread* thread_alternative; // For the threads
+
+    port_result_t ports[MAX_OS_SCAN_PORTS];
+    uint8_t ports_count;
+    bool os_guess;
+    uint16_t src_port;
+    uint16_t selected_menu_index;
 } App;
 
 // Views in the App
@@ -109,10 +120,20 @@ typedef enum {
     TextBoxView,
     DialogInfoView,
     InputByteView,
+    NumberInputView,
     FileBrowserView,
     IpAssignerView,
     LoadingView
 } scenesViews;
+
+typedef enum {
+    ARP_STATE_START_SCAN = 0,
+    ARP_STATE_SET_IP,
+    ARP_STATE_SHOW_LIST,
+    ARP_STATE_SPOOF,
+    ARP_STATE_SELECT_IP,
+    ARP_STATE_SET_RANGE,
+} ARP_SCENE_STATES;
 
 // This functions works only to draw repetitive views in widgets
 void draw_in_development(App* app); // draws when something is on development

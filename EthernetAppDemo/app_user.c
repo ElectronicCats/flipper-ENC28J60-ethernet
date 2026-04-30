@@ -81,6 +81,11 @@ App* app_alloc() {
 
     app->text = furi_string_alloc();
 
+    app->number_input = number_input_alloc();
+
+    view_dispatcher_add_view(
+        app->view_dispatcher, NumberInputView, number_input_get_view(app->number_input));
+
     // Init the storage
     app->storage = furi_record_open(RECORD_STORAGE);
     app->dialogs = furi_record_open(RECORD_DIALOGS);
@@ -118,6 +123,7 @@ void app_free(App* app) {
     view_dispatcher_remove_view(app->view_dispatcher, SubmenuView);
     view_dispatcher_remove_view(app->view_dispatcher, WidgetView);
     view_dispatcher_remove_view(app->view_dispatcher, TextBoxView);
+    view_dispatcher_remove_view(app->view_dispatcher, NumberInputView);
     view_dispatcher_remove_view(app->view_dispatcher, VarListView);
     view_dispatcher_remove_view(app->view_dispatcher, InputByteView);
     view_dispatcher_remove_view(app->view_dispatcher, FileBrowserView);

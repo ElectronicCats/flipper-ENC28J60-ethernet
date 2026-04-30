@@ -11,6 +11,8 @@
 
 #define DEBUG 0
 
+#define SCAN_TTL 64
+
 typedef enum {
     TCP_HS_SYN,
     TCP_HS_SYN_ACK,
@@ -33,6 +35,17 @@ bool tcp_send_syn(
     uint32_t sequence,
     uint32_t ack_number) {
     uint16_t tcp_len = 0;
+    uint16_t window_size;
+
+    // Variación realista tipo Nmap
+    uint8_t r = furi_hal_random_get() % 3;
+
+    if(r == 0)
+        window_size = 64240; // Linux típico
+    else if(r == 1)
+        window_size = 65535; // BSD / iOS
+    else
+        window_size = 8192; // Windows antiguo
     if(!set_tcp_header_syn(
            ethernet->tx_buffer + ETHERNET_HEADER_LEN + IP_HEADER_LEN,
            source_ip,
@@ -41,7 +54,7 @@ bool tcp_send_syn(
            dest_port,
            sequence,
            ack_number,
-           1,
+           window_size,
            0,
            &tcp_len))
         return false;
@@ -54,7 +67,7 @@ bool tcp_send_syn(
            target_ip,
            0,
            0x4000,
-           WIN_TTL))
+           SCAN_TTL))
         return false;
 
     if(!set_ethernet_header(ethernet->tx_buffer, source_mac, target_mac, 0x800)) return false;
@@ -123,7 +136,7 @@ bool tcp_send_fin(
            target_ip,
            0,
            0x4000,
-           WIN_TTL))
+           SCAN_TTL))
         return false;
 
     if(!set_ethernet_header(buffer, ethernet->mac_address, target_mac, 0x800)) return false;
@@ -176,7 +189,7 @@ bool tcp_send_ack(
         return false;
 
     if(!set_ipv4_header(
-           buffer + ETHERNET_HEADER_LEN, 6, tcp_len, source_ip, target_ip, 0, 0x4000, WIN_TTL))
+           buffer + ETHERNET_HEADER_LEN, 6, tcp_len, source_ip, target_ip, 0, 0x4000, SCAN_TTL))
         return false;
 
     if(!set_ethernet_header(buffer, source_mac, target_mac, 0x800)) return false;
@@ -217,7 +230,7 @@ void tcp_syn_scan(void* context, uint8_t* target_ip, uint16_t init_port, uint16_
 
     tcp_header_t tcp_header;
 
-    uint32_t sequence = 1;
+    uint32_t sequence = furi_get_tick() ^ (rand() << 16);
     uint32_t ack_number = 0;
 
     uint32_t submenu_index = 0;
@@ -231,13 +244,16 @@ void tcp_syn_scan(void* context, uint8_t* target_ip, uint16_t init_port, uint16_
         furi_string_cat_printf(app->text, TEXT_PORT_FORMAT, i, TEXT_POINTS);
         submenu_change_item_label(app->submenu, submenu_index, furi_string_get_cstr(app->text));
         //printf("PUERTO: %lu\n", i);
+
+        uint16_t src_port = 32768 + (rand() % 28232);
+
         tcp_send_syn(
             app->ethernet,
             app->ethernet->mac_address,
             app->ethernet->ip_address,
             target_mac,
             target_ip,
-            64892,
+            src_port,
             i,
             sequence,
             ack_number);
@@ -325,7 +341,7 @@ bool tcp_handshake_process(
            target_mac))
         return false;
 
-    uint32_t sequence = 1;
+    uint32_t sequence = furi_get_tick() ^ (rand() << 16);
     uint32_t ack_number = 0;
 
     uint32_t last_time = 0;
@@ -444,7 +460,7 @@ bool tcp_handshake_process_spoof(
            target_mac))
         return false;
 
-    uint32_t sequence = 1;
+    uint32_t sequence = furi_get_tick() ^ (rand() << 16);
     uint32_t ack_number = 0;
 
     uint32_t last_time = 0;
@@ -559,7 +575,7 @@ bool tcp_os_detector(void* context, uint8_t* target_ip, uint16_t source_port, ui
            target_mac))
         return false;
 
-    uint32_t sequence = 1;
+    uint32_t sequence = furi_get_tick() ^ (rand() << 16);
     uint32_t ack_number = 0;
 
     uint32_t last_time = 0;
@@ -619,4 +635,184 @@ bool tcp_os_detector(void* context, uint8_t* target_ip, uint16_t source_port, ui
         }
     }
     return result;
+}
+
+bool tcp_send_ack_probe(
+    enc28j60_t* ethernet,
+    uint8_t* source_mac,
+    uint8_t* source_ip,
+    uint8_t* target_mac,
+    uint8_t* target_ip,
+    uint16_t source_port,
+    uint16_t dest_port,
+    uint32_t sequence) {
+    uint16_t tcp_len = 0;
+
+    if(!set_tcp_header_ack(
+           ethernet->tx_buffer + ETHERNET_HEADER_LEN + IP_HEADER_LEN,
+           source_ip,
+           target_ip,
+           source_port,
+           dest_port,
+           sequence,
+           0,
+           1024,
+           0,
+           &tcp_len))
+        return false;
+
+    if(!set_ipv4_header(
+           ethernet->tx_buffer + ETHERNET_HEADER_LEN,
+           6,
+           tcp_len,
+           source_ip,
+           target_ip,
+           0,
+           0x4000,
+           SCAN_TTL))
+        return false;
+
+    if(!set_ethernet_header(ethernet->tx_buffer, source_mac, target_mac, 0x800)) return false;
+
+    send_packet(ethernet, ethernet->tx_buffer, ETHERNET_HEADER_LEN + IP_HEADER_LEN + tcp_len);
+
+    return true;
+}
+
+bool tcp_send_fin_probe(
+    enc28j60_t* ethernet,
+    uint8_t* source_mac,
+    uint8_t* source_ip,
+    uint8_t* target_mac,
+    uint8_t* target_ip,
+    uint16_t source_port,
+    uint16_t dest_port,
+    uint32_t sequence) {
+    uint16_t tcp_len = 0;
+
+    if(!set_tcp_header_fin(
+           ethernet->tx_buffer + ETHERNET_HEADER_LEN + IP_HEADER_LEN,
+           source_ip,
+           target_ip,
+           source_port,
+           dest_port,
+           sequence,
+           0,
+           1024,
+           0,
+           &tcp_len))
+        return false;
+
+    if(!set_ipv4_header(
+           ethernet->tx_buffer + ETHERNET_HEADER_LEN,
+           6,
+           tcp_len,
+           source_ip,
+           target_ip,
+           0,
+           0x4000,
+           SCAN_TTL))
+        return false;
+
+    if(!set_ethernet_header(ethernet->tx_buffer, source_mac, target_mac, 0x800)) return false;
+
+    send_packet(ethernet, ethernet->tx_buffer, ETHERNET_HEADER_LEN + IP_HEADER_LEN + tcp_len);
+
+    return true;
+}
+
+bool tcp_send_null_probe(
+    enc28j60_t* ethernet,
+    uint8_t* source_mac,
+    uint8_t* source_ip,
+    uint8_t* target_mac,
+    uint8_t* target_ip,
+    uint16_t source_port,
+    uint16_t dest_port,
+    uint32_t sequence) {
+    uint16_t tcp_len = 0;
+    uint16_t options_size = 0;
+    uint8_t* options_vector = NULL;
+
+    if(!set_tcp_header_tseq(
+           ethernet->tx_buffer + ETHERNET_HEADER_LEN + IP_HEADER_LEN,
+           source_ip,
+           target_ip,
+           source_port,
+           dest_port,
+           sequence,
+           0,
+           1024,
+           0,
+           &options_size,
+           options_vector,
+           &tcp_len)) {
+        return false;
+    }
+    if(!set_ipv4_header(
+           ethernet->tx_buffer + ETHERNET_HEADER_LEN,
+           6,
+           tcp_len,
+           source_ip,
+           target_ip,
+           0,
+           0x4000,
+           SCAN_TTL))
+        return false;
+
+    if(!set_ethernet_header(ethernet->tx_buffer, source_mac, target_mac, 0x800)) return false;
+
+    send_packet(ethernet, ethernet->tx_buffer, ETHERNET_HEADER_LEN + IP_HEADER_LEN + tcp_len);
+
+    return true;
+}
+
+bool tcp_send_xmas_probe(
+    enc28j60_t* ethernet,
+    uint8_t* source_mac,
+    uint8_t* source_ip,
+    uint8_t* target_mac,
+    uint8_t* target_ip,
+    uint16_t source_port,
+    uint16_t dest_port,
+    uint32_t sequence) {
+    uint16_t tcp_len = 0;
+
+    uint16_t options_size = 0;
+
+    if(!set_tcp_header_tseq(
+           ethernet->tx_buffer + ETHERNET_HEADER_LEN + IP_HEADER_LEN,
+           source_ip,
+           target_ip,
+           source_port,
+           dest_port,
+           sequence,
+           0,
+           1024,
+           0,
+           &options_size,
+           NULL,
+           &tcp_len)) {
+        return false;
+    }
+
+    if(!set_ipv4_header(
+           ethernet->tx_buffer + ETHERNET_HEADER_LEN,
+           6,
+           tcp_len,
+           source_ip,
+           target_ip,
+           0,
+           0x4000,
+           SCAN_TTL)) {
+        return false;
+    }
+
+    if(!set_ethernet_header(ethernet->tx_buffer, source_mac, target_mac, 0x800)) {
+        return false;
+    }
+
+    send_packet(ethernet, ethernet->tx_buffer, ETHERNET_HEADER_LEN + IP_HEADER_LEN + tcp_len);
+
+    { return false; }
 }

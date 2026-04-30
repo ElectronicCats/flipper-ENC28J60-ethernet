@@ -12,14 +12,16 @@ const uint32_t time_showing = 1000;
 // List for the menu options
 enum {
     SNIFFING_OPTION,
-    READ_PCAPS_OPTION,
-    ARP_ACTIONS_OPTION,
-    TESTING_OPTION,
+    IP_SCANNER_OPTION,
+    DORA_PROCESS_OPTION,
     PING_OPTION,
     PORTS_SCANNER_OPTION,
     OS_DETECTOR_OPTION,
+    ARP_ACTIONS_OPTION,
+    READ_PCAPS_OPTION,
     SETTINGS_OPTION,
-    ABOUT_US
+    ABOUT_US,
+    TESTING_OPTION
 } main_menu_options;
 
 // Function to display init at the start of the app
@@ -41,6 +43,8 @@ void draw_start(App* app) {
 void main_menu_options_callback(void* context, uint32_t index) {
     App* app = (App*)context;
 
+    scene_manager_set_scene_state(app->scene_manager, app_scene_main_menu_option, index);
+
     switch(index) {
 #if DEV_MODE
     case TESTING_OPTION:
@@ -53,12 +57,12 @@ void main_menu_options_callback(void* context, uint32_t index) {
         scene_manager_next_scene(app->scene_manager, app_scene_sniffer_option);
         break;
 
-    case READ_PCAPS_OPTION:
-        scene_manager_next_scene(app->scene_manager, app_scene_browser_pcaps_option);
+    case IP_SCANNER_OPTION:
+        scene_manager_next_scene(app->scene_manager, app_scene_arp_scanner_menu_option);
         break;
 
-    case ARP_ACTIONS_OPTION:
-        scene_manager_next_scene(app->scene_manager, app_scene_arp_action_menu_option);
+    case DORA_PROCESS_OPTION:
+        scene_manager_next_scene(app->scene_manager, app_scene_get_ip_option);
         break;
 
     case PING_OPTION:
@@ -71,6 +75,14 @@ void main_menu_options_callback(void* context, uint32_t index) {
 
     case OS_DETECTOR_OPTION:
         scene_manager_next_scene(app->scene_manager, app_scene_os_detector_option);
+        break;
+
+    case ARP_ACTIONS_OPTION:
+        scene_manager_next_scene(app->scene_manager, app_scene_arp_action_menu_option);
+        break;
+
+    case READ_PCAPS_OPTION:
+        scene_manager_next_scene(app->scene_manager, app_scene_browser_pcaps_option);
         break;
 
     case SETTINGS_OPTION:
@@ -109,26 +121,37 @@ void app_scene_main_menu_on_enter(void* context) {
     submenu_add_item(app->submenu, "Sniffer", SNIFFING_OPTION, main_menu_options_callback, app);
 
     submenu_add_item(
-        app->submenu, "ARP Actions", ARP_ACTIONS_OPTION, main_menu_options_callback, app);
+        app->submenu, "IP Scanner", IP_SCANNER_OPTION, main_menu_options_callback, app);
 
     submenu_add_item(
-        app->submenu, "Read Pcaps", READ_PCAPS_OPTION, main_menu_options_callback, app);
+        app->submenu, "DORA Process", DORA_PROCESS_OPTION, main_menu_options_callback, app);
 
     submenu_add_item(app->submenu, "Ping", PING_OPTION, main_menu_options_callback, app);
 
     submenu_add_item(
         app->submenu, "Ports Scanner", PORTS_SCANNER_OPTION, main_menu_options_callback, app);
-#if DEV_MODE
+
     submenu_add_item(
         app->submenu, "OS Detector", OS_DETECTOR_OPTION, main_menu_options_callback, app);
 
-    submenu_add_item(app->submenu, "...", TESTING_OPTION, main_menu_options_callback, app);
-#endif
+    submenu_add_item(
+        app->submenu, "ARP Actions", ARP_ACTIONS_OPTION, main_menu_options_callback, app);
+
+    submenu_add_item(
+        app->submenu, "Read Pcaps", READ_PCAPS_OPTION, main_menu_options_callback, app);
+
     submenu_add_item(app->submenu, "Settings", SETTINGS_OPTION, main_menu_options_callback, app);
 
     submenu_add_item(app->submenu, "About Us", ABOUT_US, main_menu_options_callback, app);
 
+#if DEV_MODE
+    submenu_add_item(app->submenu, "...", TESTING_OPTION, main_menu_options_callback, app);
+#endif
+
     view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);
+
+    uint32_t index = scene_manager_get_scene_state(app->scene_manager, app_scene_main_menu_option);
+    submenu_set_selected_item(app->submenu, index);
 }
 
 // Function for the main menu on event

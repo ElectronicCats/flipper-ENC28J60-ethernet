@@ -23,12 +23,9 @@ bool create_tcp_header(
     uint_to_bytes(&sequence, tcp_header->sequence, sizeof(uint32_t));
     uint_to_bytes(&ack_number, tcp_header->ack_number, sizeof(uint32_t));
 
-    // Set data offset (5 = 20 bytes / 4) and reserved bits
-    tcp_header->data_offset_flags[0] = (5 << 4); // 5 * 4 = 20 bytes header length
+    uint16_t offset_and_flags = ((5 << 12) | flags); // 5 = header sin opciones
 
-    // Set flags
-    tcp_header->data_offset_flags[0] |= ((uint8_t*)&flags)[1] & 0x01;
-    tcp_header->data_offset_flags[1] = ((uint8_t*)&flags)[0];
+    uint_to_bytes(&offset_and_flags, tcp_header->data_offset_flags, sizeof(uint16_t));
 
     // Set window size
     uint_to_bytes(&window_size, tcp_header->window_size, sizeof(uint16_t));
@@ -78,11 +75,13 @@ bool set_tcp_header_syn(
     if(buffer == NULL || source_ip == NULL || target_ip == NULL) return false;
 
     pseudo_header_ip_t pseudo_header;
+    memset(&pseudo_header, 0, sizeof(pseudo_header_ip_t));
     memcpy(pseudo_header.source_ip, source_ip, 4);
     memcpy(pseudo_header.target_ip, target_ip, 4);
     pseudo_header.protocol = 0x06;
 
     tcp_header_t tcp_header;
+    memset(&tcp_header, 0, sizeof(tcp_header_t));
 
     create_tcp_header(
         &tcp_header,
@@ -94,24 +93,55 @@ bool set_tcp_header_syn(
         window_size,
         urgent_pointer);
 
-    // Crear la funcion para armar el paquete SYN
-    uint16_t options_size = 0;
+    uint16_t idx = 0;
 
-    // This is the array with the values to send the request
-    uint8_t first_option[] = {TCP_MSS, 0x04, 0x05, 0xB4, 0x01};
-    memcpy(tcp_header.options + options_size, first_option, sizeof(first_option));
-    options_size += sizeof(first_option);
+    // MSS 1460
+    tcp_header.options[idx++] = 0x02;
+    tcp_header.options[idx++] = 0x04;
+    tcp_header.options[idx++] = 0x05;
+    tcp_header.options[idx++] = 0xB4;
 
-    uint8_t second_option[] = {TCP_WS, 0x03, 0x08, 0x01, 0x01};
-    memcpy(tcp_header.options + options_size, second_option, sizeof(second_option));
-    options_size += sizeof(second_option);
+    // NOP, NOP
+    tcp_header.options[idx++] = 0x01;
+    tcp_header.options[idx++] = 0x01;
 
-    uint8_t tree_option[] = {TCP_SACK_P, 0x02};
-    memcpy(tcp_header.options + options_size, tree_option, sizeof(tree_option));
-    options_size += sizeof(tree_option);
+    // SACK permitted
+    tcp_header.options[idx++] = 0x04;
+    tcp_header.options[idx++] = 0x02;
 
-    tcp_header.data_offset_flags[0] = ((tcp_header.data_offset_flags[0] >> 4) + (options_size / 4))
-                                      << 4;
+    // NOP, NOP
+    tcp_header.options[idx++] = 0x01;
+    tcp_header.options[idx++] = 0x01;
+
+    // Timestamp
+    tcp_header.options[idx++] = 0x08;
+    tcp_header.options[idx++] = 0x0A;
+
+    // TSval dinámico
+    uint32_t ts = furi_get_tick();
+    uint_to_bytes(&ts, &tcp_header.options[idx], 4);
+    idx += 4;
+
+    // TSecr = 0
+    uint32_t tsecr = 0;
+    uint_to_bytes(&tsecr, &tcp_header.options[idx], 4);
+    idx += 4;
+
+    // Padding a múltiplo de 4
+    while(idx % 4 != 0) {
+        tcp_header.options[idx++] = TCP_NOP;
+    }
+
+    uint16_t options_size = idx;
+
+    uint8_t header_words = (TCP_HEADER_LEN + options_size) / 4;
+    uint16_t offset_and_flags;
+    bytes_to_uint(&offset_and_flags, tcp_header.data_offset_flags, sizeof(uint16_t));
+
+    offset_and_flags &= 0x0FFF; // limpiar solo data offset
+    offset_and_flags |= (header_words << 12);
+
+    uint_to_bytes(&offset_and_flags, tcp_header.data_offset_flags, sizeof(uint16_t));
 
     calculate_checksum_tcp(options_size, &pseudo_header, &tcp_header);
 
@@ -225,6 +255,7 @@ bool set_tcp_header_tseq(
     pseudo_header.protocol = 0x06;
 
     tcp_header_t tcp_header;
+    memset(&tcp_header, 0, sizeof(tcp_header_t));
 
     create_tcp_header(
         &tcp_header,

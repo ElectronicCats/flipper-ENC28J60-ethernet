@@ -1,9 +1,9 @@
 #include "../app_user.h"
 
 enum {
-    SCAN_IP,
-    ATTACK_IP,
-    SET_IP
+    VIEW_IP_LIST,
+    SET_IP,
+    ATTACK_IP
 } arp_ip_specific_options;
 
 static uint8_t target_ip[4] = {0};
@@ -16,16 +16,19 @@ void arp_spoofing_menu_to_ip_callback(void* context, uint32_t index) {
     App* app = (App*)context;
 
     switch(index) {
+    case VIEW_IP_LIST:
+        scene_manager_set_scene_state(
+            app->scene_manager, app_scene_arp_scanner_option, ARP_STATE_SHOW_LIST);
+
+        scene_manager_next_scene(app->scene_manager, app_scene_arp_scanner_option);
+        break;
+
     case ATTACK_IP:
     case SET_IP:
+
         scene_manager_set_scene_state(
             app->scene_manager, app_scene_arp_spoofing_specific_ip_option, index);
         scene_manager_next_scene(app->scene_manager, app_scene_arp_spoofing_specific_ip_option);
-        break;
-
-    case SCAN_IP:
-        scene_manager_set_scene_state(app->scene_manager, app_scene_arp_scanner_menu_option, 2);
-        scene_manager_next_scene(app->scene_manager, app_scene_arp_scanner_menu_option);
         break;
 
     default:
@@ -38,6 +41,14 @@ void app_scene_arp_spoofing_specific_ip_menu_on_enter(void* context) {
     App* app = (App*)context;
 
     submenu_reset(app->submenu);
+
+    // If an IP was selected from ARP, copy it
+    if(*(uint32_t*)app->ip_helper != 0) {
+        memcpy(target_ip, app->ip_helper, 4);
+
+        // Clear helper to avoid overwriting later
+        memset(app->ip_helper, 0, 4);
+    }
 
     if(*(uint32_t*)target_ip == 0) memcpy(target_ip, app->ip_gateway, 4);
     furi_string_reset(app->text);
@@ -52,8 +63,12 @@ void app_scene_arp_spoofing_specific_ip_menu_on_enter(void* context) {
 
     submenu_set_header(app->submenu, "ARP Spoofing To IP");
 
-    // Option Scan an IP
-    submenu_add_item(app->submenu, "Scan for IP", SCAN_IP, arp_spoofing_menu_to_ip_callback, app);
+    submenu_add_item(
+        app->submenu, "View scanned IPs", VIEW_IP_LIST, arp_spoofing_menu_to_ip_callback, app);
+
+    // Option set an IP by manual
+    submenu_add_item(
+        app->submenu, "Set IP manually", SET_IP, arp_spoofing_menu_to_ip_callback, app);
 
     // Option to run the ARP spoofing IP
     submenu_add_item(
@@ -63,9 +78,10 @@ void app_scene_arp_spoofing_specific_ip_menu_on_enter(void* context) {
         arp_spoofing_menu_to_ip_callback,
         app);
 
-    // Option set an IP by manual
-    submenu_add_item(
-        app->submenu, "Set IP manually", SET_IP, arp_spoofing_menu_to_ip_callback, app);
+    uint32_t last_index = scene_manager_get_scene_state(
+        app->scene_manager, app_scene_arp_spoofing_specific_ip_option);
+
+    submenu_set_selected_item(app->submenu, last_index);
 
     // switch view to menu
     view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);
@@ -156,11 +172,14 @@ void app_scene_arp_spoofing_specific_ip_on_enter(void* context) {
 
 // Function for the spoofing scene on event
 bool app_scene_arp_spoofing_specific_ip_on_event(void* context, SceneManagerEvent event) {
-    bool consumed = false;
     App* app = (App*)context;
-    UNUSED(app);
-    UNUSED(event);
-    return consumed;
+
+    if(event.type == SceneManagerEventTypeBack) {
+        scene_manager_previous_scene(app->scene_manager);
+        return true;
+    }
+
+    return false;
 }
 
 // Function for the arp spoofing scene on exit
@@ -184,8 +203,11 @@ void app_scene_arp_spoofing_specific_ip_on_exit(void* context) {
 // Function to draw if getting the MAC from IP failed
 void draw_process_failed(App* app) {
     widget_reset(app->widget);
+
     widget_add_string_multiline_element(
-        app->widget, 64, 32, AlignCenter, AlignCenter, FontPrimary, "Failed getting MAC");
+        app->widget, 64, 24, AlignCenter, AlignCenter, FontPrimary, "Failed getting MAC");
+
+    widget_add_button_element(app->widget, GuiButtonTypeLeft, "Back", NULL, NULL);
 }
 
 // Function to display the view to attack an IP
