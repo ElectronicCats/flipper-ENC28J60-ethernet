@@ -285,8 +285,12 @@ int32_t ping_thread(void* context) {
     // Variable to start the process
     bool start_ping = false;
 
-    // Array to get the MAC for the GATEWAY
+    // Array to get the MAC for the next hop (target if on-subnet, else gateway).
     uint8_t mac_to_send[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+
+    // F0.3a — scanner session (subnet-aware MAC resolve + cache).
+    scanner_session_t scanner;
+    scanner_session_init(&scanner, app);
 
     // reset the counters
     messages_sent = 0;
@@ -332,21 +336,12 @@ int32_t ping_thread(void* context) {
         goto finalize;
     }
 
-    // Get the MAC gateway
-    if(!arp_get_specific_mac(
-           ethernet,
-           app->ethernet->ip_address,
-           (*(uint32_t*)ethernet->ip_address & *(uint32_t*)ethernet->subnet_mask) ==
-                   (*(uint32_t*)app->scan_params.ip_ping &
-                    *(uint32_t*)ethernet->subnet_mask) ?
-               app->scan_params.ip_ping :
-               app->ip_gateway,
-           app->ethernet->mac_address,
-           app->mac_gateway) &&
-       start_ping && is_connected) {
+    // F0.3a — resolve next-hop MAC for the ping target.
+    // scanner_resolve_next_hop handles subnet check + ARP + cache, and
+    // updates app->mac_gateway when the resolved hop IS the gateway.
+    if(start_ping && is_connected &&
+       !scanner_resolve_next_hop(&scanner, app->scan_params.ip_ping, mac_to_send)) {
         start_ping = false;
-    } else {
-        memcpy(mac_to_send, app->mac_gateway, 6);
     }
 
     // Here is where gonna make the ping
@@ -386,6 +381,7 @@ int32_t ping_thread(void* context) {
     furi_delay_ms(1);
 
 finalize:
+    scanner_session_deinit(&scanner);
 
     return 0;
 }
