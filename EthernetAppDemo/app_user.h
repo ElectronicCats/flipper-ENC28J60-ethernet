@@ -1,3 +1,5 @@
+#pragma once
+
 #include <furi.h>
 #include <furi_hal.h>
 #include <gui/gui.h>
@@ -126,6 +128,11 @@ typedef struct {
 
     scan_params_t scan_params;     // F0.1 — centralized cross-scene targets
 } App;
+
+// F0.2 — settings persistence. Must be included AFTER the App typedef
+// because settings.h declares functions taking `App*`, and App is an
+// anonymous-struct typedef (cannot be forward-declared).
+#include "libraries/settings/settings.h"
 
 // Views in the App
 typedef enum {

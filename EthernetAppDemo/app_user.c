@@ -125,10 +125,20 @@ App* app_alloc() {
     app->is_static_ip = false;
     app->is_dora = false;
 
+    // F0.2 — overlay persisted settings on top of the in-memory defaults.
+    // Silent fallback to defaults if /ext/apps_data/ethernet/settings.cfg is
+    // missing or malformed.
+    settings_load(app);
+
     return app;
 }
 
 void app_free(App* app) {
+    // F0.2 — persist current settings before tearing down storage and the
+    // ethernet instance. Errors are silent; a failed save must not block
+    // app exit.
+    settings_save(app);
+
     furi_thread_flags_set(furi_thread_get_id(app->thread), flag_stop);
 
     furi_thread_join(app->thread);
