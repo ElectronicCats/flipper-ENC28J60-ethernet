@@ -1,3 +1,15 @@
+/*
+ * Portions of this file are derived from the EtherCard library
+ * (https://github.com/njh/EtherCard), originally authored by Guido Socher
+ * and Jean-Claude Wippler, itself based on AVRlib by Pascal Stang.
+ * EtherCard is licensed under GPL-2.0-or-later. See LICENSES/EtherCard.LICENSE.
+ *
+ * Modifications by Electronic Cats, 2024-2025: ported to Flipper Zero
+ * (Furi HAL SPI), C-only, struct-based instance API.
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
+
 #include "enc28j60.h"
 
 /**
