@@ -38,6 +38,21 @@ App* app_alloc() {
     // Alloc the app memory
     App* app = (App*)malloc(sizeof(App));
 
+    // F0.1 — initialize cross-scene scan parameters with sensible defaults.
+    // Matches the prior file-static initial values:
+    //   PortsScannerScene.c:11   target_port = 22
+    //   PortsScannerScene.c:12   range_port = 1000
+    //   PortsScannerScene.c:40   protocols_index = PORTS_SCANNER_TCP
+    //   ArpScannerScene.c:17     range_ip = 30
+    // Other arrays default to all zeros (already done by calloc/memset).
+    app->scan_params.target_port = 22;
+    app->scan_params.range_port = 1000;
+    app->scan_params.protocols_index = 0; // PORTS_SCANNER_TCP
+    app->scan_params.range_ip = 30;
+    memset(app->scan_params.target_ip, 0, sizeof(app->scan_params.target_ip));
+    memset(app->scan_params.ip_ping, 0, sizeof(app->scan_params.ip_ping));
+    memset(app->scan_params.ip_start, 0, sizeof(app->scan_params.ip_start));
+
     // Alloc the scene manager and view dispatcher
     app->scene_manager = scene_manager_alloc(&app_scene_handlers, app);
     app->view_dispatcher = view_dispatcher_alloc();
