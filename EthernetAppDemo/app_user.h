@@ -133,6 +133,7 @@ typedef struct {
 // because settings.h declares functions taking `App*`, and App is an
 // anonymous-struct typedef (cannot be forward-declared).
 #include "libraries/settings/settings.h"
+#include "libraries/scanner/scanner_session.h"
 
 // Views in the App
 typedef enum {
