@@ -10,8 +10,7 @@
  * This problem will be solved but at the moment will be in development
  */
 
-// Ping to by default, it does ping to google
-uint8_t ip_ping[4] = {0, 0, 0, 0};
+// ip_ping now lives in app->scan_params (F0.1)
 
 // counter for messages sent
 uint16_t messages_sent = 0;
@@ -59,10 +58,16 @@ void app_scene_ping_menu_scene_on_enter(void* context) {
 
     furi_string_reset(app->text);
 
-    if(*(uint32_t*)ip_ping == 0) memcpy(ip_ping, app->ip_gateway, 4);
+    if(*(uint32_t*)app->scan_params.ip_ping == 0)
+        memcpy(app->scan_params.ip_ping, app->ip_gateway, 4);
 
     furi_string_cat_printf(
-        app->text, "PING TO %u:%u:%u:%u", ip_ping[0], ip_ping[1], ip_ping[2], ip_ping[3]);
+        app->text,
+        "PING TO %u:%u:%u:%u",
+        app->scan_params.ip_ping[0],
+        app->scan_params.ip_ping[1],
+        app->scan_params.ip_ping[2],
+        app->scan_params.ip_ping[3]);
 
     submenu_set_header(app->submenu, furi_string_get_cstr(app->text));
 
@@ -71,7 +76,12 @@ void app_scene_ping_menu_scene_on_enter(void* context) {
     submenu_add_item(app->submenu, "View scanned IPs", 2, menu_ping_options_callback, app);
 
     furi_string_cat_printf(
-        app->text, "IP to do ping %u:%u:%u:%u", ip_ping[0], ip_ping[1], ip_ping[2], ip_ping[3]);
+        app->text,
+        "IP to do ping %u:%u:%u:%u",
+        app->scan_params.ip_ping[0],
+        app->scan_params.ip_ping[1],
+        app->scan_params.ip_ping[2],
+        app->scan_params.ip_ping[3]);
 
     submenu_add_item(
         app->submenu, furi_string_get_cstr(app->text), 1, menu_ping_options_callback, app);
@@ -111,7 +121,12 @@ void draw_ping_packet_count(App* app) {
 
     furi_string_reset(app->text);
     furi_string_cat_printf(
-        app->text, "%u:%u:%u:%u", ip_ping[0], ip_ping[1], ip_ping[2], ip_ping[3]);
+        app->text,
+        "%u:%u:%u:%u",
+        app->scan_params.ip_ping[0],
+        app->scan_params.ip_ping[1],
+        app->scan_params.ip_ping[2],
+        app->scan_params.ip_ping[3]);
 
     widget_add_string_element(
         app->widget,
@@ -149,7 +164,7 @@ void app_scene_ping_set_ip_scene_on_enter(void* context) {
 
     ip_assigner_set_header(app->ip_assigner, "IP TO PING");
 
-    ip_assigner_set_ip_array(app->ip_assigner, ip_ping);
+    ip_assigner_set_ip_array(app->ip_assigner, app->scan_params.ip_ping);
 
     ip_assigner_callback(app->ip_assigner, input_bytes_for_ip_to_ping_callback, app);
 
@@ -322,8 +337,9 @@ int32_t ping_thread(void* context) {
            ethernet,
            app->ethernet->ip_address,
            (*(uint32_t*)ethernet->ip_address & *(uint32_t*)ethernet->subnet_mask) ==
-                   (*(uint32_t*)ip_ping & *(uint32_t*)ethernet->subnet_mask) ?
-               ip_ping :
+                   (*(uint32_t*)app->scan_params.ip_ping &
+                    *(uint32_t*)ethernet->subnet_mask) ?
+               app->scan_params.ip_ping :
                app->ip_gateway,
            app->ethernet->mac_address,
            app->mac_gateway) &&
@@ -341,7 +357,7 @@ int32_t ping_thread(void* context) {
                 ethernet->mac_address,
                 mac_to_send,
                 app->ethernet->ip_address,
-                ip_ping,
+                app->scan_params.ip_ping,
                 1,
                 sequence,
                 (uint8_t*)ping_data,
@@ -358,7 +374,7 @@ int32_t ping_thread(void* context) {
         packet_receive_len = receive_packet(ethernet, packet_to_receive, MAX_FRAMELEN);
 
         if(packet_receive_len) {
-            if(ping_packet_replied(packet_to_receive, ip_ping)) {
+            if(ping_packet_replied(packet_to_receive, app->scan_params.ip_ping)) {
                 ping_responses++;
                 view_dispatcher_send_custom_event(
                     app->view_dispatcher, 5); // Update the ping count
