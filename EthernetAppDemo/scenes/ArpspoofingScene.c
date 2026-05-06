@@ -94,6 +94,10 @@ int32_t arpspoofing_thread(void* context) {
 
     uint8_t count_frame = 0;
 
+    // F0.3b — scanner session (cancel-requested check).
+    scanner_session_t scanner;
+    scanner_session_init(&scanner, app);
+
     widget_reset(app->widget); // Reset the widget
     view_dispatcher_switch_to_view(
         app->view_dispatcher, WidgetView); // Switch view for the view dispatcher
@@ -157,7 +161,7 @@ int32_t arpspoofing_thread(void* context) {
         last_time = furi_get_tick();
     }
 
-    while(furi_hal_gpio_read(&gpio_button_back) && program_loop) {
+    while(!scanner_cancel_requested(&scanner) && program_loop) {
         // Waiting to read the gpio ok to attack or stop to attack
         if(furi_hal_gpio_read(&gpio_button_ok)) {
             attack = !attack;
@@ -192,5 +196,6 @@ int32_t arpspoofing_thread(void* context) {
         draw_device_no_connected(app);
     }
 
+    scanner_session_deinit(&scanner);
     return 0;
 }
