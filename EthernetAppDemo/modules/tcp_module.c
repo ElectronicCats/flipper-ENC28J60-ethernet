@@ -1,6 +1,7 @@
 #include "tcp_module.h"
 
 #include "app_user.h"
+#include "arp_module.h"
 #include "../libraries/protocol_tools/tcp.h"
 #include "../libraries/protocol_tools/ethernet_protocol.h"
 #include "../libraries/protocol_tools/ipv4.h"
@@ -213,37 +214,83 @@ bool tcp_send_ack(
     return true;
 }
 
+// Predicate context for tcp_syn_scan's wait_for_packet calls.
+// `port_open` is an OUT field — true on SYN-ACK match, false on RST-ACK
+// match. Predicate returns true in either case so the wait can break.
+typedef struct {
+    enc28j60_t* ethernet;
+    uint8_t* my_mac;
+    uint16_t expected_source_port;
+    bool port_open;
+} tcp_scan_pred_ctx_t;
+
+static bool tcp_scan_match(const uint8_t* frame, uint16_t len, void* ctx) {
+    UNUSED(len);
+    tcp_scan_pred_ctx_t* c = (tcp_scan_pred_ctx_t*)ctx;
+
+    // Auto-reply to incidental ARP requests during the scan; do not match.
+    if(is_arp((uint8_t*)frame)) {
+        arp_reply_requested(c->ethernet, (uint8_t*)frame, c->ethernet->ip_address);
+        return false;
+    }
+
+    if(!is_tcp((uint8_t*)frame)) return false;
+
+    // Frame's destination MAC == our MAC?
+    if((*(uint16_t*)(c->my_mac + 4) != *(uint16_t*)(frame + 4)) ||
+       (*(uint32_t*)c->my_mac != *(uint32_t*)frame))
+        return false;
+
+    tcp_header_t hdr = tcp_get_header((uint8_t*)frame);
+
+    uint16_t data_offset_flags = 0;
+    bytes_to_uint(&data_offset_flags, hdr.data_offset_flags, sizeof(uint16_t));
+    data_offset_flags &= 0x1FF;
+
+    uint16_t source_port = 0;
+    bytes_to_uint(&source_port, hdr.source_port, sizeof(uint16_t));
+
+    if(source_port != c->expected_source_port) return false;
+
+    uint16_t syn_ack = (uint16_t)(TCP_SYN | TCP_ACK);
+    uint16_t rst_ack = (uint16_t)(TCP_RST | TCP_ACK);
+
+    if((data_offset_flags & syn_ack) == syn_ack) {
+        c->port_open = true;
+        return true;
+    }
+    if((data_offset_flags & rst_ack) == rst_ack) {
+        c->port_open = false;
+        return true; // match — break wait, but don't record open.
+    }
+    return false;
+}
+
 void tcp_syn_scan(void* context, uint8_t* target_ip, uint16_t init_port, uint16_t range_port) {
     App* app = context;
 
-    uint8_t target_mac[6] = {0};
-    if(!arp_get_specific_mac(
-           app->ethernet,
-           app->ethernet->ip_address,
-           (*(uint32_t*)app->ip_gateway & *(uint32_t*)app->ethernet->subnet_mask) ==
-                   (*(uint32_t*)target_ip & *(uint32_t*)app->ethernet->subnet_mask) ?
-               target_ip :
-               app->ip_gateway,
-           app->ethernet->mac_address,
-           target_mac))
-        return;
+    // F0.3e — scanner session (subnet-aware ARP + cache + cancel + wait).
+    scanner_session_t scanner;
+    scanner_session_init(&scanner, app);
 
-    tcp_header_t tcp_header;
+    uint8_t target_mac[6] = {0};
+    if(!scanner_resolve_next_hop(&scanner, target_ip, target_mac)) {
+        scanner_session_deinit(&scanner);
+        return;
+    }
 
     uint32_t sequence = furi_get_tick() ^ (rand() << 16);
     uint32_t ack_number = 0;
 
     uint32_t submenu_index = 0;
-
     submenu_add_item(app->submenu, "", submenu_index, NULL, NULL);
 
     for(uint32_t i = init_port; i < (init_port + range_port); i++) {
-        //furi_thread_yield();
-        if(!furi_hal_gpio_read(&gpio_button_back)) break;
+        if(scanner_cancel_requested(&scanner)) break;
+
         furi_string_reset(app->text);
         furi_string_cat_printf(app->text, TEXT_PORT_FORMAT, i, TEXT_POINTS);
         submenu_change_item_label(app->submenu, submenu_index, furi_string_get_cstr(app->text));
-        //printf("PUERTO: %lu\n", i);
 
         uint16_t src_port = 32768 + (rand() % 28232);
 
@@ -258,65 +305,37 @@ void tcp_syn_scan(void* context, uint8_t* target_ip, uint16_t init_port, uint16_
             sequence,
             ack_number);
 
-        uint32_t last_time = furi_get_tick();
-
-        while(!(furi_get_tick() - last_time > 100)) {
-            uint16_t packen_len = 0;
-
-            packen_len = receive_packet(app->ethernet, app->ethernet->rx_buffer, 1500);
-
-            if(packen_len) {
-                if(is_arp(app->ethernet->rx_buffer)) {
-                    arp_reply_requested(
-                        app->ethernet, app->ethernet->rx_buffer, app->ethernet->ip_address);
-                } else if(is_tcp(app->ethernet->rx_buffer)) {
-                    // Packet is for me
-                    if((*(uint16_t*)(app->ethernet->mac_address + 4) ==
-                        *(uint16_t*)(app->ethernet->rx_buffer + 4)) &&
-                       (*(uint32_t*)app->ethernet->mac_address ==
-                        *(uint32_t*)app->ethernet->rx_buffer)) {
-                        tcp_header = tcp_get_header(app->ethernet->rx_buffer);
-
-                        uint16_t data_offset_flags = 0;
-                        bytes_to_uint(
-                            &data_offset_flags, tcp_header.data_offset_flags, sizeof(uint16_t));
-                        data_offset_flags &= 0x1FF;
-                        data_offset_flags &= ((uint16_t)(TCP_SYN | TCP_ACK));
-
-                        uint16_t source_port;
-                        bytes_to_uint(&source_port, tcp_header.source_port, sizeof(uint16_t));
-
-                        if((data_offset_flags == (uint16_t)(TCP_SYN | TCP_ACK)) &&
-                           source_port == i) {
-                            furi_string_reset(app->text);
-                            furi_string_cat_printf(
-                                app->text, TEXT_PORT_FORMAT, (uint32_t)source_port, "\0");
-                            submenu_change_item_label(
-                                app->submenu, submenu_index, furi_string_get_cstr(app->text));
-                            //submenu_set_selected_item(app->submenu, submenu_index);
-                            submenu_index++;
-                            furi_string_reset(app->text);
-                            furi_string_cat_printf(app->text, TEXT_PORT_FORMAT, i, TEXT_POINTS);
-                            submenu_add_item(
-                                app->submenu,
-                                furi_string_get_cstr(app->text),
-                                submenu_index,
-                                NULL,
-                                NULL);
-                            submenu_set_selected_item(app->submenu, submenu_index);
-                            break;
-                        } else if(
-                            (data_offset_flags == (uint16_t)(TCP_RST | TCP_ACK)) &&
-                            source_port == i) {
-                            break;
-                        }
-                    }
-                }
-            }
+        // F0.3e — scanner_wait_for_packet replaces the inline 100ms poll.
+        // Predicate matches our scan port and reports SYN-ACK (open) vs
+        // RST-ACK (closed) via pred_ctx.port_open. Returns true on either
+        // match so the wait breaks early on RST, preserving pre-F0.3e
+        // throughput on closed ports.
+        tcp_scan_pred_ctx_t pred_ctx = {
+            .ethernet = app->ethernet,
+            .my_mac = app->ethernet->mac_address,
+            .expected_source_port = (uint16_t)i,
+            .port_open = false,
+        };
+        uint16_t got = 0;
+        if(scanner_wait_for_packet(&scanner, tcp_scan_match, &pred_ctx, &got, 100) &&
+           pred_ctx.port_open) {
+            // SYN-ACK observed — record open port.
+            furi_string_reset(app->text);
+            furi_string_cat_printf(app->text, TEXT_PORT_FORMAT, (uint32_t)i, "\0");
+            submenu_change_item_label(
+                app->submenu, submenu_index, furi_string_get_cstr(app->text));
+            submenu_index++;
+            furi_string_reset(app->text);
+            furi_string_cat_printf(app->text, TEXT_PORT_FORMAT, i, TEXT_POINTS);
+            submenu_add_item(
+                app->submenu, furi_string_get_cstr(app->text), submenu_index, NULL, NULL);
+            submenu_set_selected_item(app->submenu, submenu_index);
         }
     }
     furi_string_reset(app->text);
     submenu_change_item_label(app->submenu, submenu_index, "FINISH");
+
+    scanner_session_deinit(&scanner);
 }
 
 bool tcp_handshake_process(
