@@ -5,6 +5,7 @@
 #include "../libraries/protocol_tools/ipv4.h"
 #include "../libraries/protocol_tools/arp.h"
 #include "../libraries/protocol_tools/ethernet_protocol.h"
+#include "../libraries/scanner/scanner_session.h"
 #include "../modules/tcp_module.h"
 #include "../libraries/protocol_tools/icmp.h"
 #include "../modules/ping_module.h"
@@ -269,24 +270,48 @@ void clasificar_window(uint16_t* win, int n, uint8_t* value_ptr) {
     }
 }
 
-static bool os_icmp_probe(App* app, uint8_t* target_ip, uint8_t* out_ttl, uint32_t* out_rtt) {
+// Predicate context for os_icmp_probe.
+typedef struct {
+    uint8_t* out_ttl;
+    uint32_t* out_rtt;
+    uint32_t start_time;
+} os_icmp_probe_ctx_t;
+
+static bool os_icmp_probe_match(const uint8_t* frame, uint16_t len, void* ctx) {
+    UNUSED(len);
+    os_icmp_probe_ctx_t* c = (os_icmp_probe_ctx_t*)ctx;
+
+    if(!is_icmp((uint8_t*)frame)) return false;
+    icmp_header_t icmp = icmp_get_header((uint8_t*)frame);
+    if(icmp.type != ICMP_TYPE_ECHO_REPLY) return false;
+
+    ipv4_header_t ip = ipv4_get_header((uint8_t*)frame);
+    *c->out_ttl = ip.ttl;
+    *c->out_rtt = furi_get_tick() - c->start_time;
+    return true;
+}
+
+// F0.3f — takes scanner_session_t* instead of App* so it can reuse the
+// MAC cache and the wait_for_packet primitive. Single caller (os_scan)
+// updated below.
+static bool os_icmp_probe(
+    scanner_session_t* scanner,
+    uint8_t* target_ip,
+    uint8_t* out_ttl,
+    uint32_t* out_rtt) {
     uint32_t start_time = furi_get_tick();
 
     uint8_t packet[MAX_FRAMELEN] = {0};
     uint8_t target_mac[6] = {0};
+    enc28j60_t* ethernet = scanner->ethernet;
 
-    arp_get_specific_mac(
-        app->ethernet,
-        app->ethernet->ip_address,
-        target_ip,
-        app->ethernet->mac_address,
-        target_mac);
+    if(!scanner_resolve_next_hop(scanner, target_ip, target_mac)) return false;
 
     uint16_t packet_len = create_flipper_ping_packet(
         packet,
-        app->ethernet->mac_address,
+        ethernet->mac_address,
         target_mac,
-        app->ethernet->ip_address,
+        ethernet->ip_address,
         target_ip,
         0xBEEF,
         1,
@@ -295,26 +320,15 @@ static bool os_icmp_probe(App* app, uint8_t* target_ip, uint8_t* out_ttl, uint32
 
     if(packet_len == 0) return false;
 
-    send_packet(app->ethernet, packet, packet_len);
+    send_packet(ethernet, packet, packet_len);
 
-    while((furi_get_tick() - start_time) < 1000) {
-        uint16_t len = receive_packet(app->ethernet, app->ethernet->rx_buffer, MAX_FRAMELEN);
-        if(len == 0) continue;
-
-        if(!is_icmp(app->ethernet->rx_buffer)) continue;
-
-        icmp_header_t icmp = icmp_get_header(app->ethernet->rx_buffer);
-        if(icmp.type != ICMP_TYPE_ECHO_REPLY) continue;
-
-        ipv4_header_t ip = ipv4_get_header(app->ethernet->rx_buffer);
-
-        *out_ttl = ip.ttl;
-        *out_rtt = furi_get_tick() - start_time;
-
-        return true;
-    }
-
-    return false;
+    os_icmp_probe_ctx_t pred_ctx = {
+        .out_ttl = out_ttl,
+        .out_rtt = out_rtt,
+        .start_time = start_time,
+    };
+    uint16_t got = 0;
+    return scanner_wait_for_packet(scanner, os_icmp_probe_match, &pred_ctx, &got, 1000);
 }
 
 /* 8 options:
@@ -650,6 +664,11 @@ int get_port_index(uint16_t port, uint16_t* probe_ports, uint8_t count) {
 
 int32_t os_scan(void* context, uint8_t* target_ip) {
     App* app = context;
+
+    // F0.3f — scanner session for ARP cache + cancel + os_icmp_probe.
+    scanner_session_t scanner;
+    scanner_session_init(&scanner, app);
+
     os_scoreboard_t sb = {0};
     os_scoreboard_init(&sb);
 
@@ -687,15 +706,12 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
 
     uint32_t ack_number = 0;
 
-    arp_get_specific_mac(
-        app->ethernet,
-        app->ethernet->ip_address,
-        (*(uint32_t*)app->ip_gateway & *(uint32_t*)app->ethernet->subnet_mask) ==
-                (*(uint32_t*)target_ip & *(uint32_t*)app->ethernet->subnet_mask) ?
-            target_ip :
-            app->ip_gateway,
-        app->ethernet->mac_address,
-        target_mac);
+    // F0.3f — replaces inline subnet check + arp_get_specific_mac.
+    // Return value intentionally ignored to preserve original behavior:
+    // pre-F0.3f the code also ignored arp_get_specific_mac's return and
+    // continued with target_mac=0 on failure. Whether the scan produces
+    // useful results in that case is a separate question (it doesn't).
+    scanner_resolve_next_hop(&scanner, target_ip, target_mac);
 
     seq_act = OFP_TSEQ;
     doSeqTests(app, target_ip);
@@ -723,6 +739,9 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
     }
 
     while(attemp != packet_count) {
+        // F0.3f — honor cancel between attempt rounds.
+        if(scanner_cancel_requested(&scanner)) break;
+
         memset(app->ethernet->rx_buffer, 0, 1500);
 
         for(uint8_t p = 0; p < probe_port_count; p++) {
@@ -1071,7 +1090,7 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
             port_results[i].last_sequence);
     }
 
-    if(os_icmp_probe(app, target_ip, &ttl, &rtt)) {
+    if(os_icmp_probe(&scanner, target_ip, &ttl, &rtt)) {
         ttl_icmp = ttl;
         icmp_valid = true;
     }
@@ -1482,19 +1501,23 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
 
     if(best >= STRONG_OS_THRESHOLD) {
         app->os_guess = false;
+        scanner_session_deinit(&scanner);
         return result;
 
     }
 
     else if(best >= GUESS_OS_THRESHOLD) {
         app->os_guess = true;
+        scanner_session_deinit(&scanner);
         return result;
 
     }
 
     else {
         app->os_guess = false;
+        scanner_session_deinit(&scanner);
         return NO_DETECTED;
     }
+    scanner_session_deinit(&scanner);
     return os_score_resolve(&sb);
 }
