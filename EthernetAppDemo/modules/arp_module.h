@@ -70,14 +70,16 @@ void send_arp_spoofing(enc28j60_t* ethernet, uint8_t* buffer, uint16_t len);
  * to discover all active devices on the local network segment. It then populates a provided
  * `arp_list` with the IP and MAC addresses of the devices that respond.
  *
- * @param ethernet A pointer to the ENC28J60 driver instance.
+ * @param scanner A pointer to a scanner_session_t (forward-declared as
+ *                struct ScannerSession to avoid pulling scanner_session.h).
  * @param list A pointer to an `arp_list` structure to store the discovered devices.
  * @param init_ip A pointer to the 4-byte starting IP address for the scan.
  * @param list_count A pointer to a `uint8_t` that will be updated with the number of devices found.
  * @param range The number of IP addresses to scan from the `init_ip`.
  */
+struct ScannerSession; // forward declaration for arp_scan_network
 void arp_scan_network(
-    enc28j60_t* ethernet,
+    struct ScannerSession* scanner,
     arp_list* list,
     uint8_t init_ip[4],
     uint8_t* list_count,

@@ -463,12 +463,16 @@ int32_t arp_scanner_thread(void* context) {
     }
 
     if(start && is_the_network_connected(ethernet)) {
+        // F0.3c — arp_scan_network now takes a scanner_session_t.
+        scanner_session_t scanner;
+        scanner_session_init(&scanner, app);
         arp_scan_network(
-            ethernet,
+            &scanner,
             app->ip_list,
             app->scan_params.ip_start,
             &app->ip_counter,
             app->scan_params.range_ip);
+        scanner_session_deinit(&scanner);
     }
 
     view_dispatcher_send_custom_event(app->view_dispatcher, 1);

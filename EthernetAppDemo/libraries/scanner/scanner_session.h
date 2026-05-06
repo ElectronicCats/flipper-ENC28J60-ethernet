@@ -9,7 +9,10 @@
  */
 typedef bool (*scanner_packet_predicate_fn)(const uint8_t* frame, uint16_t len, void* ctx);
 
-typedef struct {
+// Named-tag typedef so other module headers can forward-declare
+// `struct ScannerSession;` and use `struct ScannerSession*` in their
+// public signatures without dragging this whole header in.
+typedef struct ScannerSession {
     enc28j60_t* ethernet;
     ViewDispatcher* view_dispatcher;
     uint8_t* ip_gateway;       // borrowed: App.ip_gateway (4 bytes)
