@@ -253,16 +253,19 @@ static bool tcp_scan_match(const uint8_t* frame, uint16_t len, void* ctx) {
     if(source_port != c->expected_source_port) return false;
 
     uint16_t syn_ack = (uint16_t)(TCP_SYN | TCP_ACK);
-    uint16_t rst_ack = (uint16_t)(TCP_RST | TCP_ACK);
 
     if((data_offset_flags & syn_ack) == syn_ack) {
         c->port_open = true;
         return true;
     }
-    if((data_offset_flags & rst_ack) == rst_ack) {
-        c->port_open = false;
-        return true; // match — break wait, but don't record open.
-    }
+    // RST-ACK detection intentionally NOT done here. Pre-F0.3e the code
+    // attempted to early-break on RST-ACK but the bitmask made it dead code,
+    // so closed ports always took the full 100 ms timeout. Re-introducing
+    // the early-break tripled the rate of submenu mutations from this
+    // worker thread, which surfaced a pre-existing GUI-from-worker race
+    // (the scan would hang and the device reset). Until F0.4 moves the
+    // GUI updates onto the dispatcher thread, the safer choice is to
+    // preserve the original 100 ms-per-port pacing.
     return false;
 }
 

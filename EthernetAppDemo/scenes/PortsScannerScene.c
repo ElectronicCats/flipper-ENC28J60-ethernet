@@ -211,6 +211,18 @@ void variable_list_ports_scanner_callback(void* context, uint32_t index) {
         view_dispatcher_switch_to_view(app->view_dispatcher, NumberInputView);
         break;
     }
+
+    case PROTOCOL:
+        // Toggle between TCP and UDP. Pre-F0 the protocol switcher used a
+        // VariableItemList with left/right arrows; commit eae1f70 migrated
+        // the scene to Submenu, which doesn't support in-place value
+        // changes — so the click-to-toggle pattern is the natural fit.
+        app->scan_params.protocols_index =
+            (app->scan_params.protocols_index == PORTS_SCANNER_TCP) ? PORTS_SCANNER_UDP :
+                                                                      PORTS_SCANNER_TCP;
+        // Rebuild the submenu so the "Protocol [TCP/UDP]" label updates.
+        app_scene_ports_scanner_on_enter(app);
+        break;
     }
 }
 
