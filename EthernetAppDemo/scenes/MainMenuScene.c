@@ -25,7 +25,6 @@ enum {
     READ_PCAPS_OPTION,
     SETTINGS_OPTION,
     ABOUT_US,
-    TESTING_OPTION
 } main_menu_options;
 
 // Function to display init at the start of the app
@@ -50,13 +49,6 @@ void main_menu_options_callback(void* context, uint32_t index) {
     scene_manager_set_scene_state(app->scene_manager, app_scene_main_menu_option, index);
 
     switch(index) {
-#if DEV_MODE
-    case TESTING_OPTION:
-
-        //printf("TEST OPTION\n");
-
-        break;
-#endif
     case GET_IP_OPTION:
         scene_manager_next_scene(app->scene_manager, app_scene_get_ip_option);
         break;
@@ -145,10 +137,6 @@ void app_scene_main_menu_on_enter(void* context) {
     submenu_add_item(app->submenu, "Settings", SETTINGS_OPTION, main_menu_options_callback, app);
 
     submenu_add_item(app->submenu, "About Us", ABOUT_US, main_menu_options_callback, app);
-
-#if DEV_MODE
-    submenu_add_item(app->submenu, "...", TESTING_OPTION, main_menu_options_callback, app);
-#endif
 
     view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);
 
