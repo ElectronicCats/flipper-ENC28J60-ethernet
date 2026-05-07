@@ -792,9 +792,6 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
                             if(tcp_opts_vec[attemp].has_ts) {
                                 ts_vals[attemp] = tcp_opts_vec[attemp].tsval;
                             }
-
-                            for(uint8_t k = 0; k < tcp_opts_vec[attemp].count; k++)
-                                ;
                         }
 
                         uint16_t windows_size;
@@ -849,9 +846,6 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
                         if(count_valid >= 6) {
                             port_responded[port_idx] = true;
                         }
-
-                        for(uint16_t i = 0; i < packen_len; i++)
-                            ;
 
                         continue; // salir del while de espera para enviar nuevos SYN a puertos restantes
                     }
