@@ -1,7 +1,24 @@
 #include "rx_dispatch.h"
+#include <furi_hal_gpio.h>
+#include <furi_hal_resources.h>
 
 #define RX_DISPATCH_MAX_HANDLERS 8
 #define RX_DISPATCH_STACK_BYTES  4096
+
+// F0.5c — wakeup is now driven by an external GPIO interrupt on the
+// ENC28J60 INT pin (wired to PA14 / SWCLK / Flipper external pin 10).
+// The chip drives INT low whenever any EIR.* flag is set with its
+// matching EIE.* enable bit. enc28j60_start sets EIE_INTIE|EIE_PKTIE,
+// so each received packet pulls INT low; receive_packet's ECON2.PKTDEC
+// clears the flag and lets INT release (only when EPKTCNT hits 0).
+//
+// We use a falling-edge ISR that just sets a thread flag — ISR-safe,
+// no chip I/O, no mutex. The dispatcher thread blocks on flag_wait
+// with a 100 ms timeout so a missed INT (datasheet errata DS80349
+// notes some races) still gets serviced within 100 ms instead of
+// hanging forever.
+#define RX_FLAG_INT          (1U << 0)
+#define RX_POLL_FALLBACK_MS  100
 
 struct rx_handle {
     rx_predicate_fn predicate;
@@ -13,6 +30,7 @@ struct rx_handle {
 typedef struct {
     enc28j60_t* ethernet;
     FuriThread* thread;
+    FuriThreadId thread_id;
     FuriMutex* mutex;
     volatile bool running;
     volatile uint8_t pause_count;  // >0 = paused. Counter for nestable pause/resume.
@@ -22,46 +40,59 @@ typedef struct {
 
 static rx_dispatch_t g_dispatch;
 
+// ISR context: only operations safe to do here are flag/queue/semaphore
+// signaling. Furi's furi_thread_flags_set wraps xTaskNotifyFromISR.
+static void rx_dispatch_int_isr(void* ctx) {
+    rx_dispatch_t* d = (rx_dispatch_t*)ctx;
+    if(d->thread_id) {
+        furi_thread_flags_set(d->thread_id, RX_FLAG_INT);
+    }
+}
+
 static int32_t rx_dispatch_thread_fn(void* context) {
     rx_dispatch_t* d = (rx_dispatch_t*)context;
     enc28j60_t* eth = d->ethernet;
     uint8_t* rx = eth->rx_buffer;
 
     while(d->running) {
-        // Honor pause requests so the worker thread (during DORA) gets
-        // exclusive chip access. F0.4b will replace this with a DHCP
-        // handler so the worker never reads the chip directly.
+        // Block until INT fires or fallback timeout. Idle traffic case:
+        // ~10 wakeups/s instead of the 1000/s F0.4 polling cadence.
+        // FuriFlagWaitAny default also clears matched flags on exit
+        // (FuriFlagNoClear would suppress that).
+        furi_thread_flags_wait(RX_FLAG_INT, FuriFlagWaitAny, RX_POLL_FALLBACK_MS);
+
+        if(!d->running) break;
+
         if(d->pause_count > 0) {
             d->acked_pause = true;
-            furi_delay_ms(1);
             continue;
         }
         d->acked_pause = false;
 
-        uint16_t len = receive_packet(eth, rx, MAX_FRAMELEN);
-        if(len == 0) {
-            // F0.4a hotfix — initial 100 µs polling froze the device when
-            // entering some menus (notably PingScene). Plausible causes:
-            // ENC28J60 SPI per-byte acquire/release saturating the bus
-            // mutex against GUI/scene threads, or chip RX state machine
-            // needing more recovery time. 1 ms matches the pre-F0.4a
-            // worker cadence that was hardware-validated in F0.3.
-            furi_delay_ms(1);
-            continue;
-        }
+        // Drain all queued packets in this wakeup. INT is falling-edge,
+        // so it only re-triggers on H→L; if multiple packets arrived
+        // between wakeups (or arrive while we're processing one), the
+        // chip keeps INT low until EPKTCNT decrements to zero. Looping
+        // here until receive_packet returns 0 ensures we don't leave
+        // packets stranded for a full RX_POLL_FALLBACK_MS window.
+        while(d->running) {
+            if(d->pause_count > 0) break;
+            uint16_t len = receive_packet(eth, rx, MAX_FRAMELEN);
+            if(len == 0) break;
 
-        // Snapshot handlers under mutex so a concurrent register/unregister
-        // doesn't tear the iteration. Each call is short; the mutex isn't
-        // held while handlers run.
-        struct rx_handle snapshot[RX_DISPATCH_MAX_HANDLERS];
-        furi_mutex_acquire(d->mutex, FuriWaitForever);
-        memcpy(snapshot, d->slots, sizeof(snapshot));
-        furi_mutex_release(d->mutex);
+            // Snapshot handlers under mutex so a concurrent register/
+            // unregister doesn't tear the iteration. Each call is short;
+            // the mutex isn't held while handlers run.
+            struct rx_handle snapshot[RX_DISPATCH_MAX_HANDLERS];
+            furi_mutex_acquire(d->mutex, FuriWaitForever);
+            memcpy(snapshot, d->slots, sizeof(snapshot));
+            furi_mutex_release(d->mutex);
 
-        for(uint8_t i = 0; i < RX_DISPATCH_MAX_HANDLERS; i++) {
-            if(!snapshot[i].in_use) continue;
-            if(snapshot[i].predicate(rx, len, snapshot[i].ctx)) {
-                snapshot[i].handler(rx, len, snapshot[i].ctx);
+            for(uint8_t i = 0; i < RX_DISPATCH_MAX_HANDLERS; i++) {
+                if(!snapshot[i].in_use) continue;
+                if(snapshot[i].predicate(rx, len, snapshot[i].ctx)) {
+                    snapshot[i].handler(rx, len, snapshot[i].ctx);
+                }
             }
         }
     }
@@ -80,17 +111,37 @@ void rx_dispatch_init(App* app) {
     g_dispatch.running = true;
     g_dispatch.thread = furi_thread_alloc_ex(
         "RX Dispatch", RX_DISPATCH_STACK_BYTES, rx_dispatch_thread_fn, &g_dispatch);
+
     furi_thread_start(g_dispatch.thread);
+    g_dispatch.thread_id = furi_thread_get_id(g_dispatch.thread);
+
+    // Configure PA14 (SWCLK / external pin 10) for falling-edge interrupt.
+    // Pull-up so the line idles high when the chip releases INT (the
+    // chip output is open-drain). Register ISR last so it can't fire
+    // before thread_id is set.
+    furi_hal_gpio_init(&gpio_swclk, GpioModeInterruptFall, GpioPullUp, GpioSpeedLow);
+    furi_hal_gpio_add_int_callback(&gpio_swclk, rx_dispatch_int_isr, &g_dispatch);
 }
 
 void rx_dispatch_deinit(App* app) {
     UNUSED(app);
     if(!g_dispatch.running) return;
 
+    // Stop new IRQs first, then restore the pin to a low-power state.
+    furi_hal_gpio_remove_int_callback(&gpio_swclk);
+    furi_hal_gpio_init(&gpio_swclk, GpioModeAnalog, GpioPullNo, GpioSpeedLow);
+
     g_dispatch.running = false;
+    // Kick the thread out of furi_thread_flags_wait so it can observe
+    // running=false and exit. Without this, teardown waits up to one
+    // RX_POLL_FALLBACK_MS window.
+    if(g_dispatch.thread_id) {
+        furi_thread_flags_set(g_dispatch.thread_id, RX_FLAG_INT);
+    }
     furi_thread_join(g_dispatch.thread);
     furi_thread_free(g_dispatch.thread);
     g_dispatch.thread = NULL;
+    g_dispatch.thread_id = NULL;
 
     furi_mutex_free(g_dispatch.mutex);
     g_dispatch.mutex = NULL;
@@ -144,4 +195,10 @@ void rx_dispatch_resume(void) {
     furi_mutex_acquire(g_dispatch.mutex, FuriWaitForever);
     if(g_dispatch.pause_count > 0) g_dispatch.pause_count--;
     furi_mutex_release(g_dispatch.mutex);
+    // F0.5c — kick the thread out of flags_wait so it sees the resumed
+    // state immediately. Without this it'd wait up to RX_POLL_FALLBACK_MS
+    // (100 ms) before resuming actual packet reads.
+    if(g_dispatch.thread_id) {
+        furi_thread_flags_set(g_dispatch.thread_id, RX_FLAG_INT);
+    }
 }
