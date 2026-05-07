@@ -1,8 +1,10 @@
 #include "../app_user.h"
 
-// Variables to save the positions and the count of packets
+// Variables to save the positions and the count of packets.
+// F0.7 — capacity exposed as a constant so pcap_scan can bounds-check.
+#define PACKET_POSITIONS_MAX 2000
 uint32_t packet_count = 0;
-uint64_t packet_positions[2000] = {0};
+uint64_t packet_positions[PACKET_POSITIONS_MAX] = {0};
 
 // Function for the thread
 int32_t thread_read_pcaps(void* context);
@@ -20,7 +22,8 @@ void app_scene_read_pcap_on_enter(void* context) {
     App* app = (App*)context;
 
     // watch if the pcap function works
-    packet_count = pcap_scan(app->file, furi_string_get_cstr(app->path), packet_positions);
+    packet_count = pcap_scan(
+        app->file, furi_string_get_cstr(app->path), packet_positions, PACKET_POSITIONS_MAX);
 
     // Allocate and start the thread
     app->thread_alternative =

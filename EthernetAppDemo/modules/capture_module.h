@@ -106,8 +106,10 @@ size_t pcap_get_specific_packet(File* file, uint8_t* packet, uint32_t packet_pos
  * @param file A pointer to the `File` object.
  * @param filename The complete path to the PCAP file.
  * @param positions A pointer to a `uint64_t` array where the file offset of each packet will be stored.
- * @return The total number of packets found in the file.
+ * @param max_positions Capacity of the `positions` array. F0.7 — added so
+ *        pcap_scan can stop before overflowing on large captures.
+ * @return The total number of packets found in the file (capped at max_positions).
  */
-uint32_t pcap_scan(File* file, const char* filename, uint64_t* positions);
+uint32_t pcap_scan(File* file, const char* filename, uint64_t* positions, uint32_t max_positions);
 
 #endif

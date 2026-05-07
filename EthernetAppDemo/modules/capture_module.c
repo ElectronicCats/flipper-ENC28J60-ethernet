@@ -155,7 +155,7 @@ size_t pcap_get_specific_packet(File* file, uint8_t* packet, uint32_t packet_pos
     return packet_header.orig_len;
 }
 
-uint32_t pcap_scan(File* file, const char* filename, uint64_t* positions) {
+uint32_t pcap_scan(File* file, const char* filename, uint64_t* positions, uint32_t max_positions) {
     // Counter and positions
     uint32_t counter = 0;
 
@@ -191,6 +191,10 @@ uint32_t pcap_scan(File* file, const char* filename, uint64_t* positions) {
     while(bytes_read > 0) {
         // Add the value for the position with bytes_read
         position = position + bytes_read;
+
+        // F0.7 — bounds check; pre-fix this could write past
+        // packet_positions[2000] on captures with > 2000 frames.
+        if(counter >= max_positions) break;
 
         // Add the position
         positions[counter] = position;
