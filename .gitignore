@@ -1,1 +1,21 @@
 .vscode
+
+# Build artifacts (uFBT) — distributed via GitHub Releases, not git.
+**/dist/
+**/build/
+*.fap
+*.elf
+*.elf.d
+*.o
+*.map
+
+# Regenerated per build; not portable across machines.
+compile_commands.json
+
+# Editor / OS
+*.swp
+.DS_Store
+
+# Local debug logs from /tmp helpers (pyserial scripts)
+*.pcap
+*.pcap.tmp
