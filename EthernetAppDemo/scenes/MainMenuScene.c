@@ -6,8 +6,10 @@
  * here the user selects an option that wants to do.
  */
 
-// Time to show the LOGO
-const uint32_t time_showing = 1000;
+// Time to show the LOGO. F0.7 — was 1000 ms. The splash blocks the GUI
+// thread for the entire delay and runs once on first entry to the
+// main menu. 250 ms is still legible as a splash but feels responsive.
+const uint32_t time_showing = 250;
 
 // List for the menu options
 // Order follows the natural network-audit flow:
