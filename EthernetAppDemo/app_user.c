@@ -63,7 +63,16 @@ static bool auto_icmp_predicate(const uint8_t* frame, uint16_t len, void* ctx) {
     UNUSED(len);
     App* app = (App*)ctx;
     if(!app->is_static_ip) return false;
-    return is_icmp((uint8_t*)frame);
+    if(!is_icmp((uint8_t*)frame)) return false;
+    // F0.5g — match ECHO REQUESTS only. Pre-fix the predicate matched
+    // any ICMP, including ECHO REPLIES bound for our own ping loop.
+    // The handler (ping_reply_to_request) ignored non-requests, but
+    // the frame was already dequeued by rx_dispatch's receive_packet,
+    // so PingScene's outstanding poll never saw the reply. Net effect:
+    // pings looked dropped or intermittent on the same LAN where they
+    // were actually arriving fine.
+    icmp_header_t icmp = icmp_get_header((uint8_t*)frame);
+    return icmp.type == ICMP_TYPE_ECHO_REQUEST;
 }
 
 static void auto_icmp_handler(const uint8_t* frame, uint16_t len, void* ctx) {

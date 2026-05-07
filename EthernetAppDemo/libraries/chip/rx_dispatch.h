@@ -6,6 +6,33 @@ typedef void (*rx_handler_fn)(const uint8_t* frame, uint16_t len, void* ctx);
 
 typedef struct rx_handle rx_handle_t;
 
+/**
+ * F0.5g handler contract:
+ *
+ * - Predicates and handlers run inside the dispatcher's own mutex
+ *   (held since F0.5d to make rx_unregister wait for any in-flight
+ *   invocation, closing a use-after-free on stack-allocated ctxs).
+ *
+ * - This means a slow handler blocks rx_register / rx_unregister
+ *   for as long as the handler runs. Keep handlers fast — single-
+ *   digit milliseconds at most. Use them to capture state into
+ *   `ctx` and signal a waiting thread (semaphore / message queue)
+ *   that does the heavy work off-mutex.
+ *
+ * - Handlers MUST NOT call rx_register or rx_unregister; that
+ *   would deadlock against the same mutex they're already holding.
+ *
+ * - Handlers MAY call chip-mutex-protected functions (send_packet,
+ *   etc.) — lock order is dispatch mutex (outer) → chip mutex
+ *   (inner) and there is no reverse path.
+ *
+ * - SnifferScene's handler currently does an SD write
+ *   (~10–50 ms typical) inside this lock. That delay surfaces as
+ *   Back-button latency on scene exit. Acceptable in practice; if
+ *   it ever exceeds tolerance, refactor to enqueue frames in the
+ *   handler and drain to SD from the scene's main loop.
+ */
+
 void rx_dispatch_init(App* app);
 void rx_dispatch_deinit(App* app);
 

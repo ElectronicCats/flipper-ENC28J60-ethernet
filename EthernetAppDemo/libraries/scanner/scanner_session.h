@@ -77,10 +77,16 @@ void scanner_send_packet_trigger(void* ctx);
 
 /**
  * Block until a received frame satisfies pred(frame, len, pred_ctx) or
- * timeout_ms elapses. On match, copies the matched length into *len_out
- * (the frame itself stays in ethernet->rx_buffer; caller reads from
- * there before invoking the next chip operation). On timeout, *len_out=0
- * and returns false.
+ * timeout_ms elapses. On match, copies the matched length into *len_out.
+ * On timeout, *len_out=0 and returns false.
+ *
+ * F0.5g — IMPORTANT: the predicate is the ONLY safe place to read
+ * frame contents. After it returns true the dispatcher will keep
+ * draining queued packets and overwrite ethernet->rx_buffer; by the
+ * time this function returns to the caller the matched frame is gone.
+ * Capture whatever fields you need (MAC, port, TTL, etc.) into your
+ * pred_ctx as a side effect of the predicate. *len_out is informational
+ * only — do not dereference rx_buffer based on it.
  *
  * Honors cancel: if the back button is pressed during the wait, returns
  * false immediately with *len_out=0.

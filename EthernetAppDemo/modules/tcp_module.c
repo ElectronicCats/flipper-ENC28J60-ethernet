@@ -83,15 +83,16 @@ bool tcp_send_syn(
     send_packet(ethernet, ethernet->tx_buffer, ETHERNET_HEADER_LEN + IP_HEADER_LEN + tcp_len);
 
 #if DEBUG
-
+    // F0.5g — was `buffer[i]` referencing an undefined symbol; would
+    // not compile if anyone enabled DEBUG. The actual frame lives in
+    // ethernet->tx_buffer.
     printf("TCP SYN ENVIADO: ");
     for(uint16_t i = 0; i < (ETHERNET_HEADER_LEN + IP_HEADER_LEN + tcp_len); i++) {
         printf(
             "%02X%c",
-            buffer[i],
+            ethernet->tx_buffer[i],
             i == (ETHERNET_HEADER_LEN + IP_HEADER_LEN + tcp_len - 1) ? '\n' : ' ');
     }
-
 #endif
 
     return true;

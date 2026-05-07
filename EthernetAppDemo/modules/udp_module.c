@@ -28,16 +28,14 @@ bool send_empty_udp_packet(
     uint8_t* target_ip,
     uint16_t source_port,
     uint16_t target_port) {
-    if(!arp_get_specific_mac(
-           ethernet,
-           ethernet->ip_address,
-           (*(uint32_t*)ip_gateway & *(uint32_t*)ethernet->subnet_mask) ==
-                   (*(uint32_t*)target_ip & *(uint32_t*)ethernet->subnet_mask) ?
-               target_ip :
-               ip_gateway,
-           ethernet->mac_address,
-           target_mac))
-        return false;
+    UNUSED(ip_gateway);
+    // F0.5g — caller is expected to pass an already-resolved target_mac
+    // (udp_port_scan does this via scanner_resolve_next_hop before the
+    // loop). Pre-fix this function ignored the passed target_mac and
+    // re-ran arp_get_specific_mac, which (a) wasted the cached MAC,
+    // (b) opened a race with rx_dispatch since arp_get_specific_mac
+    // polls receive_packet directly, and (c) could add up to 20 s per
+    // probed port if the local ARP failed (10 attempts × 2 s).
 
     if(!set_udp_header(
            buffer + sizeof(ethernet_header_t) + sizeof(ipv4_header_t),
