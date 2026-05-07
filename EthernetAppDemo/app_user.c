@@ -39,9 +39,17 @@ static void app_tick_event(void* context) {
 // F0.4a — auto-reply handlers migrated from app_worker.c.
 // Predicate / handler pairs registered with rx_dispatch in app_alloc.
 
+// F0.7 — both auto-reply predicates gate on is_static_ip. Pre-fix the
+// auto-replies fired even before DORA, so the chip claimed ownership of
+// its IP_DEFAULT (192.168.0.2) on whatever LAN it was plugged into —
+// causing IP conflicts with whatever real host owned that address.
+// is_static_ip is set true after DORA succeeds (app_worker.c) and on
+// settings_load when the persisted flag was true.
+
 static bool auto_arp_predicate(const uint8_t* frame, uint16_t len, void* ctx) {
-    UNUSED(ctx);
     UNUSED(len);
+    App* app = (App*)ctx;
+    if(!app->is_static_ip) return false;
     return is_arp((uint8_t*)frame);
 }
 
@@ -52,8 +60,9 @@ static void auto_arp_handler(const uint8_t* frame, uint16_t len, void* ctx) {
 }
 
 static bool auto_icmp_predicate(const uint8_t* frame, uint16_t len, void* ctx) {
-    UNUSED(ctx);
     UNUSED(len);
+    App* app = (App*)ctx;
+    if(!app->is_static_ip) return false;
     return is_icmp((uint8_t*)frame);
 }
 
