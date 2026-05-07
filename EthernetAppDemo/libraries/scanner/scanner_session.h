@@ -15,9 +15,9 @@ typedef bool (*scanner_packet_predicate_fn)(const uint8_t* frame, uint16_t len, 
 typedef struct ScannerSession {
     enc28j60_t* ethernet;
     ViewDispatcher* view_dispatcher;
-    uint8_t* ip_gateway;       // borrowed: App.ip_gateway (4 bytes)
-    uint8_t* mac_gateway;      // borrowed: App.mac_gateway (6 bytes)
-    uint8_t* subnet_mask;      // borrowed: ethernet->subnet_mask (4 bytes)
+    uint8_t* ip_gateway; // borrowed: App.ip_gateway (4 bytes)
+    uint8_t* mac_gateway; // borrowed: App.mac_gateway (6 bytes)
+    uint8_t* subnet_mask; // borrowed: ethernet->subnet_mask (4 bytes)
 
     // Round-robin MAC cache. Avoids paying ARP-resolve cost on every call.
     struct {
@@ -51,10 +51,7 @@ void scanner_session_deinit(scanner_session_t* s);
  * Cached results are reused. Cache misses pay one arp_get_specific_mac
  * call, which today blocks up to ~20 s. Returns true on success.
  */
-bool scanner_resolve_next_hop(
-    scanner_session_t* s,
-    const uint8_t target_ip[4],
-    uint8_t mac_out[6]);
+bool scanner_resolve_next_hop(scanner_session_t* s, const uint8_t target_ip[4], uint8_t mac_out[6]);
 
 /**
  * Optional trigger callback invoked AFTER the rx handler is registered

@@ -332,9 +332,13 @@ static bool os_icmp_probe(
     };
     uint16_t got = 0;
     return scanner_wait_for_packet(
-        scanner, os_icmp_probe_match, &pred_ctx,
-        scanner_send_packet_trigger, &trigger_ctx,
-        &got, 1000);
+        scanner,
+        os_icmp_probe_match,
+        &pred_ctx,
+        scanner_send_packet_trigger,
+        &trigger_ctx,
+        &got,
+        1000);
 }
 
 /* 8 options:

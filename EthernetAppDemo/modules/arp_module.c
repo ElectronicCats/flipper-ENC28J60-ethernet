@@ -226,9 +226,13 @@ void arp_scan_network(
         };
         uint16_t got = 0;
         if(scanner_wait_for_packet(
-               scanner, arp_reply_match_predicate, &ctx,
-               scanner_send_packet_trigger, &trigger_ctx,
-               &got, 1000)) {
+               scanner,
+               arp_reply_match_predicate,
+               &ctx,
+               scanner_send_packet_trigger,
+               &trigger_ctx,
+               &got,
+               1000)) {
             memcpy(list[counter].ip, start_list, 4);
             counter++;
         }

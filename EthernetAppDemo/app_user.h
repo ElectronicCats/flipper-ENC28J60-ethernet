@@ -66,13 +66,13 @@ typedef enum {
 // across scenes; centralized in F0.1 to remove name collisions and
 // enable persistence in F0.2).
 typedef struct {
-    uint8_t target_ip[4];          // generic target IPv4 (port scan / OS detect / ARP spoof)
-    uint16_t target_port;          // single port (port scan start)
-    uint16_t range_port;           // count of ports to scan from target_port
-    uint8_t protocols_index;       // 0=TCP, 1=UDP (PORTS_SCANNER_TCP/UDP)
-    uint8_t ip_ping[4];            // ping target IPv4
-    uint8_t ip_start[4];           // ARP scan start IPv4
-    uint8_t range_ip;              // ARP scan count
+    uint8_t target_ip[4]; // generic target IPv4 (port scan / OS detect / ARP spoof)
+    uint16_t target_port; // single port (port scan start)
+    uint16_t range_port; // count of ports to scan from target_port
+    uint8_t protocols_index; // 0=TCP, 1=UDP (PORTS_SCANNER_TCP/UDP)
+    uint8_t ip_ping[4]; // ping target IPv4
+    uint8_t ip_start[4]; // ARP scan start IPv4
+    uint8_t range_ip; // ARP scan count
 } scan_params_t;
 
 // Forward declaration so the App struct can hold rx_handle_t* fields.
@@ -89,9 +89,9 @@ typedef struct {
 
     uint8_t ip_helper[4];
     uint8_t mac_helper[6]; // F0.5d-wave2 — was [4]; ArpScannerScene
-                           // memcpy'd 6 bytes here, silently overwriting
-                           // is_static_ip / enc28j60_connected on every
-                           // "select host from scan list" action.
+        // memcpy'd 6 bytes here, silently overwriting
+        // is_static_ip / enc28j60_connected on every
+        // "select host from scan list" action.
 
     bool is_static_ip; // To know if the device has the static IP
     bool enc28j60_connected; // To know if the enc28j60 is connected
@@ -130,7 +130,7 @@ typedef struct {
     uint16_t src_port;
     uint16_t selected_menu_index;
 
-    scan_params_t scan_params;     // F0.1 — centralized cross-scene targets
+    scan_params_t scan_params; // F0.1 — centralized cross-scene targets
 
     rx_handle_t* auto_arp_handle;
     rx_handle_t* auto_icmp_handle;

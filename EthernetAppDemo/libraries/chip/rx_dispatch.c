@@ -17,8 +17,8 @@
 // with a 100 ms timeout so a missed INT (datasheet errata DS80349
 // notes some races) still gets serviced within 100 ms instead of
 // hanging forever.
-#define RX_FLAG_INT          (1U << 0)
-#define RX_POLL_FALLBACK_MS  100
+#define RX_FLAG_INT         (1U << 0)
+#define RX_POLL_FALLBACK_MS 100
 
 struct rx_handle {
     rx_predicate_fn predicate;
@@ -33,8 +33,8 @@ typedef struct {
     FuriThreadId thread_id;
     FuriMutex* mutex;
     volatile bool running;
-    volatile uint8_t pause_count;  // >0 = paused. Counter for nestable pause/resume.
-    volatile bool acked_pause;     // thread sets when it observes pause and idles
+    volatile uint8_t pause_count; // >0 = paused. Counter for nestable pause/resume.
+    volatile bool acked_pause; // thread sets when it observes pause and idles
     struct rx_handle slots[RX_DISPATCH_MAX_HANDLERS];
 } rx_dispatch_t;
 

@@ -294,8 +294,15 @@ typedef struct {
 static void tcp_syn_trigger(void* ctx) {
     tcp_syn_trigger_ctx_t* c = (tcp_syn_trigger_ctx_t*)ctx;
     tcp_send_syn(
-        c->eth, c->source_mac, c->source_ip, c->target_mac, c->target_ip,
-        c->source_port, c->dest_port, c->sequence, c->ack_number);
+        c->eth,
+        c->source_mac,
+        c->source_ip,
+        c->target_mac,
+        c->target_ip,
+        c->source_port,
+        c->dest_port,
+        c->sequence,
+        c->ack_number);
 }
 
 void tcp_syn_scan(void* context, uint8_t* target_ip, uint16_t init_port, uint16_t range_port) {
@@ -347,9 +354,7 @@ void tcp_syn_scan(void* context, uint8_t* target_ip, uint16_t init_port, uint16_
         };
         uint16_t got = 0;
         if(scanner_wait_for_packet(
-               &scanner, tcp_scan_match, &pred_ctx,
-               tcp_syn_trigger, &trigger_ctx,
-               &got, 100) &&
+               &scanner, tcp_scan_match, &pred_ctx, tcp_syn_trigger, &trigger_ctx, &got, 100) &&
            pred_ctx.port_open) {
             // SYN-ACK observed — record open port.
             furi_string_reset(app->text);

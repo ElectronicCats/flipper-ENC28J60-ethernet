@@ -131,9 +131,15 @@ typedef struct {
 static void udp_probe_trigger(void* ctx) {
     udp_probe_trigger_ctx_t* c = (udp_probe_trigger_ctx_t*)ctx;
     send_empty_udp_packet(
-        c->eth->tx_buffer, c->eth, c->ip_gateway,
-        c->source_mac, c->target_mac, c->source_ip, c->target_ip,
-        c->source_port, c->target_port);
+        c->eth->tx_buffer,
+        c->eth,
+        c->ip_gateway,
+        c->source_mac,
+        c->target_mac,
+        c->source_ip,
+        c->target_ip,
+        c->source_port,
+        c->target_port);
 }
 
 void udp_port_scan(void* context, uint8_t* target_ip, uint16_t init_port, uint16_t range_port) {
@@ -179,9 +185,7 @@ void udp_port_scan(void* context, uint8_t* target_ip, uint16_t init_port, uint16
         };
         uint16_t got = 0;
         if(scanner_wait_for_packet(
-               &scanner, udp_scan_match, &pred_ctx,
-               udp_probe_trigger, &trigger_ctx,
-               &got, 100)) {
+               &scanner, udp_scan_match, &pred_ctx, udp_probe_trigger, &trigger_ctx, &got, 100)) {
             // Port responded — append result.
             furi_string_reset(app->text);
             furi_string_cat_printf(app->text, TEXT_PORT_FORMAT, (uint32_t)i, "\0");

@@ -62,10 +62,7 @@ static void cache_insert(scanner_session_t* s, const uint8_t ip[4], const uint8_
     s->cache_next = (slot + 1) % SCANNER_RESOLVE_CACHE_ENTRIES;
 }
 
-bool scanner_resolve_next_hop(
-    scanner_session_t* s,
-    const uint8_t target_ip[4],
-    uint8_t mac_out[6]) {
+bool scanner_resolve_next_hop(scanner_session_t* s, const uint8_t target_ip[4], uint8_t mac_out[6]) {
     furi_assert(s);
     furi_assert(target_ip);
     furi_assert(mac_out);
@@ -113,9 +110,13 @@ bool scanner_resolve_next_hop(
 
         uint16_t got = 0;
         ok = scanner_wait_for_packet(
-            s, arp_reply_match_predicate, &pred_ctx,
-            scanner_send_packet_trigger, &trigger_ctx,
-            &got, 2000);
+            s,
+            arp_reply_match_predicate,
+            &pred_ctx,
+            scanner_send_packet_trigger,
+            &trigger_ctx,
+            &got,
+            2000);
     }
 
     if(ok) {
