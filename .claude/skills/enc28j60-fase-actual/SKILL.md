@@ -3,63 +3,93 @@ name: enc28j60-fase-actual
 description: Active context for the ENC28J60 refactor. Consult before any commit, file creation, or direction change. Updated at the start of every sub-phase.
 ---
 
-# Current phase: F0.0 — Bootstrap (closing)
+# Current phase: F0.4 — RX dispatch decoupling (entering)
 
 ## What is done
 
-- v2.0-f0.0 (closing):
-  - Branch `refactor/phase-0` created from main.
-  - uFBT 0.2.6 + Unleashed `unlshd-087` SDK (API 87.8, Target 7) verified.
-  - Build green. FAP baseline: 95544 bytes.
-  - **D1 resolved:** driver `enc28j60.{c,h}` is DERIVATIVE_GPLV2 of EtherCard upstream. **Option A applied** — file-level GPL-2.0-or-later carve-out with SPDX headers, `LICENSES/EtherCard.LICENSE` added, `LICENSE` and `README.md` updated. Rest of the project remains MIT.
-  - **D2 resolved:** ENC28J60 `/INT` is wired to Flipper external pin 10 (PA14 / SWCLK). F0.5 will use interrupt-driven RX. SWD debug attach unavailable during runtime (acceptable trade-off).
-  - **D3 resolved with deviation:** Unleashed fbt does NOT support `fap_min_sdk_version`. SDK pinning lives in CI workflow only. `fap_version=(1, 0)` added to `application.fam` as baseline. All 3 required APIs verified present (`furi_hal_gpio_add_int_callback`, `flipper_format_*`, `furi_hal_rtc_get_timestamp`).
-  - `docs/DECISIONS.md`, `docs/ARCHITECTURE.md` v0, `docs/HARDWARE.md` written.
-  - GitHub issue templates added (`bug_report`, `feature_request`, `hardware_compat`, `config.yml`).
-  - GitHub Discussions enablement pending user manual action (gh CLI not available locally).
+- v2.0-f0.0  Bootstrap. License audit (driver is GPL-2.0-or-later,
+             carve-out applied). INT pin on Flipper pin 10 / PA14 /
+             SWCLK. CI uses Unleashed unlshd-087 (API 87.8). Issue
+             templates added. Hardware-validated.
+- v2.0-f0.1  scan_params centralized in App. 7 file-static globals
+             collapsed across 6 scenes. Hardware-validated.
+- v2.0-f0.2  Settings persistence via libraries/settings/settings.{c,h}
+             on /ext/apps_data/ethernet/settings.cfg. MAC/IP/static-flag/
+             scan_params survive reboots. Hardware-validated.
+- v2.0-f0.3  Scanner session refactor. All 6 scanners share
+             libraries/scanner/scanner_session.{c,h} (init/deinit/
+             resolve_next_hop/wait_for_packet/cancel_requested).
+             Sub-phases v2.0-f0.3a..f. Hardware-validated against
+             dnsmasq + http.server lab on 10.10.10.0/24.
+- ux fix     Main menu reordered to follow audit flow (Get IP first,
+             then Scan Hosts, etc.). DORA Process → "Get IP".
+             IP Scanner → "Scan Hosts".
 
 ## Where we are
 
-F0.0 closing. About to enter F0.1 (centralize `scan_params` into App).
+Entering F0.4 — RX dispatch decoupling. This is the architectural fix
+that makes most of the deferred bugs in docs/BACKLOG.md disappear at
+once.
+
+Sub-phase plan (proposed, awaiting Sabas confirm):
+  F0.4a — libraries/chip/rx_dispatch.{c,h} (single thread + handler
+          registry). Migrate auto-ARP-reply and auto-ICMP-reply
+          handlers. Delete app_worker.c.
+  F0.4b — Rewrite scanner_session.wait_for_packet on top of
+          rx_dispatch (register/wait_semaphore/unregister).
+  F0.4c — Remove all furi_thread_suspend/resume from scenes/.
+  F0.4d — SnifferScene re-implemented as a capture-everything handler.
+          Bug B-2 (busy-loop block) and B-3 (dead window) close as a
+          byproduct.
+  F0.4 final — verification + tag.
 
 ## What NOT to touch
 
-- Runtime code in `EthernetAppDemo/modules/`, `scenes/`, `libraries/chip/` — code refactors start in F0.1, not F0.0.
-- `application.fam` — already at the F0.0 target shape (`fap_version=(1, 0)` only).
-- The `main` branch — work continues on `refactor/phase-0`.
-- ARP-spoof-to-IP feature — gated by current `DEV_MODE`, leave as-is until F0.8 introduces `PENTEST_MODE` flag.
-- The `ETHERCARD_*` macro names in `enc28j60.h:17-18` — they document the derivation boundary; renaming weakens the GPL-2.0 attribution.
-
-## Exit criteria for F0.0
-
-- [x] branch `refactor/phase-0` created
-- [x] uFBT build verified green untouched
-- [x] D1 (license) recorded, Option A applied
-- [x] D2 (INT pin) recorded
-- [x] D3 (SDK pin) recorded — manifest pin not available; CI-side only
-- [x] `docs/ARCHITECTURE.md` v0 committed
-- [x] `docs/HARDWARE.md` committed
-- [x] `docs/DECISIONS.md` committed
-- [x] `LICENSES/EtherCard.LICENSE` + SPDX headers + LICENSE/README updates committed
-- [x] `.github/ISSUE_TEMPLATE/` committed (bug, feature, hardware + config.yml)
-- [ ] GitHub Discussions enabled (pending user manual action via UI)
-- [ ] tag `v2.0-f0.0` created (pending Task 11)
+- The two driver files (`enc28j60.c`, `enc28j60.h`) keep their SPDX
+  GPL-2.0-or-later header. New code added to them inherits the
+  license. Don't rename the ETHERCARD_* macros — they document the
+  derivation boundary.
+- `application.fam` — already at F0 baseline. No SDK pin needed
+  (Unleashed doesn't support `fap_min_sdk_version`).
+- ARP-spoof-to-IP feature — gated by current `DEV_MODE`, leave as-is
+  until F0.8 introduces `PENTEST_MODE` flag.
+- ofp_tseq dev scaffolding (`os_detector_module.c:517-585`). F0.6
+  scaffolding cleanup will delete it.
+- TestingScene. F0.6 will delete.
+- The pre-existing `dnsmasq --no-ping` workaround documented in
+  /tmp/eth-testrig-up.sh — that's a *test rig* concession, not a
+  Flipper fix. Real fix is bumping the DORA timeout (B-1, F0.7).
 
 ## Extra rules during F0
 
 - All commit messages in English.
 - Each sub-phase ends with one annotated tag `vMAJOR.MINOR-fN.M`.
-- Do not promote ARP-spoof-to-IP into the standard menu until F0.8 introduces `PENTEST_MODE`. Leave the existing `DEV_MODE` gate as-is.
-- Do not delete files claiming they are "dead" without a fresh `grep -rn` confirming zero callers.
-- After every `ufbt` build, run `git checkout -- EthernetAppDemo/dist/` to discard tracked-but-rebuilt artifacts before commit, unless the task explicitly requires committing the new `.fap` (only at release tags).
-- The two driver files (`enc28j60.c`, `enc28j60.h`) are GPL-2.0-or-later — modifications to them must preserve their SPDX header. Any new code that you write into them is also under GPL-2.0.
+- Hardware-validate before tagging F0.X final whenever Flipper is
+  available.
+- After every `ufbt` build, run `git checkout -- EthernetAppDemo/dist/`
+  to discard tracked-but-rebuilt artifacts before commit, unless the
+  task explicitly requires committing the new `.fap` (only at release
+  tags).
+- Do not delete files claiming they are "dead" without a fresh
+  `grep -rn` confirming zero callers.
+
+## Backlog of deferred bugs
+
+See `docs/BACKLOG.md`. Five entries from F0.3 hardware testing:
+  B-1 DORA timeout too short → F0.7
+  B-2 SnifferScene busy-loop blocks BACK → F0.4
+  B-3 dead window between sniffer entry and capture → F0.4
+  B-4 UDP scanner conflates open/filtered → F1
+  B-5 LoadingView animation lag during ARP scan → F0.4
 
 ## Quick references
 
 - Master plan: `ENC28J60_REFACTOR_PLAN.md` (root).
 - Roadmap design: `docs/superpowers/specs/2026-05-05-roadmap-design.md`.
-- F0.0 task plan: `docs/superpowers/plans/2026-05-05-f0-0-bootstrap.md`.
-- D1/D2/D3 details: `docs/DECISIONS.md`.
+- F0.x plans: `docs/superpowers/plans/`.
+- Decisions: `docs/DECISIONS.md`.
+- Backlog: `docs/BACKLOG.md`.
 - Architecture: `docs/ARCHITECTURE.md`.
 - Hardware: `docs/HARDWARE.md`.
-- F1.x findings (raw): `/tmp/f0-0-d{1,2,3}.md` — temp, will be cleaned at end of F0.0.
+- Test rig (laptop side): `/tmp/eth-testrig-up.sh`,
+  `/tmp/eth-testrig-down.sh`. Pcap goes to `/tmp/eth-testrig.pcap`.
