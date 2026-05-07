@@ -8,9 +8,8 @@
 #define RANGE_PORT_TEXT  RANGE_TEXT PORT_TEXT
 
 // target_ip / target_port / range_port now live in app->scan_params (F0.1)
-
-uint8_t target_port_bytes[2] = {0x00, 0x50};
-uint8_t range_port_bytes[2] = {0x00, 0x01};
+// F0.6 — target_port_bytes / range_port_bytes deleted (dead byte_input
+// path; PORTS_SCANNER_SCENE_BYTE_INPUT state was never entered).
 
 typedef enum {
     VIEW_IP_LIST,
@@ -75,22 +74,9 @@ void set_ip_address_ports_scanner(App* app) {
         app->view_dispatcher, IpAssignerView); // Switch to the input byte view
 }
 
-void byte_input_ports_scanner_callback(void* context) {
-    App* app = context;
-
-    bytes_to_uint(&app->scan_params.range_port, range_port_bytes, sizeof(uint16_t));
-    bytes_to_uint(&app->scan_params.target_port, target_port_bytes, sizeof(uint16_t));
-
-    scene_manager_set_scene_state(
-        app->scene_manager, app_scene_ports_scanner_option, PORTS_SCANNER_SCENE_MENU);
-    view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);
-
-    app_scene_ports_scanner_on_enter(app);
-}
-
-void byte_change_ports_scanner(void* context) {
-    UNUSED(context);
-}
+// F0.6 — byte_input_ports_scanner_callback / byte_change_ports_scanner
+// deleted. Never registered with byte_input_set_result_callback; the
+// active port input path is the number_input setter (lines 200-218).
 
 int32_t ports_scanner_thread(void* context) {
     App* app = context;
