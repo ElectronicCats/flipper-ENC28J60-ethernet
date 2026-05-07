@@ -81,6 +81,11 @@ typedef struct {
     uint8_t range_ip;              // ARP scan count
 } scan_params_t;
 
+// Forward declaration so the App struct can hold rx_handle_t* fields.
+// The full definition lives in libraries/chip/rx_dispatch.h, which is
+// included below the App typedef (it depends on App* in its API).
+typedef struct rx_handle rx_handle_t;
+
 // Struct for the App
 typedef struct {
     arp_list ip_list[255];
@@ -127,6 +132,9 @@ typedef struct {
     uint16_t selected_menu_index;
 
     scan_params_t scan_params;     // F0.1 — centralized cross-scene targets
+
+    rx_handle_t* auto_arp_handle;
+    rx_handle_t* auto_icmp_handle;
 } App;
 
 // F0.2 — settings persistence. Must be included AFTER the App typedef
@@ -134,6 +142,7 @@ typedef struct {
 // anonymous-struct typedef (cannot be forward-declared).
 #include "libraries/settings/settings.h"
 #include "libraries/scanner/scanner_session.h"
+#include "libraries/chip/rx_dispatch.h"
 
 // Views in the App
 typedef enum {

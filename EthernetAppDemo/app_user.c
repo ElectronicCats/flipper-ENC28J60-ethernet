@@ -1,4 +1,6 @@
 #include "app_user.h"
+#include "libraries/protocol_tools/arp.h"
+#include "libraries/protocol_tools/icmp.h"
 
 // Just to set as initial MAC the user must to modify to have other MAC address
 uint8_t MAC_INITIAL[6] = {0xba, 0x3f, 0x91, 0xc2, 0x7e, 0x5d};
@@ -32,6 +34,32 @@ static void app_tick_event(void* context) {
     furi_assert(context);
     App* app = (App*)context;
     UNUSED(app);
+}
+
+// F0.4a — auto-reply handlers migrated from app_worker.c.
+// Predicate / handler pairs registered with rx_dispatch in app_alloc.
+
+static bool auto_arp_predicate(const uint8_t* frame, uint16_t len, void* ctx) {
+    UNUSED(ctx);
+    UNUSED(len);
+    return is_arp((uint8_t*)frame);
+}
+
+static void auto_arp_handler(const uint8_t* frame, uint16_t len, void* ctx) {
+    UNUSED(len);
+    App* app = (App*)ctx;
+    arp_reply_requested(app->ethernet, (uint8_t*)frame, app->ethernet->ip_address);
+}
+
+static bool auto_icmp_predicate(const uint8_t* frame, uint16_t len, void* ctx) {
+    UNUSED(ctx);
+    UNUSED(len);
+    return is_icmp((uint8_t*)frame);
+}
+
+static void auto_icmp_handler(const uint8_t* frame, uint16_t len, void* ctx) {
+    App* app = (App*)ctx;
+    ping_reply_to_request(app->ethernet, (uint8_t*)frame, len);
 }
 
 App* app_alloc() {
@@ -117,6 +145,12 @@ App* app_alloc() {
     app->enc28j60_connected = enc28j60_start(app->ethernet) !=
                               0xff; // To know if the enc28j60 is connected
 
+    // F0.4a — start RX dispatcher and register the two auto-reply handlers.
+    // These previously lived inline in ethernet_thread (app_worker.c).
+    rx_dispatch_init(app);
+    app->auto_arp_handle = rx_register(auto_arp_predicate, auto_arp_handler, app);
+    app->auto_icmp_handle = rx_register(auto_icmp_predicate, auto_icmp_handler, app);
+
     app->thread = furi_thread_alloc_ex("Ethernet Thread", 10 * 1024, ethernet_thread, app);
     furi_thread_start(app->thread);
 
@@ -138,6 +172,11 @@ void app_free(App* app) {
     // ethernet instance. Errors are silent; a failed save must not block
     // app exit.
     settings_save(app);
+
+    // F0.4a — stop dispatcher first so handlers don't race teardown.
+    rx_unregister(app->auto_arp_handle);
+    rx_unregister(app->auto_icmp_handle);
+    rx_dispatch_deinit(app);
 
     furi_thread_flags_set(furi_thread_get_id(app->thread), flag_stop);
 
