@@ -208,7 +208,14 @@ bool flipper_process_dora_with_host_name(
     enable_broadcast(ethernet);
 
     while(!ret && is_link_up(ethernet)) {
-        if(furi_get_tick() > (current_time + 3000)) {
+        // F0.7 (B-1) — was 3000 ms, which is shorter than the time
+        // a standards-compliant DHCP server takes to ARP-probe + ICMP-
+        // probe a candidate IP before sending OFFER (≈ 2-3 s on
+        // dnsmasq with default `--ping`). The Flipper used to give up
+        // exactly when the OFFER arrived, retry DISCOVER 40 s later,
+        // and the user saw a stuck "Waiting for IP". 10 s gives the
+        // server room to do its checks and still feels reasonable.
+        if(furi_get_tick() > (current_time + 10000)) {
             break;
         }
 
