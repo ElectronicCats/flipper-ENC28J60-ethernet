@@ -1,5 +1,6 @@
 #include "scanner_session.h"
 #include "../chip/enc28j60.h"
+#include "../chip/rx_dispatch.h"
 #include "../../modules/arp_module.h"
 
 void scanner_session_init(scanner_session_t* s, App* app) {
@@ -65,12 +66,18 @@ bool scanner_resolve_next_hop(
         return true;
     }
 
+    // F0.4b — pause rx_dispatch around arp_get_specific_mac so its inline
+    // poll loop has exclusive chip access. Stop-gap: arp_get_specific_mac
+    // still uses receive_packet directly. F0.4c will migrate it onto
+    // rx_dispatch via a registered ARP-reply handler.
+    rx_dispatch_pause();
     bool ok = arp_get_specific_mac(
         s->ethernet,
         s->ethernet->ip_address,
         (uint8_t*)resolve_ip,
         s->ethernet->mac_address,
         mac_out);
+    rx_dispatch_resume();
 
     if(ok) {
         cache_insert(s, resolve_ip, mac_out);
@@ -83,6 +90,37 @@ bool scanner_resolve_next_hop(
     return ok;
 }
 
+// State for the rx_dispatch handler that scanner_wait_for_packet registers
+// for the duration of a single wait. Lives on the stack of the caller of
+// scanner_wait_for_packet; the handler runs in the rx_dispatch thread.
+typedef struct {
+    scanner_packet_predicate_fn user_pred;
+    void* user_ctx;
+    FuriSemaphore* signal;
+    volatile uint16_t matched_len;
+    volatile bool matched;
+} scanner_wait_state_t;
+
+static bool wait_predicate(const uint8_t* frame, uint16_t len, void* ctx) {
+    scanner_wait_state_t* w = (scanner_wait_state_t*)ctx;
+    if(w->matched) return false;
+    if(w->user_pred(frame, len, w->user_ctx)) {
+        w->matched_len = len;
+        return true;
+    }
+    return false;
+}
+
+static void wait_signal_handler(const uint8_t* frame, uint16_t len, void* ctx) {
+    UNUSED(frame);
+    UNUSED(len);
+    scanner_wait_state_t* w = (scanner_wait_state_t*)ctx;
+    if(!w->matched) {
+        w->matched = true;
+        furi_semaphore_release(w->signal);
+    }
+}
+
 bool scanner_wait_for_packet(
     scanner_session_t* s,
     scanner_packet_predicate_fn pred,
@@ -92,21 +130,44 @@ bool scanner_wait_for_packet(
     furi_assert(s);
     furi_assert(pred);
     furi_assert(len_out);
+    UNUSED(s);
 
     *len_out = 0;
-    uint32_t start = furi_get_tick();
-    uint8_t* rx = s->ethernet->rx_buffer;
 
-    while((furi_get_tick() - start) < timeout_ms) {
-        if(scanner_cancel_requested(s)) return false;
-        uint16_t got = receive_packet(s->ethernet, rx, MAX_FRAMELEN);
-        if(got > 0 && pred(rx, got, pred_ctx)) {
-            *len_out = got;
-            return true;
-        }
-        furi_delay_us(1);
+    scanner_wait_state_t state = {
+        .user_pred = pred,
+        .user_ctx = pred_ctx,
+        .signal = furi_semaphore_alloc(1, 0),
+        .matched_len = 0,
+        .matched = false,
+    };
+    if(!state.signal) return false;
+
+    rx_handle_t* handle = rx_register(wait_predicate, wait_signal_handler, &state);
+    if(!handle) {
+        furi_semaphore_free(state.signal);
+        return false;
     }
-    return false;
+
+    // Sleep on the semaphore in short slices so we can also poll the back
+    // button (cancel). 50 ms per slice keeps cancel latency under 50 ms
+    // without busy-polling.
+    bool got = false;
+    uint32_t start = furi_get_tick();
+    while((furi_get_tick() - start) < timeout_ms) {
+        if(scanner_cancel_requested(s)) break;
+        uint32_t slice = timeout_ms - (furi_get_tick() - start);
+        if(slice > 50) slice = 50;
+        if(furi_semaphore_acquire(state.signal, slice) == FuriStatusOk) {
+            got = true;
+            *len_out = state.matched_len;
+            break;
+        }
+    }
+
+    rx_unregister(handle);
+    furi_semaphore_free(state.signal);
+    return got;
 }
 
 bool scanner_cancel_requested(scanner_session_t* s) {
