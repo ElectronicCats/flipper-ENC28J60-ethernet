@@ -179,16 +179,10 @@ bool get_arp_requested(uint8_t* buffer, uint8_t* dst_ip) {
     return true;
 }
 
-// Predicate context for arp_scan_network's wait_for_packet calls.
-// `target_ip` and `target_mac` are aliased into the caller's storage so the
-// predicate can both validate the frame and write the resolved MAC.
-typedef struct {
-    uint8_t* target_ip;
-    uint8_t* target_mac;
-} arp_scan_pred_ctx_t;
-
-static bool arp_scan_match(const uint8_t* frame, uint16_t len, void* ctx) {
-    arp_scan_pred_ctx_t* c = (arp_scan_pred_ctx_t*)ctx;
+// F0.4f — moved typedef + predicate to arp_module.h so scanner_session
+// can reuse them. Same body, public name.
+bool arp_reply_match_predicate(const uint8_t* frame, uint16_t len, void* ctx) {
+    arp_reply_match_ctx_t* c = (arp_reply_match_ctx_t*)ctx;
     return get_arp_reply(c->target_ip, c->target_mac, (uint8_t*)frame, len);
 }
 
@@ -225,12 +219,12 @@ void arp_scan_network(
         // Replaces the inline `while((now - last) < 1000) { receive_packet; ... }`
         // poll loop. The predicate writes list[counter].mac as a side effect via
         // get_arp_reply, so on a true return we just record the IP.
-        arp_scan_pred_ctx_t ctx = {
+        arp_reply_match_ctx_t ctx = {
             .target_ip = start_list,
             .target_mac = list[counter].mac,
         };
         uint16_t got = 0;
-        if(scanner_wait_for_packet(scanner, arp_scan_match, &ctx, &got, 1000)) {
+        if(scanner_wait_for_packet(scanner, arp_reply_match_predicate, &ctx, &got, 1000)) {
             memcpy(list[counter].ip, start_list, 4);
             counter++;
         }

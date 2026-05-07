@@ -2,6 +2,8 @@
 #include "../chip/enc28j60.h"
 #include "../chip/rx_dispatch.h"
 #include "../../modules/arp_module.h"
+#include "../protocol_tools/ethernet_protocol.h"
+#include "../protocol_tools/arp.h"
 
 void scanner_session_init(scanner_session_t* s, App* app) {
     furi_assert(s);
@@ -66,18 +68,35 @@ bool scanner_resolve_next_hop(
         return true;
     }
 
-    // F0.4b — pause rx_dispatch around arp_get_specific_mac so its inline
-    // poll loop has exclusive chip access. Stop-gap: arp_get_specific_mac
-    // still uses receive_packet directly. F0.4c will migrate it onto
-    // rx_dispatch via a registered ARP-reply handler.
-    rx_dispatch_pause();
-    bool ok = arp_get_specific_mac(
-        s->ethernet,
-        s->ethernet->ip_address,
-        (uint8_t*)resolve_ip,
-        s->ethernet->mac_address,
-        mac_out);
-    rx_dispatch_resume();
+    // F0.4f — replaces arp_get_specific_mac (which had its own inline
+    // receive_packet poll) with the scanner_wait_for_packet primitive.
+    // Now the chip is read exclusively by rx_dispatch; we just send
+    // the ARP request and let the registered handler signal us when a
+    // matching reply arrives. No more rx_dispatch_pause/resume needed.
+    //
+    // Retry budget mirrors legacy arp_get_specific_mac (10 attempts ×
+    // 2 s/wait = up to 20 s worst case) so timing-sensitive callers
+    // (e.g., port scan over the gateway) keep the same behavior.
+    arp_set_my_mac_address(s->ethernet->mac_address);
+    arp_set_my_ip_address(s->ethernet->ip_address);
+
+    arp_reply_match_ctx_t pred_ctx = {
+        .target_ip = (uint8_t*)resolve_ip,
+        .target_mac = mac_out,
+    };
+
+    bool ok = false;
+    for(uint8_t attempt = 0; attempt < 10 && !ok; attempt++) {
+        if(scanner_cancel_requested(s)) break;
+
+        uint8_t request_buf[ETHERNET_HEADER_LEN + ARP_LEN] = {0};
+        uint16_t request_len = 0;
+        if(!set_arp_request(request_buf, &request_len, (uint8_t*)resolve_ip)) break;
+        send_packet(s->ethernet, request_buf, request_len);
+
+        uint16_t got = 0;
+        ok = scanner_wait_for_packet(s, arp_reply_match_predicate, &pred_ctx, &got, 2000);
+    }
 
     if(ok) {
         cache_insert(s, resolve_ip, mac_out);

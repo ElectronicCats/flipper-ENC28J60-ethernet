@@ -86,6 +86,37 @@ void arp_scan_network(
     uint8_t range);
 
 /**
+ * Set the file-static "my MAC" / "my IP" used by the ARP request/reply
+ * builders. Call before set_arp_request / arp_reply_requested if the
+ * caller didn't go through arp_get_specific_mac.
+ */
+void arp_set_my_mac_address(uint8_t* MAC);
+void arp_set_my_ip_address(uint8_t* ip);
+
+/**
+ * Build an ARP-request frame for `target_ip`. Caller must have set
+ * my_mac/my_ip via the helpers above. Writes the framed packet into
+ * `buffer` and its length into `*len`.
+ */
+bool set_arp_request(uint8_t* buffer, uint16_t* len, uint8_t* target_ip);
+
+/**
+ * Predicate ctx for matching ARP replies. F0.4f: shared between
+ * arp_scan_network and scanner_resolve_next_hop. The predicate runs in
+ * the rx_dispatch thread; on a match it copies the source MAC into
+ * `target_mac` as a side effect (via get_arp_reply).
+ *
+ * `target_ip` and `target_mac` are aliased into caller storage; their
+ * lifetime must outlive the wait.
+ */
+typedef struct {
+    uint8_t* target_ip;
+    uint8_t* target_mac;
+} arp_reply_match_ctx_t;
+
+bool arp_reply_match_predicate(const uint8_t* frame, uint16_t len, void* ctx);
+
+/**
  * @brief Retrieves the MAC address for a specific destination IP address using ARP.
  *
  * This function sends an ARP request for a specific IP address and waits for an

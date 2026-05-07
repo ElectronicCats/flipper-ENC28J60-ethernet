@@ -144,25 +144,30 @@ two scanner paths migrate onto rx_dispatch handlers.
 
 ---
 
-## B-7 — Two scanner_session paths still poll the chip directly
+## B-7 — Two scanner_session paths still poll the chip directly — CLOSED
 
 **Found:** F0.4 design review. Two code paths inside scanner_session
 were not migrated onto rx_dispatch:
   - `scanner_resolve_next_hop` calls `arp_get_specific_mac` (in
-    `arp_module.c`) which still does its own send_packet + inline
+    `arp_module.c`) which still did its own send_packet + inline
     `while ... receive_packet` poll loop. Wrapped in
     `rx_dispatch_pause/_resume` as a stop-gap.
   - `enable_promiscuous`, `pcap_capture_init` in SnifferScene also
     pause/resume around chip access.
 
-**Location:** `EthernetAppDemo/libraries/scanner/scanner_session.c`
-`scanner_resolve_next_hop`; `EthernetAppDemo/scenes/SnifferScene.c`.
-
-**Severity:** Low. Functionality is correct; the pause/resume is
-ugly but works.
-
-**Fix in:** F0.4f (deferred sub-phase). Migrate `arp_get_specific_mac`
-to use a registered ARP-reply handler so the pause goes away.
+**Closed:**
+  - SnifferScene + SettingsScene pauses removed in F0.5a once the
+    chip-level FuriMutex covered the bank-race the pauses were
+    masking.
+  - `scanner_resolve_next_hop` migrated in F0.4f (tag v2.0-f0.4f):
+    builds the ARP request inline via `set_arp_request` + `send_packet`
+    and waits for the reply through `scanner_wait_for_packet` using
+    the new public `arp_reply_match_predicate`. No more pause/resume
+    on this path. `arp_get_specific_mac` stays for now — still called
+    by `tcp_module.c`, `udp_module.c`, and `ArpSpoofingSpecificIP.c`
+    (those call sites have a latent FIFO race vs. rx_dispatch but it's
+    masked by the cache from `scanner_resolve_next_hop`; deferred to a
+    follow-up pass if user reports symptoms).
 
 ---
 
