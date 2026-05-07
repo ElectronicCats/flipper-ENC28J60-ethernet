@@ -119,7 +119,7 @@ just enough for the GUI thread's render timer to lag.
 
 ---
 
-## B-6 — ENC28J60 driver `bank` is unprotected file-static
+## B-6 — ENC28J60 driver `bank` is unprotected file-static — CLOSED
 
 **Found:** F0.4a hardware diagnosis. `enc28j60.c` keeps `static uint8_t
 bank` to track the chip's selected bank register. `set_bank_with_mask`
@@ -129,20 +129,18 @@ corrupt the chip's actual register state. The MAADR corruption that
 broke F0.4a's first hardware test was an instance of this; we worked
 around it by reordering `settings_load` before `rx_dispatch_init` and
 by adding `rx_dispatch_pause/_resume` wrappers in `scanner_resolve_next_hop`,
-`SettingsScene`, and `SnifferScene`. The pauses are stop-gaps.
+`SettingsScene`, and `SnifferScene`. The pauses were stop-gaps.
 
-**Location:** `EthernetAppDemo/libraries/chip/enc28j60.c` —
-`set_bank_with_mask` (~ line 296) and the `static uint8_t bank`
-file-scope variable.
-
-**Severity:** Medium. Currently masked by pause/resume discipline; a
-new caller that forgets to pause would re-introduce the race.
-
-**Fix in:** F0.5 (bulk SPI rewrite). Replace per-byte
-`furi_hal_spi_bus_acquire/release` with single-acquire bulk transfers
-AND add a chip-level mutex (FuriMutex held across `set_bank` +
-register-IO sequences). All `rx_dispatch_pause/_resume` stop-gaps
-introduced in F0.4 can be removed afterward.
+**Closed:** F0.5a (commits abf9790 + 9d45f31, tag v2.0-f0.5a). Added a
+`FuriMutex* mutex` to `enc28j60_t` and wrapped every public chip
+function (alloc/free, soft_reset, set_mac, start, is_link_up,
+send/receive_packet, broadcast/multicast/promiscuous toggles) with
+acquire/release. Static helpers inherit the lock from the caller.
+Removed pause/resume from `SettingsScene` and `SnifferScene`. The
+pauses around DORA (GetIPScene) and `arp_get_specific_mac`
+(scanner_resolve_next_hop) STAY for now — those exist for FIFO
+ordering, not just bank race; they go away in F0.4f when the last
+two scanner paths migrate onto rx_dispatch handlers.
 
 ---
 
