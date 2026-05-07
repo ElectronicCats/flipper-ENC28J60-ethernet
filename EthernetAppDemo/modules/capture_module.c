@@ -133,8 +133,12 @@ size_t pcap_reader_init(File* file, const char* filename) {
     return bytes_read;
 }
 
-size_t pcap_get_specific_packet(File* file, uint8_t* packet, uint32_t packet_position) {
-    if(!file || !storage_file_is_open(file)) return 0;
+size_t pcap_get_specific_packet(
+    File* file,
+    uint8_t* packet,
+    size_t packet_capacity,
+    uint32_t packet_position) {
+    if(!file || !packet || packet_capacity == 0 || !storage_file_is_open(file)) return 0;
 
     // Sync the file
     if(!storage_file_sync(file)) return 0;
@@ -148,11 +152,17 @@ size_t pcap_get_specific_packet(File* file, uint8_t* packet, uint32_t packet_pos
     if(storage_file_read(file, &packet_header, sizeof(packet_header)) != sizeof(packet_header))
         return 0;
 
-    // Read the packet data
-    if(storage_file_read(file, packet, packet_header.orig_len) != packet_header.orig_len) return 0;
+    // F0.5e — clamp orig_len to caller's buffer size. The PCAP record
+    // header is untrusted input (file may be corrupt or hand-crafted),
+    // so a record claiming e.g. orig_len=0xFFFFFFFF would otherwise
+    // silently overflow the caller's frame buffer.
+    uint32_t to_read = packet_header.orig_len;
+    if(to_read > packet_capacity) to_read = packet_capacity;
 
-    // Return the actual bytes read
-    return packet_header.orig_len;
+    // Read the packet data
+    if(storage_file_read(file, packet, to_read) != to_read) return 0;
+
+    return to_read;
 }
 
 uint32_t pcap_scan(File* file, const char* filename, uint64_t* positions, uint32_t max_positions) {
@@ -182,9 +192,6 @@ uint32_t pcap_scan(File* file, const char* filename, uint64_t* positions, uint32
     // This variable will use to get the positions
     uint64_t position = 0;
 
-    // Just for the packet
-    uint8_t packet[1518] = {0};
-
     // For the packets
     pcap_packet_header_t packet_header;
 
@@ -199,11 +206,17 @@ uint32_t pcap_scan(File* file, const char* filename, uint64_t* positions, uint32
         // Add the position
         positions[counter] = position;
 
-        // Read the bytes to move the positions on the file, this line is for the packet header
+        // Read the per-packet header, then skip the body via seek
+        // (F0.5e — pre-fix this read into a 1518-byte stack buffer,
+        // which a malicious orig_len could overflow). We only need
+        // the offsets here; the body is read on demand by
+        // pcap_get_specific_packet, which clamps to the caller's
+        // buffer.
         bytes_read = storage_file_read(file, &packet_header, sizeof(packet_header));
-
-        // Pass the bytes on the file, this line is for the ethernet packet
-        bytes_read += storage_file_read(file, &packet, packet_header.orig_len);
+        if(bytes_read != sizeof(packet_header)) break;
+        uint64_t cursor = storage_file_tell(file);
+        if(!storage_file_seek(file, (uint32_t)(cursor + packet_header.orig_len), true)) break;
+        bytes_read += packet_header.orig_len;
 
         // If the position has the same position as the total lenght of the file break the loop
         if(position == file_size) break;

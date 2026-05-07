@@ -80,12 +80,23 @@ int32_t thread_read_pcaps(void* context) {
     App* app = (App*)context;
 
     uint8_t* buffer = app->ethernet->tx_buffer;
+    const size_t buffer_capacity = MAX_FRAMELEN; // matches enc28j60_t.tx_buffer
 
     uint32_t len = 0;
 
     uint32_t counter = 0;
 
     bool write_once = true;
+
+    // F0.5e — bail out early on empty/corrupt PCAPs. Pre-fix the loop
+    // dereferenced packet_positions[counter] even when packet_count==0,
+    // and `counter >= packet_count - 1` underflowed to a near-infinite
+    // sentinel that disabled the right-arrow upper bound.
+    if(packet_count == 0) {
+        draw_could_not_be_read(app);
+        view_dispatcher_send_custom_event(app->view_dispatcher, 1);
+        return 0;
+    }
 
     bool start = storage_file_open(
         app->file, furi_string_get_cstr(app->path), FSAM_READ, FSOM_OPEN_EXISTING);
@@ -115,7 +126,8 @@ int32_t thread_read_pcaps(void* context) {
         }
 
         if(write_once) {
-            len = pcap_get_specific_packet(app->file, buffer, packet_positions[counter]);
+            len = pcap_get_specific_packet(
+                app->file, buffer, buffer_capacity, packet_positions[counter]);
 
             furi_string_reset(app->text);
 

@@ -32,8 +32,16 @@ void scanner_send_packet_trigger(void* ctx) {
 }
 
 static bool same_subnet(const uint8_t a[4], const uint8_t b[4], const uint8_t mask[4]) {
-    return ((*(uint32_t*)a) & (*(uint32_t*)mask)) ==
-           ((*(uint32_t*)b) & (*(uint32_t*)mask));
+    // F0.5e — byte-wise compare. Pre-fix this cast uint8_t[4] to
+    // uint32_t* and OR'd word-aligned. The arrays it sees come from
+    // enc28j60_t.{ip_address,subnet_mask} which sit at non-word-
+    // aligned offsets in the struct; ARM Cortex-M4 tolerates unaligned
+    // word loads at runtime by default, but the cast violates strict
+    // aliasing and would HardFault if Furi flipped UNALIGN_TRP.
+    for(uint8_t i = 0; i < 4; i++) {
+        if((a[i] & mask[i]) != (b[i] & mask[i])) return false;
+    }
+    return true;
 }
 
 static bool cache_lookup(scanner_session_t* s, const uint8_t ip[4], uint8_t mac_out[6]) {

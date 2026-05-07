@@ -90,11 +90,18 @@ size_t pcap_reader_init(File* file, const char* filename);
  *
  * @param file A pointer to the initialized `File` object.
  * @param packet A pointer to a buffer where the packet data will be copied.
- * @param packet_position The 1-based index of the packet to retrieve.
- * @return The length of the retrieved packet in bytes, or `0` if the packet
- * could not be read.
+ * @param packet_capacity Size of `packet` in bytes. Frames whose recorded
+ *        orig_len exceeds this are clamped — protects against malicious or
+ *        corrupt PCAPs writing past the caller's buffer (F0.5e fix).
+ * @param packet_position The byte offset of the packet record in the file.
+ * @return The length of the retrieved packet in bytes (≤ packet_capacity),
+ * or `0` if the packet could not be read.
  */
-size_t pcap_get_specific_packet(File* file, uint8_t* packet, uint32_t packet_position);
+size_t pcap_get_specific_packet(
+    File* file,
+    uint8_t* packet,
+    size_t packet_capacity,
+    uint32_t packet_position);
 
 /**
  * @brief Scans a PCAP file to locate all packet positions.

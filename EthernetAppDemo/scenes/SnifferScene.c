@@ -169,7 +169,14 @@ int32_t sniffer_thread(void* context) {
     // around scene entry, not on a specific frame.
     enable_promiscuous(ethernet);
     solve_paths(app->storage, app->path);
-    pcap_capture_init(app->file, furi_string_get_cstr(app->path));
+    // F0.5e — abort cleanly if the PCAP file can't be opened. Pre-fix
+    // the return was ignored: the handler still ran, the on-screen
+    // counter still ticked up, but every frame was lost (no file).
+    if(!pcap_capture_init(app->file, furi_string_get_cstr(app->path))) {
+        disable_promiscuous(ethernet);
+        view_dispatcher_send_custom_event(app->view_dispatcher, 0xff);
+        return 0;
+    }
 
     state.handle = rx_register(sniffer_predicate, sniffer_handler, &state);
 
