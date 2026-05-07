@@ -145,6 +145,23 @@ App* app_alloc() {
     app->enc28j60_connected = enc28j60_start(app->ethernet) !=
                               0xff; // To know if the enc28j60 is connected
 
+    memcpy(app->ip_helper, IP_DEFAULT, 4);
+
+    app->is_static_ip = false;
+    app->is_dora = false;
+
+    // F0.2 — overlay persisted settings on top of the in-memory defaults.
+    // Silent fallback to defaults if /ext/apps_data/ethernet/settings.cfg is
+    // missing or malformed. MUST run BEFORE rx_dispatch_init below: settings
+    // _load calls enc28j60_set_mac() which writes MAADR0..5 byte by byte;
+    // if the dispatcher is already polling chip registers, the chip's bank
+    // state races and MAADR ends up corrupted, which causes the chip's
+    // UCEN filter to reject all unicast frames (including DHCP OFFER,
+    // breaking DORA after F0.4a). Diagnosed via FURI_LOG inside DORA on
+    // hardware: rx_calls=1860, rx_hits=0 — chip RX FIFO empty for the full
+    // 3-second timeout while the laptop confirmed OFFER was sent.
+    settings_load(app);
+
     // F0.4a — start RX dispatcher and register the two auto-reply handlers.
     // These previously lived inline in ethernet_thread (app_worker.c).
     rx_dispatch_init(app);
@@ -153,16 +170,6 @@ App* app_alloc() {
 
     app->thread = furi_thread_alloc_ex("Ethernet Thread", 10 * 1024, ethernet_thread, app);
     furi_thread_start(app->thread);
-
-    memcpy(app->ip_helper, IP_DEFAULT, 4);
-
-    app->is_static_ip = false;
-    app->is_dora = false;
-
-    // F0.2 — overlay persisted settings on top of the in-memory defaults.
-    // Silent fallback to defaults if /ext/apps_data/ethernet/settings.cfg is
-    // missing or malformed.
-    settings_load(app);
 
     return app;
 }
