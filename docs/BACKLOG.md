@@ -187,4 +187,50 @@ and the `flag_dhcp_dora` flag entirely.
 
 ---
 
+## B-9 — OS Detector reliability (deferred to F1)
+
+**Found:** External code review against F0.4g.1 state. Six issues; the
+three small ones landed in F0.5h. The four below are structural and
+need real work, not patches:
+
+1. **Direct receive_packet vs rx_dispatch.** `os_scan`'s burst-probe
+   loop polls `receive_packet` while rx_dispatch is also draining the
+   chip RX FIFO. With INT-driven dispatch (F0.5c) the dispatcher
+   almost always wins; SYN-ACKs are consumed before os_scan sees them
+   or arrive out of order. Same family of bug fixed in PingScene
+   (F0.4g.1). Fix: register a per-scan rx_dispatch handler and
+   collect responses via predicate side effects, then unregister
+   before deinit.
+
+2. **Sample arrays indexed by `attemp` (attempt round), not response
+   counter.** When multiple ports respond inside the same round (the
+   common case for a 11-port probe), every reply overwrites
+   `sequences[attemp]`, `ids[attemp]`, `windows[attemp]`,
+   `tcp_opts_vec[attemp]`. Heuristics then fingerprint a single
+   surviving sample. Fix: use a per-response counter; treat each
+   matched frame as one sample regardless of which round it landed in.
+
+3. **PORT_OPEN before ACK validation.** `port_results[port_idx].state =
+   PORT_OPEN` is set inside the SYN-ACK branch *before* `ack_recv`
+   has been initialised and validated. A duplicate, late, or unrelated
+   SYN-ACK survives as a port-open vote. Fix: reorder so the OPEN
+   write happens only after the matching ACK is confirmed.
+
+4. **UI blocks during scan.** `OsDetector.c` allocates the worker
+   thread and immediately joins inside the menu callback. Cancel via
+   Back is technically possible (the worker reads gpio_button_back)
+   but the event loop is frozen so the user sees no feedback. Fix:
+   return from the callback after `furi_thread_start`; expose
+   progress via custom events; let on_exit join + cancel.
+
+**Location:** `EthernetAppDemo/modules/os_detector_module.c`,
+`EthernetAppDemo/scenes/OsDetector.c`.
+
+**Severity:** Medium overall. v2.0 ships with the feature labeled
+"EXPERIMENTAL — Heuristic, may be wrong" in submenu header and
+result page so users don't trust the output blindly. Real fix is
+F1 territory.
+
+---
+
 (Add new entries below as they're found.)
