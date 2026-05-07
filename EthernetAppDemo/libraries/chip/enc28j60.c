@@ -398,6 +398,10 @@ static uint16_t read_Phy_byte(FuriHalSpiBusHandle* spi, const uint8_t address) {
 enc28j60_t* enc28j60_alloc(uint8_t* mac_address, uint8_t* ip_address) {
     enc28j60_t* ethernet_enc = (enc28j60_t*)malloc(sizeof(enc28j60_t));
     ethernet_enc->spi = spi_alloc();
+    // F0.5a — chip-level mutex serializes register access across threads.
+    // Each public function below acquires this around set_bank + SPI op
+    // sequences. Closes B-6 (unprotected file-static `bank`).
+    ethernet_enc->mutex = furi_mutex_alloc(FuriMutexTypeNormal);
     memcpy(ethernet_enc->mac_address, mac_address, 6);
     memcpy(ethernet_enc->ip_address, ip_address, 4);
     return ethernet_enc;
@@ -406,6 +410,7 @@ enc28j60_t* enc28j60_alloc(uint8_t* mac_address, uint8_t* ip_address) {
 // Free enc28j60
 void free_enc28j60(enc28j60_t* instance) {
     spi_free(instance->spi);
+    if(instance->mutex) furi_mutex_free(instance->mutex);
     free(instance);
 }
 
@@ -415,7 +420,9 @@ void enc28j60_soft_reset(enc28j60_t* instance) {
 
     if(!spi) return;
 
+    furi_mutex_acquire(instance->mutex, FuriWaitForever);
     write_operation(spi, ENC28J60_SOFT_RESET, 0, ENC28J60_SOFT_RESET);
+    furi_mutex_release(instance->mutex);
 
     furi_delay_ms(2);
 }
@@ -423,12 +430,14 @@ void enc28j60_soft_reset(enc28j60_t* instance) {
 //  Set MAC Adress
 void enc28j60_set_mac(enc28j60_t* instance) {
     FuriHalSpiBusHandle* spi = instance->spi;
+    furi_mutex_acquire(instance->mutex, FuriWaitForever);
     write_register_byte(spi, MAADR5, instance->mac_address[0]);
     write_register_byte(spi, MAADR4, instance->mac_address[1]);
     write_register_byte(spi, MAADR3, instance->mac_address[2]);
     write_register_byte(spi, MAADR2, instance->mac_address[3]);
     write_register_byte(spi, MAADR1, instance->mac_address[4]);
     write_register_byte(spi, MAADR0, instance->mac_address[5]);
+    furi_mutex_release(instance->mutex);
 }
 
 // Function to start
@@ -438,10 +447,15 @@ uint8_t enc28j60_start(enc28j60_t* instance) {
     // To know if the SPI is not initialized
     if(!spi) return 0xff;
 
+    furi_mutex_acquire(instance->mutex, FuriWaitForever);
+
     uint32_t prev_time = furi_get_tick();
 
     while(!(read_operation(spi, ENC28J60_READ_CTRL_REG, ESTAT) & ESTAT_CLKRDY)) {
-        if((furi_get_tick()) > (prev_time + 1000)) return 0xff;
+        if((furi_get_tick()) > (prev_time + 1000)) {
+            furi_mutex_release(instance->mutex);
+            return 0xff;
+        }
         furi_delay_us(1);
     }
 
@@ -479,6 +493,8 @@ uint8_t enc28j60_start(enc28j60_t* instance) {
 
     uint8_t rev = read_register_byte(spi, EREVID);
 
+    furi_mutex_release(instance->mutex);
+
     if(rev > 5) ++rev;
 
     return rev;
@@ -486,7 +502,10 @@ uint8_t enc28j60_start(enc28j60_t* instance) {
 
 // Get if the ENC is linked
 bool is_link_up(enc28j60_t* instance) {
-    return (read_Phy_byte(instance->spi, PHSTAT2) >> 2) & 1;
+    furi_mutex_acquire(instance->mutex, FuriWaitForever);
+    bool result = (read_Phy_byte(instance->spi, PHSTAT2) >> 2) & 1;
+    furi_mutex_release(instance->mutex);
+    return result;
 }
 
 // To know if it is link up in a determinated time
