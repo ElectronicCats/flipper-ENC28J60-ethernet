@@ -160,24 +160,23 @@ int32_t sniffer_thread(void* context) {
         return 0;
     }
 
-    // Enable promiscuous mode and create pcap file. Both touch chip
-    // registers (promiscuous) and SD I/O (pcap init); pause the
-    // dispatcher briefly while we set state.
-    rx_dispatch_pause();
+    // F0.5a — chip mutex inside enable/disable_promiscuous and
+    // receive_packet now serializes bank access, so no rx_dispatch
+    // pause is needed. There's a tiny window between enable_promiscuous
+    // and rx_register where the dispatcher can read frames that won't
+    // match the sniffer predicate (they're handled by auto-replies or
+    // dropped). That's acceptable — the user expects capture to start
+    // around scene entry, not on a specific frame.
     enable_promiscuous(ethernet);
     solve_paths(app->storage, app->path);
     pcap_capture_init(app->file, furi_string_get_cstr(app->path));
 
-    // Register handler BEFORE resuming dispatch — no dead window.
     state.handle = rx_register(sniffer_predicate, sniffer_handler, &state);
-    rx_dispatch_resume();
 
     if(!state.handle) {
         // Out of handler slots. Cleanup and exit.
         pcap_close(app->file);
-        rx_dispatch_pause();
         disable_promiscuous(ethernet);
-        rx_dispatch_resume();
         view_dispatcher_send_custom_event(app->view_dispatcher, 0xff);
         return 0;
     }
@@ -199,12 +198,11 @@ int32_t sniffer_thread(void* context) {
 
     // Stop capture: mark handler as dropping incoming frames first
     // (cheap atomic), then unregister, then teardown chip+file.
+    // F0.5a — chip mutex covers disable_promiscuous; no pause needed.
     state.stopped = true;
     rx_unregister(state.handle);
 
-    rx_dispatch_pause();
     disable_promiscuous(ethernet);
-    rx_dispatch_resume();
 
     pcap_close(app->file);
 

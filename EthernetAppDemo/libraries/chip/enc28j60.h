@@ -36,6 +36,7 @@ extern "C" {
 // Struct for the ENC28J60 Ethernet controller
 typedef struct {
     FuriHalSpiBusHandle* spi; // SPI interface handle
+    FuriMutex* mutex; // F0.5a — serializes chip register access (bank state)
     uint8_t mac_address[6]; // MAC address (6 bytes)
     uint8_t ip_address[4]; // IP address (4 bytes)
     uint8_t subnet_mask[4];

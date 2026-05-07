@@ -505,6 +505,8 @@ void send_packet(enc28j60_t* instance, uint8_t* buffer, uint16_t len) {
 
     FuriHalSpiBusHandle* spi = instance->spi;
 
+    furi_mutex_acquire(instance->mutex, FuriWaitForever);
+
     while(1) {
         write_operation(spi, ENC28J60_BIT_FIELD_SET, ECON1, ECON1_TXRST);
         write_operation(spi, ENC28J60_BIT_FIELD_CLR, ECON1, ECON1_TXRST);
@@ -543,6 +545,8 @@ void send_packet(enc28j60_t* instance, uint8_t* buffer, uint16_t len) {
 
         retry++;
     }
+
+    furi_mutex_release(instance->mutex);
 }
 
 // To get a packet from
@@ -551,6 +555,8 @@ uint16_t receive_packet(enc28j60_t* instance, uint8_t* buffer, uint16_t size) {
     static uint16_t get_next_packet = RXSTART_INIT;
     static bool unreleased_packet = false;
     uint16_t len = 0;
+
+    furi_mutex_acquire(instance->mutex, FuriWaitForever);
 
     if(unreleased_packet) {
         if(get_next_packet == 0)
@@ -584,6 +590,8 @@ uint16_t receive_packet(enc28j60_t* instance, uint8_t* buffer, uint16_t size) {
         write_operation(spi, ENC28J60_BIT_FIELD_SET, ECON2, ECON2_PKTDEC);
     }
 
+    furi_mutex_release(instance->mutex);
+
 #if SHOW_PACKETS_RECEIVED
     analize_packet(buffer, len);
 #endif
@@ -593,32 +601,44 @@ uint16_t receive_packet(enc28j60_t* instance, uint8_t* buffer, uint16_t size) {
 
 void enable_broadcast(enc28j60_t* instance) {
     FuriHalSpiBusHandle* spi = instance->spi;
+    furi_mutex_acquire(instance->mutex, FuriWaitForever);
     write_register_byte(spi, ERXFCON, read_register_byte(spi, ERXFCON) | ERXFCON_BCEN);
+    furi_mutex_release(instance->mutex);
 }
 
 void disable_broadcast(enc28j60_t* instance) {
     FuriHalSpiBusHandle* spi = instance->spi;
+    furi_mutex_acquire(instance->mutex, FuriWaitForever);
     write_register_byte(spi, ERXFCON, read_register_byte(spi, ERXFCON) & ~ERXFCON_BCEN);
+    furi_mutex_release(instance->mutex);
 }
 
 void enable_multicast(enc28j60_t* instance) {
     FuriHalSpiBusHandle* spi = instance->spi;
+    furi_mutex_acquire(instance->mutex, FuriWaitForever);
     write_register_byte(spi, ERXFCON, read_register_byte(spi, ERXFCON) | ERXFCON_MCEN);
+    furi_mutex_release(instance->mutex);
 }
 
 void disable_multicast(enc28j60_t* instance) {
     FuriHalSpiBusHandle* spi = instance->spi;
+    furi_mutex_acquire(instance->mutex, FuriWaitForever);
     write_register_byte(spi, ERXFCON, read_register_byte(spi, ERXFCON) & ~ERXFCON_MCEN);
+    furi_mutex_release(instance->mutex);
 }
 
 void enable_promiscuous(enc28j60_t* instance) {
     FuriHalSpiBusHandle* spi = instance->spi;
+    furi_mutex_acquire(instance->mutex, FuriWaitForever);
     write_register_byte(spi, ERXFCON, read_register_byte(spi, ERXFCON) & ERXFCON_CRCEN);
+    furi_mutex_release(instance->mutex);
 }
 
 void disable_promiscuous(enc28j60_t* instance) {
     FuriHalSpiBusHandle* spi = instance->spi;
+    furi_mutex_acquire(instance->mutex, FuriWaitForever);
     write_register_byte(spi, ERXFCON, ERXFCON_UCEN | ERXFCON_CRCEN | ERXFCON_PMEN | ERXFCON_BCEN);
+    furi_mutex_release(instance->mutex);
 }
 
 // To generate a random MAC
