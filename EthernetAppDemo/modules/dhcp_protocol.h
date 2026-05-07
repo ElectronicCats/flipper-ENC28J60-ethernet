@@ -6,30 +6,11 @@
 #include "../libraries/chip/enc28j60.h"
 
 /**
- * @brief Performs the DORA process to get an IP address via DHCP.
- *
- * This function initiates the DHCP client process to obtain a dynamic
- * IP address, subnet mask, and gateway from a DHCP server. It handles all four
- * stages: Discover, Offer, Request, and Acknowledge.
- *
- * @param ethernet A pointer to the ENC28J60 driver instance.
- * @param static_ip A pointer to a 4-byte buffer where the assigned IP address will be stored.
- * @param ip_router A pointer to a 4-byte buffer where the router's IP address will be stored.
- * @return `true` if the DORA process was successful and an IP was obtained, `false` otherwise.
- */
-bool flipper_process_dora(
-    enc28j60_t* ethernet,
-    uint8_t* static_ip,
-    uint8_t* ip_router,
-    uint8_t* mac_router);
-
-/**
  * @brief Performs the DORA process with an included host name.
  *
- * Similar to `flipper_process_dora`, this function handles the full DHCP
- * DORA process but also includes a user-defined host name in the DHCP Discover
- * and Request messages. This allows the DHCP server to register the device with a
- * specific name.
+ * Handles the full DHCP DORA cycle (Discover, Offer, Request, Acknowledge)
+ * and includes a user-defined host name in the DHCP Discover and Request
+ * messages, so the server can register the device with a specific name.
  *
  * @param ethernet A pointer to the ENC28J60 driver instance.
  * @param static_ip A pointer to a 4-byte buffer where the assigned IP address will be stored.
