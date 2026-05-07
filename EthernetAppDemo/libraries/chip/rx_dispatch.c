@@ -192,6 +192,15 @@ void rx_dispatch_pause(void) {
     g_dispatch.pause_count++;
     g_dispatch.acked_pause = false;
     furi_mutex_release(g_dispatch.mutex);
+    // F0.5d-wave2 — kick the thread out of furi_thread_flags_wait so it
+    // observes pause_count immediately. Pre-fix the thread could sleep
+    // up to RX_POLL_FALLBACK_MS (100 ms) before checking, while pause's
+    // 40 ms ack loop returned silently with acked_pause still false —
+    // a false-positive ack that let the caller race the dispatcher into
+    // the chip.
+    if(g_dispatch.thread_id) {
+        furi_thread_flags_set(g_dispatch.thread_id, RX_FLAG_INT);
+    }
     // Wait for the thread to ack — at most a few ms of polling.
     for(uint8_t i = 0; i < 20 && !g_dispatch.acked_pause; i++) {
         furi_delay_ms(2);

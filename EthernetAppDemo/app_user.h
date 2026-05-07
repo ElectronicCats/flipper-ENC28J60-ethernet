@@ -88,7 +88,10 @@ typedef struct {
     uint8_t mac_gateway[6]; // Array to save the mac_gateway
 
     uint8_t ip_helper[4];
-    uint8_t mac_helper[4];
+    uint8_t mac_helper[6]; // F0.5d-wave2 — was [4]; ArpScannerScene
+                           // memcpy'd 6 bytes here, silently overwriting
+                           // is_static_ip / enc28j60_connected on every
+                           // "select host from scan list" action.
 
     bool is_static_ip; // To know if the device has the static IP
     bool enc28j60_connected; // To know if the enc28j60 is connected

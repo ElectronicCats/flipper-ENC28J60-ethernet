@@ -72,8 +72,12 @@ static void auto_icmp_handler(const uint8_t* frame, uint16_t len, void* ctx) {
 }
 
 App* app_alloc() {
-    // Alloc the app memory
-    App* app = (App*)malloc(sizeof(App));
+    // F0.5d-wave2 — calloc instead of malloc so every field starts
+    // zero/NULL. Pre-fix `thread_alternative` could be uninitialized
+    // garbage; if a scene checked it before assigning (e.g. GetIPScene
+    // on_exit when the chip is disconnected and on_enter never set it),
+    // furi_thread_join on a wild pointer would crash.
+    App* app = (App*)calloc(1, sizeof(App));
 
     // F0.1 — initialize cross-scene scan parameters with sensible defaults.
     // Matches the prior file-static initial values:
