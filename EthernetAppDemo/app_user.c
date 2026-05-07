@@ -1,4 +1,6 @@
 #include "app_user.h"
+#include "libraries/protocol_tools/arp.h"
+#include "libraries/protocol_tools/icmp.h"
 
 // Just to set as initial MAC the user must to modify to have other MAC address
 uint8_t MAC_INITIAL[6] = {0xba, 0x3f, 0x91, 0xc2, 0x7e, 0x5d};
@@ -34,9 +36,72 @@ static void app_tick_event(void* context) {
     UNUSED(app);
 }
 
+// F0.4a — auto-reply handlers migrated from app_worker.c.
+// Predicate / handler pairs registered with rx_dispatch in app_alloc.
+
+// F0.7 — both auto-reply predicates gate on is_static_ip. Pre-fix the
+// auto-replies fired even before DORA, so the chip claimed ownership of
+// its IP_DEFAULT (192.168.0.2) on whatever LAN it was plugged into —
+// causing IP conflicts with whatever real host owned that address.
+// is_static_ip is set true after DORA succeeds (app_worker.c) and on
+// settings_load when the persisted flag was true.
+
+static bool auto_arp_predicate(const uint8_t* frame, uint16_t len, void* ctx) {
+    UNUSED(len);
+    App* app = (App*)ctx;
+    if(!app->is_static_ip) return false;
+    return is_arp((uint8_t*)frame);
+}
+
+static void auto_arp_handler(const uint8_t* frame, uint16_t len, void* ctx) {
+    UNUSED(len);
+    App* app = (App*)ctx;
+    arp_reply_requested(app->ethernet, (uint8_t*)frame, app->ethernet->ip_address);
+}
+
+static bool auto_icmp_predicate(const uint8_t* frame, uint16_t len, void* ctx) {
+    UNUSED(len);
+    App* app = (App*)ctx;
+    if(!app->is_static_ip) return false;
+    if(!is_icmp((uint8_t*)frame)) return false;
+    // F0.5g — match ECHO REQUESTS only. Pre-fix the predicate matched
+    // any ICMP, including ECHO REPLIES bound for our own ping loop.
+    // The handler (ping_reply_to_request) ignored non-requests, but
+    // the frame was already dequeued by rx_dispatch's receive_packet,
+    // so PingScene's outstanding poll never saw the reply. Net effect:
+    // pings looked dropped or intermittent on the same LAN where they
+    // were actually arriving fine.
+    icmp_header_t icmp = icmp_get_header((uint8_t*)frame);
+    return icmp.type == ICMP_TYPE_ECHO_REQUEST;
+}
+
+static void auto_icmp_handler(const uint8_t* frame, uint16_t len, void* ctx) {
+    App* app = (App*)ctx;
+    ping_reply_to_request(app->ethernet, (uint8_t*)frame, len);
+}
+
 App* app_alloc() {
-    // Alloc the app memory
-    App* app = (App*)malloc(sizeof(App));
+    // F0.5d-wave2 — calloc instead of malloc so every field starts
+    // zero/NULL. Pre-fix `thread_alternative` could be uninitialized
+    // garbage; if a scene checked it before assigning (e.g. GetIPScene
+    // on_exit when the chip is disconnected and on_enter never set it),
+    // furi_thread_join on a wild pointer would crash.
+    App* app = (App*)calloc(1, sizeof(App));
+
+    // F0.1 — initialize cross-scene scan parameters with sensible defaults.
+    // Matches the prior file-static initial values:
+    //   PortsScannerScene.c:11   target_port = 22
+    //   PortsScannerScene.c:12   range_port = 1000
+    //   PortsScannerScene.c:40   protocols_index = PORTS_SCANNER_TCP
+    //   ArpScannerScene.c:17     range_ip = 30
+    // Other arrays default to all zeros (already done by calloc/memset).
+    app->scan_params.target_port = 22;
+    app->scan_params.range_port = 1000;
+    app->scan_params.protocols_index = 0; // PORTS_SCANNER_TCP
+    app->scan_params.range_ip = 30;
+    memset(app->scan_params.target_ip, 0, sizeof(app->scan_params.target_ip));
+    memset(app->scan_params.ip_ping, 0, sizeof(app->scan_params.ip_ping));
+    memset(app->scan_params.ip_start, 0, sizeof(app->scan_params.ip_start));
 
     // Alloc the scene manager and view dispatcher
     app->scene_manager = scene_manager_alloc(&app_scene_handlers, app);
@@ -102,22 +167,46 @@ App* app_alloc() {
     app->enc28j60_connected = enc28j60_start(app->ethernet) !=
                               0xff; // To know if the enc28j60 is connected
 
-    app->thread = furi_thread_alloc_ex("Ethernet Thread", 10 * 1024, ethernet_thread, app);
-    furi_thread_start(app->thread);
-
     memcpy(app->ip_helper, IP_DEFAULT, 4);
 
     app->is_static_ip = false;
     app->is_dora = false;
 
+    // F0.2 — overlay persisted settings on top of the in-memory defaults.
+    // Silent fallback to defaults if /ext/apps_data/ethernet/settings.cfg is
+    // missing or malformed. MUST run BEFORE rx_dispatch_init below: settings
+    // _load calls enc28j60_set_mac() which writes MAADR0..5 byte by byte;
+    // if the dispatcher is already polling chip registers, the chip's bank
+    // state races and MAADR ends up corrupted, which causes the chip's
+    // UCEN filter to reject all unicast frames (including DHCP OFFER,
+    // breaking DORA after F0.4a). Diagnosed via FURI_LOG inside DORA on
+    // hardware: rx_calls=1860, rx_hits=0 — chip RX FIFO empty for the full
+    // 3-second timeout while the laptop confirmed OFFER was sent.
+    settings_load(app);
+
+    // F0.4a — start RX dispatcher and register the two auto-reply handlers.
+    // These previously lived inline in ethernet_thread (app_worker.c, deleted
+    // in F0.4e).
+    rx_dispatch_init(app);
+    app->auto_arp_handle = rx_register(auto_arp_predicate, auto_arp_handler, app);
+    app->auto_icmp_handle = rx_register(auto_icmp_predicate, auto_icmp_handler, app);
+
     return app;
 }
 
 void app_free(App* app) {
-    furi_thread_flags_set(furi_thread_get_id(app->thread), flag_stop);
+    // F0.2 — persist current settings before tearing down storage and the
+    // ethernet instance. Errors are silent; a failed save must not block
+    // app exit.
+    settings_save(app);
 
-    furi_thread_join(app->thread);
-    furi_thread_free(app->thread);
+    // F0.4a — stop dispatcher first so handlers don't race teardown.
+    rx_unregister(app->auto_arp_handle);
+    rx_unregister(app->auto_icmp_handle);
+    rx_dispatch_deinit(app);
+
+    // F0.4e — app->thread / ethernet_thread / app_worker.c are gone;
+    // DORA runs in GetIPScene's alt thread now.
 
     //  Free all the views from the View Dispatcher
     view_dispatcher_remove_view(app->view_dispatcher, SubmenuView);

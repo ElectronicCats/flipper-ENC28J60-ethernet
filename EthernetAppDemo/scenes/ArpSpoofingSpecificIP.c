@@ -6,7 +6,7 @@ enum {
     ATTACK_IP
 } arp_ip_specific_options;
 
-static uint8_t target_ip[4] = {0};
+// target_ip now lives in app->scan_params (F0.1)
 
 /**
  * Scene for the menu to select some options in the arp spoofing to an specific IP
@@ -44,22 +44,23 @@ void app_scene_arp_spoofing_specific_ip_menu_on_enter(void* context) {
 
     // If an IP was selected from ARP, copy it
     if(*(uint32_t*)app->ip_helper != 0) {
-        memcpy(target_ip, app->ip_helper, 4);
+        memcpy(app->scan_params.target_ip, app->ip_helper, 4);
 
         // Clear helper to avoid overwriting later
         memset(app->ip_helper, 0, 4);
     }
 
-    if(*(uint32_t*)target_ip == 0) memcpy(target_ip, app->ip_gateway, 4);
+    if(*(uint32_t*)app->scan_params.target_ip == 0)
+        memcpy(app->scan_params.target_ip, app->ip_gateway, 4);
     furi_string_reset(app->text);
 
     furi_string_printf(
         app->text,
         "Attack IP [%u.%u.%u.%u]",
-        target_ip[0],
-        target_ip[1],
-        target_ip[2],
-        target_ip[3]);
+        app->scan_params.target_ip[0],
+        app->scan_params.target_ip[1],
+        app->scan_params.target_ip[2],
+        app->scan_params.target_ip[3]);
 
     submenu_set_header(app->submenu, "ARP Spoofing To IP");
 
@@ -121,7 +122,7 @@ void set_ip_to_spoof(App* app) {
     ip_assigner_reset(app->ip_assigner);
     ip_assigner_set_header(app->ip_assigner, "Set Ip Address to Spoof");
     ip_assigner_callback(app->ip_assigner, set_ip_to_spoof_manually, app);
-    ip_assigner_set_ip_array(app->ip_assigner, target_ip);
+    ip_assigner_set_ip_array(app->ip_assigner, app->scan_params.target_ip);
 
     view_dispatcher_switch_to_view(
         app->view_dispatcher, IpAssignerView); // Switch to the input byte view
@@ -129,7 +130,8 @@ void set_ip_to_spoof(App* app) {
 
 // Set the spoofing and the scene and start the alternative thread
 void spoofing_specific_ip(App* app) {
-    furi_thread_suspend(furi_thread_get_id(app->thread));
+    // F0.4c — no thread_suspend; thread_for_spoofing_specific_ip uses
+    // scanner_session for the target ARP resolve and pure TX after.
 
     // Start the other thread
     app->thread_alternative = furi_thread_alloc_ex(
@@ -147,7 +149,7 @@ void spoofing_specific_ip(App* app) {
 void finish_spoofing_specific_ip_thread(App* app) {
     furi_thread_join(app->thread_alternative);
     furi_thread_free(app->thread_alternative);
-    furi_thread_resume(furi_thread_get_id(app->thread));
+    // F0.4c — no thread_resume.
 }
 
 // Scene on enter for spoofing
@@ -262,7 +264,7 @@ int32_t thread_for_spoofing_specific_ip(void* context) {
     uint16_t size_one = 0;
 
     // Just the addreses for the specific device to disconnect
-    uint8_t* ip_device_to_disconnect = target_ip; // IP address
+    uint8_t* ip_device_to_disconnect = app->scan_params.target_ip; // IP address
     uint8_t mac_device_to_disconnect[6] = {0}; // Mac address
 
     // Just an alternative to get the gateway IP

@@ -112,9 +112,10 @@ void callback_random_mac(void* context, uint32_t index) {
 
     generate_random_mac(app->ethernet->mac_address);
 
-    furi_thread_suspend(app->thread);
+    // F0.5a — chip-level mutex inside enc28j60_set_mac now serializes
+    // bank state, so the rx_dispatch pause/resume that was here in
+    // F0.4c is no longer needed.
     enc28j60_set_mac(app->ethernet);
-    furi_thread_resume(app->thread);
 
     scene_manager_previous_scene(app->scene_manager);
 }
@@ -212,9 +213,17 @@ void settings_input_byte_address(void* context) {
         scene_manager_get_scene_state(app->scene_manager, app_scene_set_address_option);
 
     if(state == MAC_OPTION_SETTING) {
-        furi_thread_suspend(app->thread);
+        // F0.5a — chip mutex covers this; no rx_dispatch pause needed.
         enc28j60_set_mac(app->ethernet);
-        furi_thread_resume(app->thread);
+    } else if(state == IP_OPTION_SETTING) {
+        // F0.5f — manually-set IP must mark the device static-configured
+        // AND DORA-equivalent. Pre-fix the byte_input wrote the IP into
+        // app->ethernet->ip_address but left is_static_ip / is_dora
+        // false, so auto-replies stayed off and Ping/Ports/OS/ArpSpoof
+        // refused to start. The user explicitly chose this IP, so we
+        // treat it as if DORA had succeeded.
+        app->is_static_ip = true;
+        app->is_dora = true;
     }
 
     scene_manager_previous_scene(app->scene_manager);

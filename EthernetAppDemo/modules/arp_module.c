@@ -2,6 +2,7 @@
 #include "../libraries/generals/ethernet_generals.h"
 #include "../libraries/protocol_tools/ethernet_protocol.h"
 #include "../libraries/protocol_tools/arp.h"
+#include "../libraries/scanner/scanner_session.h"
 
 // Packets sent per second
 uint8_t packet_rate = 120;
@@ -178,47 +179,62 @@ bool get_arp_requested(uint8_t* buffer, uint8_t* dst_ip) {
     return true;
 }
 
+// F0.4f — moved typedef + predicate to arp_module.h so scanner_session
+// can reuse them. Same body, public name.
+bool arp_reply_match_predicate(const uint8_t* frame, uint16_t len, void* ctx) {
+    arp_reply_match_ctx_t* c = (arp_reply_match_ctx_t*)ctx;
+    return get_arp_reply(c->target_ip, c->target_mac, (uint8_t*)frame, len);
+}
+
 void arp_scan_network(
-    enc28j60_t* ethernet,
+    struct ScannerSession* scanner,
     arp_list* list,
     uint8_t init_ip[4],
     uint8_t* list_count,
     uint8_t range) {
+    enc28j60_t* ethernet = scanner->ethernet;
+
     arp_set_my_mac_address(ethernet->mac_address);
     arp_set_my_ip_address(ethernet->ip_address);
 
     uint8_t* tx_buffer = ethernet->tx_buffer;
-    uint8_t* rx_buffer = ethernet->rx_buffer;
 
     uint8_t start_list[4] = {0};
-
     memcpy(start_list, init_ip, 4);
 
     uint8_t counter = 0;
-
     uint16_t packet_len = 0;
 
     for(uint8_t i = 0; i < range; i++) {
-        // Set the arp packet request
+        // F0.3c — honor cancel between IPs.
+        if(scanner_cancel_requested(scanner)) break;
+
+        // F0.5d — register first, send second (via trigger). The previous
+        // order (send → register inside scanner_wait_for_packet) had a
+        // sub-millisecond window where a fast reply could be drained by
+        // rx_dispatch before any predicate matched it.
         set_arp_request(tx_buffer, &packet_len, start_list);
 
-        // Send packet to lan
-        send_packet(ethernet, tx_buffer, packet_len);
-
-        // Set time to get Address
-        uint32_t last_time = furi_get_tick();
-
-        // Part to received the arp messages
-        while((furi_get_tick() - last_time) < 1000) {
-            packet_len = receive_packet(ethernet, rx_buffer, MAX_FRAMELEN);
-
-            if(packet_len && get_arp_reply(start_list, list[counter].mac, rx_buffer, packet_len)) {
-                memcpy(list[counter].ip, start_list, 4);
-                counter++;
-                last_time = furi_get_tick();
-                break;
-            }
-            furi_delay_us(1);
+        scanner_send_trigger_ctx_t trigger_ctx = {
+            .eth = ethernet,
+            .buf = tx_buffer,
+            .len = packet_len,
+        };
+        arp_reply_match_ctx_t ctx = {
+            .target_ip = start_list,
+            .target_mac = list[counter].mac,
+        };
+        uint16_t got = 0;
+        if(scanner_wait_for_packet(
+               scanner,
+               arp_reply_match_predicate,
+               &ctx,
+               scanner_send_packet_trigger,
+               &trigger_ctx,
+               &got,
+               1000)) {
+            memcpy(list[counter].ip, start_list, 4);
+            counter++;
         }
 
         // Check if the ip address is the last
@@ -320,5 +336,9 @@ uint8_t is_duplicated_ip(uint8_t* ip, arp_list* list, uint8_t total_list) {
         if(is_the_ip(list[i].ip, ip)) count_of_duplicated++;
     }
 
-    return count_of_duplicated - 1;
+    // F0.7 — was `return count - 1` which underflowed to 0xFF when the
+    // IP wasn't in the list (count == 0), making callers that treat the
+    // return as a bool see a "duplicated" answer for IPs that never
+    // existed in the list.
+    return count_of_duplicated == 0 ? 0 : count_of_duplicated - 1;
 }

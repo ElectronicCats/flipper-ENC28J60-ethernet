@@ -1,3 +1,15 @@
+/*
+ * Portions of this file are derived from the EtherCard library
+ * (https://github.com/njh/EtherCard), originally authored by Guido Socher
+ * and Jean-Claude Wippler, itself based on AVRlib by Pascal Stang.
+ * EtherCard is licensed under GPL-2.0-or-later. See LICENSES/EtherCard.LICENSE.
+ *
+ * Modifications by Electronic Cats, 2024-2025: ported to Flipper Zero
+ * (Furi HAL SPI), C-only, struct-based instance API.
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
+
 #ifndef _ENC28J60_LIBRARY_
 #define _ENC28J60_LIBRARY_
 
@@ -24,6 +36,7 @@ extern "C" {
 // Struct for the ENC28J60 Ethernet controller
 typedef struct {
     FuriHalSpiBusHandle* spi; // SPI interface handle
+    FuriMutex* mutex; // F0.5a — serializes chip register access (bank state)
     uint8_t mac_address[6]; // MAC address (6 bytes)
     uint8_t ip_address[4]; // IP address (4 bytes)
     uint8_t subnet_mask[4];

@@ -1,3 +1,5 @@
+#pragma once
+
 #include <furi.h>
 #include <furi_hal.h>
 #include <gui/gui.h>
@@ -47,17 +49,11 @@
 
 #define PATHPCAPS PATHAPPEXT "/files" // Path to save pcaps
 
-// Create flags
-typedef enum {
-    flag_stop = 1,
-    flag_dhcp_dora,
-} ethernet_app_flags_t;
-
-#define ALL_FLAGS (flag_stop | flag_dhcp_dora)
-
-#define MASK_FLAGS 0xfffffffe
-
-#define IS_NOT_LINK_UP 0xff
+// F0.4e — ethernet_app_flags_t / ALL_FLAGS / MASK_FLAGS / IS_NOT_LINK_UP
+// were the worker thread's signaling protocol (flag_dhcp_dora set by
+// GetIPScene, processed in ethernet_thread). With the worker thread
+// gone, DORA runs in GetIPScene's alt thread and these flags are
+// dead. Removed.
 
 // For GET IP scene Events
 typedef enum {
@@ -65,6 +61,24 @@ typedef enum {
     ip_no_gotten_event,
     ip_gotten_event,
 } get_ip_events;
+
+// Cross-scene scan parameters (formerly file-static globals scattered
+// across scenes; centralized in F0.1 to remove name collisions and
+// enable persistence in F0.2).
+typedef struct {
+    uint8_t target_ip[4]; // generic target IPv4 (port scan / OS detect / ARP spoof)
+    uint16_t target_port; // single port (port scan start)
+    uint16_t range_port; // count of ports to scan from target_port
+    uint8_t protocols_index; // 0=TCP, 1=UDP (PORTS_SCANNER_TCP/UDP)
+    uint8_t ip_ping[4]; // ping target IPv4
+    uint8_t ip_start[4]; // ARP scan start IPv4
+    uint8_t range_ip; // ARP scan count
+} scan_params_t;
+
+// Forward declaration so the App struct can hold rx_handle_t* fields.
+// The full definition lives in libraries/chip/rx_dispatch.h, which is
+// included below the App typedef (it depends on App* in its API).
+typedef struct rx_handle rx_handle_t;
 
 // Struct for the App
 typedef struct {
@@ -74,11 +88,17 @@ typedef struct {
     uint8_t mac_gateway[6]; // Array to save the mac_gateway
 
     uint8_t ip_helper[4];
-    uint8_t mac_helper[4];
+    uint8_t mac_helper[6]; // F0.5d-wave2 — was [4]; ArpScannerScene
+        // memcpy'd 6 bytes here, silently overwriting
+        // is_static_ip / enc28j60_connected on every
+        // "select host from scan list" action.
 
     bool is_static_ip; // To know if the device has the static IP
     bool enc28j60_connected; // To know if the enc28j60 is connected
     bool is_dora;
+    volatile bool dora_cancel; // F0.5f — flipped by GetIPScene on_exit so the
+        // alt thread's DORA loop can break out before
+        // its 10 s timeout fires.
 
     SceneManager* scene_manager;
     ViewDispatcher* view_dispatcher;
@@ -102,15 +122,29 @@ typedef struct {
     FuriString* text; // String for general use
     FuriString* path; // String to get path from file browser
 
-    FuriThread* thread; // For the threads
-    FuriThread* thread_alternative; // For the threads
+    // F0.4e — `thread` (the long-running worker that handled DORA flags)
+    // is gone; rx_dispatch owns the chip and per-scene alt threads do
+    // any heavy lifting.
+    FuriThread* thread_alternative; // Per-scene alt thread (one at a time)
 
     port_result_t ports[MAX_OS_SCAN_PORTS];
     uint8_t ports_count;
     bool os_guess;
     uint16_t src_port;
     uint16_t selected_menu_index;
+
+    scan_params_t scan_params; // F0.1 — centralized cross-scene targets
+
+    rx_handle_t* auto_arp_handle;
+    rx_handle_t* auto_icmp_handle;
 } App;
+
+// F0.2 — settings persistence. Must be included AFTER the App typedef
+// because settings.h declares functions taking `App*`, and App is an
+// anonymous-struct typedef (cannot be forward-declared).
+#include "libraries/settings/settings.h"
+#include "libraries/scanner/scanner_session.h"
+#include "libraries/chip/rx_dispatch.h"
 
 // Views in the App
 typedef enum {
@@ -149,5 +183,4 @@ void draw_port_not_open(App* app); // Draw when the port is not open
 void draw_ask_for_ip(App* app); // Draw to ask a new IP
 void draw_text(App* app, const char* text); // Draw text
 
-// Thread
-int32_t ethernet_thread(void* context);
+// F0.4e — ethernet_thread declaration removed; the function is gone.

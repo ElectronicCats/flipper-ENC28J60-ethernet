@@ -7,12 +7,9 @@
 #define TARGET_PORT_TEXT TARGET_TEXT PORT_TEXT
 #define RANGE_PORT_TEXT  RANGE_TEXT PORT_TEXT
 
-uint8_t target_ip[4] = {0};
-uint16_t target_port = 22;
-uint16_t range_port = 1000;
-
-uint8_t target_port_bytes[2] = {0x00, 0x50};
-uint8_t range_port_bytes[2] = {0x00, 0x01};
+// target_ip / target_port / range_port now live in app->scan_params (F0.1)
+// F0.6 — target_port_bytes / range_port_bytes deleted (dead byte_input
+// path; PORTS_SCANNER_SCENE_BYTE_INPUT state was never entered).
 
 typedef enum {
     VIEW_IP_LIST,
@@ -37,7 +34,7 @@ typedef enum {
 } PORTS_SCANNER_SCENE_STATES;
 
 const char* protocols[] = {"TCP", "UDP"};
-uint8_t protocols_index = PORTS_SCANNER_TCP;
+// protocols_index now lives in app->scan_params (F0.1)
 
 void number_input_ports_callback(void* context, int32_t value) {
     App* app = context;
@@ -46,9 +43,9 @@ void number_input_ports_callback(void* context, int32_t value) {
         scene_manager_get_scene_state(app->scene_manager, app_scene_ports_scanner_option);
 
     if(state == TARGET_PORT) {
-        target_port = value;
+        app->scan_params.target_port = value;
     } else if(state == SOURCE_PORT) {
-        range_port = value;
+        app->scan_params.range_port = value;
     }
 
     scene_manager_set_scene_state(
@@ -71,41 +68,36 @@ void set_ip_address_ports_scanner(App* app) {
     ip_assigner_reset(app->ip_assigner);
     ip_assigner_set_header(app->ip_assigner, "Set Ip Address");
     ip_assigner_callback(app->ip_assigner, settings_start_ip_address_ports_scanner, app);
-    ip_assigner_set_ip_array(app->ip_assigner, target_ip);
+    ip_assigner_set_ip_array(app->ip_assigner, app->scan_params.target_ip);
 
     view_dispatcher_switch_to_view(
         app->view_dispatcher, IpAssignerView); // Switch to the input byte view
 }
 
-void byte_input_ports_scanner_callback(void* context) {
-    App* app = context;
-
-    bytes_to_uint(&range_port, range_port_bytes, sizeof(uint16_t));
-    bytes_to_uint(&target_port, target_port_bytes, sizeof(uint16_t));
-
-    scene_manager_set_scene_state(
-        app->scene_manager, app_scene_ports_scanner_option, PORTS_SCANNER_SCENE_MENU);
-    view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);
-
-    app_scene_ports_scanner_on_enter(app);
-}
-
-void byte_change_ports_scanner(void* context) {
-    UNUSED(context);
-}
+// F0.6 — byte_input_ports_scanner_callback / byte_change_ports_scanner
+// deleted. Never registered with byte_input_set_result_callback; the
+// active port input path is the number_input setter (lines 200-218).
 
 int32_t ports_scanner_thread(void* context) {
     App* app = context;
 
     uint8_t value = PORT_CLOSED;
 
-    switch(protocols_index) {
+    switch(app->scan_params.protocols_index) {
     case PORTS_SCANNER_TCP:
-        tcp_syn_scan(app, target_ip, target_port, range_port);
+        tcp_syn_scan(
+            app,
+            app->scan_params.target_ip,
+            app->scan_params.target_port,
+            app->scan_params.range_port);
         break;
 
     case PORTS_SCANNER_UDP:
-        udp_port_scan(app, target_ip, target_port, range_port);
+        udp_port_scan(
+            app,
+            app->scan_params.target_ip,
+            app->scan_params.target_port,
+            app->scan_params.range_port);
         break;
     }
 
@@ -128,8 +120,8 @@ void variable_list_ports_scanner_callback(void* context, uint32_t index) {
     case START:
 
         if(app->is_dora) {
-            furi_thread_suspend(app->thread);
-
+            // F0.4c — no longer suspends app->thread; rx_dispatch keeps
+            // running and ports_scanner_thread uses scanner_session.
             submenu_reset(app->submenu);
             submenu_set_header(app->submenu, "PORTS OPEN");
 
@@ -185,7 +177,8 @@ void variable_list_ports_scanner_callback(void* context, uint32_t index) {
 
     case TARGET_PORT:
     case SOURCE_PORT: {
-        int32_t current = (index == TARGET_PORT) ? target_port : range_port;
+        int32_t current = (index == TARGET_PORT) ? app->scan_params.target_port :
+                                                   app->scan_params.range_port;
 
         number_input_set_header_text(
             app->number_input, index == TARGET_PORT ? "Set Target Port" : "Set Range");
@@ -204,13 +197,26 @@ void variable_list_ports_scanner_callback(void* context, uint32_t index) {
         view_dispatcher_switch_to_view(app->view_dispatcher, NumberInputView);
         break;
     }
+
+    case PROTOCOL:
+        // Toggle between TCP and UDP. Pre-F0 the protocol switcher used a
+        // VariableItemList with left/right arrows; commit eae1f70 migrated
+        // the scene to Submenu, which doesn't support in-place value
+        // changes — so the click-to-toggle pattern is the natural fit.
+        app->scan_params.protocols_index =
+            (app->scan_params.protocols_index == PORTS_SCANNER_TCP) ? PORTS_SCANNER_UDP :
+                                                                      PORTS_SCANNER_TCP;
+        // Rebuild the submenu so the "Protocol [TCP/UDP]" label updates.
+        app_scene_ports_scanner_on_enter(app);
+        break;
     }
 }
 
 void variable_item_change_protocol_callback(VariableItem* item) {
+    App* app = (App*)variable_item_get_context(item);
     uint8_t index = variable_item_get_current_value_index(item);
     variable_item_set_current_value_text(item, protocols[index]);
-    protocols_index = index;
+    app->scan_params.protocols_index = index;
 }
 
 void app_scene_ports_scanner_on_enter(void* context) {
@@ -224,16 +230,17 @@ void app_scene_ports_scanner_on_enter(void* context) {
         app->submenu, "View scanned IPs", VIEW_IP_LIST, variable_list_ports_scanner_callback, app);
 
     // TARGET IP
-    if(*(uint32_t*)target_ip == 0) memcpy(target_ip, app->ip_gateway, 4);
+    if(*(uint32_t*)app->scan_params.target_ip == 0)
+        memcpy(app->scan_params.target_ip, app->ip_gateway, 4);
 
     furi_string_reset(app->text);
     furi_string_cat_printf(
         app->text,
         "Target IP [%u.%u.%u.%u]",
-        target_ip[0],
-        target_ip[1],
-        target_ip[2],
-        target_ip[3]);
+        app->scan_params.target_ip[0],
+        app->scan_params.target_ip[1],
+        app->scan_params.target_ip[2],
+        app->scan_params.target_ip[3]);
 
     submenu_add_item(
         app->submenu,
@@ -244,7 +251,7 @@ void app_scene_ports_scanner_on_enter(void* context) {
 
     // TARGET PORT
     furi_string_reset(app->text);
-    furi_string_cat_printf(app->text, "Target Port [%u]", target_port);
+    furi_string_cat_printf(app->text, "Target Port [%u]", app->scan_params.target_port);
 
     submenu_add_item(
         app->submenu,
@@ -255,7 +262,7 @@ void app_scene_ports_scanner_on_enter(void* context) {
 
     // RANGE PORT
     furi_string_reset(app->text);
-    furi_string_cat_printf(app->text, "Range [%u]", range_port);
+    furi_string_cat_printf(app->text, "Range [%u]", app->scan_params.range_port);
 
     submenu_add_item(
         app->submenu,
@@ -266,7 +273,8 @@ void app_scene_ports_scanner_on_enter(void* context) {
 
     // PROTOCOL
     furi_string_reset(app->text);
-    furi_string_cat_printf(app->text, "Protocol [%s]", protocols[protocols_index]);
+    furi_string_cat_printf(
+        app->text, "Protocol [%s]", protocols[app->scan_params.protocols_index]);
 
     submenu_add_item(
         app->submenu,
@@ -292,7 +300,8 @@ bool app_scene_ports_scanner_on_event(void* context, SceneManagerEvent event) {
         case PORTS_SCANNER_SCENE_SHOW_PORTS:
             furi_thread_join(app->thread_alternative);
             furi_thread_free(app->thread_alternative);
-            furi_thread_resume(app->thread);
+            // F0.4c — no thread_resume; rx_dispatch + scanner_session
+            // make app->thread no longer the chip owner.
             /* fall through */
         case PORTS_SCANNER_SCENE_BYTE_INPUT:
         case PORTS_SCANNER_SCENE_IP_INPUT:

@@ -19,3 +19,23 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+NOTE ON DERIVATIVE COMPONENTS
+
+The files `EthernetAppDemo/libraries/chip/enc28j60.c` and
+`EthernetAppDemo/libraries/chip/enc28j60.h` are derived from the EtherCard
+library (https://github.com/njh/EtherCard), originally authored by
+Guido Socher and Jean-Claude Wippler, and are distributed under
+GPL-2.0-or-later (SPDX: GPL-2.0-or-later). The full text of the GPLv2 license
+applicable to those two files is provided in LICENSES/EtherCard.LICENSE.
+
+The remainder of this repository, including all other source files in
+`EthernetAppDemo/`, documentation, build scripts, and assets, is distributed
+under the MIT license stated above.
+
+Distribution of binaries that link the GPLv2 driver must comply with the
+terms of GPL-2.0-or-later, which in practice means making the source code
+of those two files available to recipients (already satisfied by the public
+nature of this repository).

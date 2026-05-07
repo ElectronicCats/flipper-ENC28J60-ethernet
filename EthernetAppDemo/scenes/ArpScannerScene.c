@@ -12,9 +12,7 @@ typedef enum {
  * It shows the IP list and saves it in a array
  */
 
-// Variables for the ARP Scanner
-uint8_t ip_start[4] = {0, 0, 0, 0}; // The IP address to start the scan
-uint8_t range_ip = 30; // The count of the IP addresses to scan
+// ip_start and range_ip now live in app->scan_params (F0.1)
 
 /**
  * Menu To select the options and range of the Scanner
@@ -64,14 +62,14 @@ void change_value_callback(VariableItem* item) {
     if(value == 0) value = 255; // If the value is minor of 1
     if(value > 255) value = 1; // If the value is mayor of 255
 
-    range_ip = value;
+    app->scan_params.range_ip = value;
 
     // Set the value in the Element
-    variable_item_set_current_value_index(item, range_ip);
+    variable_item_set_current_value_index(item, app->scan_params.range_ip);
 
     // Set the text
     furi_string_reset(app->text);
-    furi_string_cat_printf(app->text, "%u", range_ip);
+    furi_string_cat_printf(app->text, "%u", app->scan_params.range_ip);
 
     // Set the text in the element
     variable_item_set_current_value_text(item, furi_string_get_cstr(app->text));
@@ -83,7 +81,7 @@ void range_input_callback(void* context, int32_t value) {
     if(value < 1) value = 1;
     if(value > 255) value = 255;
 
-    range_ip = (uint8_t)value;
+    app->scan_params.range_ip = (uint8_t)value;
 
     scene_manager_previous_scene(app->scene_manager);
 }
@@ -92,7 +90,7 @@ void set_range_value(App* app) {
     number_input_set_header_text(app->number_input, "Set Range");
 
     number_input_set_result_callback(
-        app->number_input, range_input_callback, app, range_ip, 1, 255);
+        app->number_input, range_input_callback, app, app->scan_params.range_ip, 1, 255);
 
     view_dispatcher_switch_to_view(app->view_dispatcher, NumberInputView);
 }
@@ -143,16 +141,22 @@ void app_scene_arp_scanner_menu_on_enter(void* context) {
 
     // SET IP
     furi_string_reset(app->text);
-    if(*(uint32_t*)ip_start == 0) memcpy(ip_start, app->ip_gateway, 4);
+    if(*(uint32_t*)app->scan_params.ip_start == 0)
+        memcpy(app->scan_params.ip_start, app->ip_gateway, 4);
     furi_string_cat_printf(
-        app->text, "Set IP [%u.%u.%u.%u]", ip_start[0], ip_start[1], ip_start[2], ip_start[3]);
+        app->text,
+        "Set IP [%u.%u.%u.%u]",
+        app->scan_params.ip_start[0],
+        app->scan_params.ip_start[1],
+        app->scan_params.ip_start[2],
+        app->scan_params.ip_start[3]);
 
     submenu_add_item(
         app->submenu, furi_string_get_cstr(app->text), SET_IP, arp_menu_callback, app);
 
     // SET RANGE
     furi_string_reset(app->text);
-    furi_string_cat_printf(app->text, "Range [%u]", range_ip);
+    furi_string_cat_printf(app->text, "Range [%u]", app->scan_params.range_ip);
 
     submenu_add_item(
         app->submenu, furi_string_get_cstr(app->text), SET_RANGE, arp_menu_callback, app);
@@ -193,8 +197,8 @@ void build_ip_submenu(App* app, uint32_t selection);
 
 // Function to set the thread and the view
 void draw_the_arp_list(App* app) {
-    furi_thread_suspend(furi_thread_get_id(app->thread));
-
+    // F0.4c — no longer suspends app->thread; rx_dispatch keeps running and
+    // arp_scanner_thread uses scanner_session (rx_dispatch-aware).
     app->thread_alternative =
         furi_thread_alloc_ex("ARP SCANNER", 10 * 1024, arp_scanner_thread, app);
 
@@ -207,7 +211,6 @@ void draw_the_arp_list(App* app) {
 void finished_arp_thread(App* app) {
     furi_thread_join(app->thread_alternative);
     furi_thread_free(app->thread_alternative);
-    furi_thread_resume(furi_thread_get_id(app->thread));
 }
 
 //  Callback for the Input
@@ -221,7 +224,7 @@ void set_ip_address(App* app) {
     ip_assigner_reset(app->ip_assigner);
     ip_assigner_set_header(app->ip_assigner, "Set Ip Address");
     ip_assigner_callback(app->ip_assigner, settings_start_ip_address, app);
-    ip_assigner_set_ip_array(app->ip_assigner, ip_start);
+    ip_assigner_set_ip_array(app->ip_assigner, app->scan_params.ip_start);
 
     view_dispatcher_switch_to_view(
         app->view_dispatcher, IpAssignerView); // Switch to the input byte view
@@ -459,7 +462,16 @@ int32_t arp_scanner_thread(void* context) {
     }
 
     if(start && is_the_network_connected(ethernet)) {
-        arp_scan_network(ethernet, app->ip_list, ip_start, &app->ip_counter, range_ip);
+        // F0.3c — arp_scan_network now takes a scanner_session_t.
+        scanner_session_t scanner;
+        scanner_session_init(&scanner, app);
+        arp_scan_network(
+            &scanner,
+            app->ip_list,
+            app->scan_params.ip_start,
+            &app->ip_counter,
+            app->scan_params.range_ip);
+        scanner_session_deinit(&scanner);
     }
 
     view_dispatcher_send_custom_event(app->view_dispatcher, 1);

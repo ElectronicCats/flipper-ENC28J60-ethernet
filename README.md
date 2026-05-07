@@ -50,3 +50,12 @@ See the  [**community code of conduct**](https://github.com/ElectronicCats/elect
 </p>
 
 Electronic Cats invests time and resources in providing this open-source design, please support Electronic Cats and open-source hardware by purchasing products from Electronic Cats!
+
+## License
+
+This project is distributed under the **MIT License** (see [`LICENSE`](LICENSE)) **except** for the ENC28J60 driver files, which are derivative works of the [EtherCard](https://github.com/njh/EtherCard) library and therefore carry **GPL-2.0-or-later**:
+
+- `EthernetAppDemo/libraries/chip/enc28j60.c`
+- `EthernetAppDemo/libraries/chip/enc28j60.h`
+
+Both files include an SPDX header and reference [`LICENSES/EtherCard.LICENSE`](LICENSES/EtherCard.LICENSE) for the full GPLv2 text. The remainder of the source tree (scenes, modules, protocol helpers, SPI shim, etc.) is original Electronic Cats code under MIT.

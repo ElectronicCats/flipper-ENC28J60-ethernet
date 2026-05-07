@@ -5,11 +5,10 @@
 #include "../libraries/protocol_tools/ipv4.h"
 #include "../libraries/protocol_tools/arp.h"
 #include "../libraries/protocol_tools/ethernet_protocol.h"
+#include "../libraries/scanner/scanner_session.h"
 #include "../modules/tcp_module.h"
 #include "../libraries/protocol_tools/icmp.h"
 #include "../modules/ping_module.h"
-#define OPTS_LEN     13
-#define OPTS_PROBES  6
 #define packet_count 9
 #define TCP_OPTS_MAX 9
 #define MAX_RETRIES  9
@@ -269,24 +268,48 @@ void clasificar_window(uint16_t* win, int n, uint8_t* value_ptr) {
     }
 }
 
-static bool os_icmp_probe(App* app, uint8_t* target_ip, uint8_t* out_ttl, uint32_t* out_rtt) {
+// Predicate context for os_icmp_probe.
+typedef struct {
+    uint8_t* out_ttl;
+    uint32_t* out_rtt;
+    uint32_t start_time;
+} os_icmp_probe_ctx_t;
+
+static bool os_icmp_probe_match(const uint8_t* frame, uint16_t len, void* ctx) {
+    UNUSED(len);
+    os_icmp_probe_ctx_t* c = (os_icmp_probe_ctx_t*)ctx;
+
+    if(!is_icmp((uint8_t*)frame)) return false;
+    icmp_header_t icmp = icmp_get_header((uint8_t*)frame);
+    if(icmp.type != ICMP_TYPE_ECHO_REPLY) return false;
+
+    ipv4_header_t ip = ipv4_get_header((uint8_t*)frame);
+    *c->out_ttl = ip.ttl;
+    *c->out_rtt = furi_get_tick() - c->start_time;
+    return true;
+}
+
+// F0.3f — takes scanner_session_t* instead of App* so it can reuse the
+// MAC cache and the wait_for_packet primitive. Single caller (os_scan)
+// updated below.
+static bool os_icmp_probe(
+    scanner_session_t* scanner,
+    uint8_t* target_ip,
+    uint8_t* out_ttl,
+    uint32_t* out_rtt) {
     uint32_t start_time = furi_get_tick();
 
     uint8_t packet[MAX_FRAMELEN] = {0};
     uint8_t target_mac[6] = {0};
+    enc28j60_t* ethernet = scanner->ethernet;
 
-    arp_get_specific_mac(
-        app->ethernet,
-        app->ethernet->ip_address,
-        target_ip,
-        app->ethernet->mac_address,
-        target_mac);
+    if(!scanner_resolve_next_hop(scanner, target_ip, target_mac)) return false;
 
     uint16_t packet_len = create_flipper_ping_packet(
         packet,
-        app->ethernet->mac_address,
+        ethernet->mac_address,
         target_mac,
-        app->ethernet->ip_address,
+        ethernet->ip_address,
         target_ip,
         0xBEEF,
         1,
@@ -295,26 +318,27 @@ static bool os_icmp_probe(App* app, uint8_t* target_ip, uint8_t* out_ttl, uint32
 
     if(packet_len == 0) return false;
 
-    send_packet(app->ethernet, packet, packet_len);
-
-    while((furi_get_tick() - start_time) < 1000) {
-        uint16_t len = receive_packet(app->ethernet, app->ethernet->rx_buffer, MAX_FRAMELEN);
-        if(len == 0) continue;
-
-        if(!is_icmp(app->ethernet->rx_buffer)) continue;
-
-        icmp_header_t icmp = icmp_get_header(app->ethernet->rx_buffer);
-        if(icmp.type != ICMP_TYPE_ECHO_REPLY) continue;
-
-        ipv4_header_t ip = ipv4_get_header(app->ethernet->rx_buffer);
-
-        *out_ttl = ip.ttl;
-        *out_rtt = furi_get_tick() - start_time;
-
-        return true;
-    }
-
-    return false;
+    // F0.5d — register predicate before sending so a fast echo-reply
+    // (LAN <1ms) doesn't get drained by rx_dispatch ahead of us.
+    os_icmp_probe_ctx_t pred_ctx = {
+        .out_ttl = out_ttl,
+        .out_rtt = out_rtt,
+        .start_time = start_time,
+    };
+    scanner_send_trigger_ctx_t trigger_ctx = {
+        .eth = ethernet,
+        .buf = packet,
+        .len = packet_len,
+    };
+    uint16_t got = 0;
+    return scanner_wait_for_packet(
+        scanner,
+        os_icmp_probe_match,
+        &pred_ctx,
+        scanner_send_packet_trigger,
+        &trigger_ctx,
+        &got,
+        1000);
 }
 
 /* 8 options:
@@ -354,7 +378,11 @@ static void parse_tcp_options(const uint8_t* tcp_start, uint8_t tcp_header_len, 
 
         if(kind == 1) { // NOP
             opts->has_nop = true;
-            opts->order[opts->count++] = 1;
+            // F0.5h — was unbounded; a packet with > TCP_OPTS_MAX
+            // consecutive NOPs would write past order[16]. Now clamp
+            // the order-write but keep walking so we still skip the
+            // NOPs and reach trailing options like MSS/TS.
+            if(opts->count < TCP_OPTS_MAX) opts->order[opts->count++] = 1;
             i++;
             continue;
         }
@@ -365,40 +393,43 @@ static void parse_tcp_options(const uint8_t* tcp_start, uint8_t tcp_header_len, 
 
         if(len < 2 || (i + len) > opts_len) break;
 
+        // F0.5h — len is attacker-controlled. Pre-fix only checked it
+        // against opts_len; switch arms then read fixed payload sizes
+        // (MSS=4, WS=3, TS=10) without verifying the option actually
+        // declared that length. A malformed packet with kind=8 len=2
+        // would pass the outer guard then read ptr[i+2..i+9] off the
+        // end of the option (and possibly off the end of the frame).
         switch(kind) {
-        case 2: // MSS
+        case 2: // MSS — fixed length 4
+            if(len < 4) break;
             opts->has_mss = true;
             opts->mss_value = (ptr[i + 2] << 8) | ptr[i + 3];
             if(opts->count < TCP_OPTS_MAX) opts->order[opts->count++] = 2;
             break;
 
-        case 3: // Window Scale
+        case 3: // Window Scale — fixed length 3
+            if(len < 3) break;
             opts->has_ws = true;
             opts->ws_value = ptr[i + 2];
             if(opts->count < TCP_OPTS_MAX) opts->order[opts->count++] = 3;
             break;
 
-        case 4: // SACK Permitted
+        case 4: // SACK Permitted — fixed length 2
             opts->has_sack = true;
             if(opts->count < TCP_OPTS_MAX) opts->order[opts->count++] = 4;
             break;
 
-        case 5: // SACK blocks
+        case 5: // SACK blocks — variable length, just record presence
             opts->has_sack = true;
-
             if(opts->count < TCP_OPTS_MAX) opts->order[opts->count++] = 5;
-
             break;
 
-        case 8: // Timestamp
+        case 8: // Timestamp — fixed length 10
+            if(len < 10) break;
             opts->has_ts = true;
-
             opts->tsval = (ptr[i + 2] << 24) | (ptr[i + 3] << 16) | (ptr[i + 4] << 8) | ptr[i + 5];
-
             opts->tsecr = (ptr[i + 6] << 24) | (ptr[i + 7] << 16) | (ptr[i + 8] << 8) | ptr[i + 9];
-
             if(opts->count < TCP_OPTS_MAX) opts->order[opts->count++] = 8;
-
             break;
         }
 
@@ -467,123 +498,14 @@ static uint8_t clasificar_tcp_options(const tcp_opts_t* opts) {
     return NO_DETECTED;
 }
 
-static struct {
-    uint8_t* val;
-    uint16_t len;
-} prbOpts[OPTS_LEN] = {
-    {(uint8_t*)"\x03\x03\x0A\x01\x02\x04\x05\xb4\x08\x0A\xff\xff\xff\xff\x00\x00\x00\x00\x04\x02",
-     20},
-    {(uint8_t*)"\x02\x04\x05\x78\x03\x03\x00\x04\x02\x08\x0A\xff\xff\xff\xff\x00\x00\x00\x00\x00",
-     20},
-    {(uint8_t*)"\x08\x0A\xff\xff\xff\xff\x00\x00\x00\x00\x01\x01\x03\x03\x05\x01\x02\x04\x02\x80",
-     20},
-    {(uint8_t*)"\x04\x02\x08\x0A\xff\xff\xff\xff\x00\x00\x00\x00\x03\x03\x0A\x00", 16},
-    {(uint8_t*)"\x02\x04\x02\x18\x04\x02\x08\x0A\xff\xff\xff\xff\x00\x00\x00\x00\x03\x03\x0A\x00",
-     20},
-    {(uint8_t*)"\x02\x04\x01\x09\x04\x02\x08\x0A\xff\xff\xff\xff\x00\x00\x00\x00", 16},
-    {(uint8_t*)"\x03\x03\x0A\x01\x02\x04\x05\xb4\x04\x02\x01\x01", 12},
-    {(uint8_t*)"\x03\x03\x0A\x01\x02\x04\x01\x09\x08\x0A\xff\xff\xff\xff\x00\x00\x00\x00\x04\x02",
-     20},
-    {(uint8_t*)"\x03\x03\x0A\x01\x02\x04\x01\x09\x08\x0A\xff\xff\xff\xff\x00\x00\x00\x00\x04\x02",
-     20},
-    {(uint8_t*)"\x03\x03\x0A\x01\x02\x04\x01\x09\x08\x0A\xff\xff\xff\xff\x00\x00\x00\x00\x04\x02",
-     20},
-    {(uint8_t*)"\x03\x03\x0A\x01\x02\x04\x01\x09\x08\x0A\xff\xff\xff\xff\x00\x00\x00\x00\x04\x02",
-     20},
-    {(uint8_t*)"\x03\x03\x0A\x01\x02\x04\x01\x09\x08\x0A\xff\xff\xff\xff\x00\x00\x00\x00\x04\x02",
-     20},
-    {(uint8_t*)"\x03\x03\x0f\x01\x02\x04\x01\x09\x08\x0A\xff\xff\xff\xff\x00\x00\x00\x00\x04\x02",
-     20}};
+// F0.6 — prbOpts[] and prbWindowSz[] were the TCP option/window probe
+// tables consumed only by ofp_tseq. Deleted along with their consumer.
 
-/* TCP Window sizes. Numbering is the same as for prbOpts[] */
-uint16_t prbWindowSz[] = {1, 63, 4, 4, 16, 512, 3, 128, 256, 1024, 31337, 32768, 65535};
-
-uint8_t seq_act = OFP_TSEQ;
-
-void ofp_tseq(App* app, uint8_t* target_ip);
-
-void doSeqTests(App* app, uint8_t* target_ip) {
-    if(seq_act == OFP_UNSET) return;
-
-    switch(seq_act) {
-    case OFP_TSEQ:
-        ofp_tseq(app, target_ip);
-        break;
-    default:
-        break;
-    }
-}
-
-void ofp_tseq(App* app, uint8_t* target_ip) {
-    for(uint8_t i = 0; i < OPTS_LEN; i++) {
-        for(uint8_t j = 0; j < prbOpts[i].len; j++)
-            ;
-    }
-
-    UNUSED(target_ip);
-    uint8_t source_mac[6] = {0x00, 0xE0, 0x4C, 0x68, 0x0E, 0xC5};
-    uint8_t target_mac[6] = {0xCC, 0x73, 0x14, 0x17, 0xA3, 0x45};
-    uint8_t source_ip[4] = {192, 168, 0, 105};
-    uint8_t target_ip_debug[4] = {192, 168, 0, 103};
-    uint16_t ip_id[6] = {63073, 63326, 35094, 25039, 36881, 19500};
-    uint16_t ip_flags_offset = 0;
-    uint8_t ttl_vec[6];
-
-    for(uint8_t i = 0; i < 6; i++) {
-        ttl_vec[i] = 64 + (furi_hal_random_get() % 64); // rango 64–127
-    }
-    uint16_t source_port = 63954;
-    uint16_t target_port = 2121;
-    uint32_t sequence = 1354199039;
-    uint32_t ack_number = 64547392;
-
-    uint16_t tcp_len = 0;
-
-    for(uint8_t i = 0; i < OPTS_PROBES; i++) {
-        set_tcp_header_tseq(
-            app->ethernet->tx_buffer + ETHERNET_HEADER_LEN + IP_HEADER_LEN,
-            source_ip,
-            target_ip_debug,
-            source_port + i,
-            target_port,
-            sequence + i,
-            ack_number,
-            prbWindowSz[i],
-            0,
-            &(prbOpts[i].len),
-            prbOpts[i].val,
-            &tcp_len);
-
-        set_ipv4_header(
-            app->ethernet->tx_buffer + ETHERNET_HEADER_LEN,
-            6,
-            tcp_len,
-            source_ip,
-            target_ip_debug,
-            ip_id[i],
-            ip_flags_offset,
-            ttl_vec[i]);
-
-        set_ethernet_header(app->ethernet->tx_buffer, source_mac, target_mac, 0x0800);
-
-        send_packet(
-            app->ethernet,
-            app->ethernet->tx_buffer,
-            ETHERNET_HEADER_LEN + IP_HEADER_LEN + tcp_len);
-
-        for(uint16_t j = 0; j < (ETHERNET_HEADER_LEN + IP_HEADER_LEN + tcp_len); j++)
-            ;
-
-        uint32_t sequences_vector[6] = {0};
-        uint16_t len_receive = receive_packet(app->ethernet, app->ethernet->rx_buffer, 1500);
-        UNUSED(len_receive);
-        if(is_tcp(app->ethernet->rx_buffer)) {
-            tcp_header_t tcp_header = tcp_get_header(app->ethernet->rx_buffer);
-            bytes_to_uint(sequences_vector + i, tcp_header.sequence, sizeof(uint32_t));
-        }
-    }
-}
-
+// F0.6 — ofp_tseq, doSeqTests and the seq_act global were dev scaffolding
+// that ignored their target_ip argument and used hardcoded debug IPs/MACs
+// (192.168.0.103 target, 192.168.0.105 source, 00:E0:4C:68:0E:C5 source MAC,
+// CC:73:14:17:A3:45 target MAC). They sent packets to nowhere on any real
+// network. Deleted.
 static void os_scoreboard_init(os_scoreboard_t* sb) {
     sb->windows_score = 0;
     sb->linux_score = 0;
@@ -650,6 +572,11 @@ int get_port_index(uint16_t port, uint16_t* probe_ports, uint8_t count) {
 
 int32_t os_scan(void* context, uint8_t* target_ip) {
     App* app = context;
+
+    // F0.3f — scanner session for ARP cache + cancel + os_icmp_probe.
+    scanner_session_t scanner;
+    scanner_session_init(&scanner, app);
+
     os_scoreboard_t sb = {0};
     os_scoreboard_init(&sb);
 
@@ -687,18 +614,18 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
 
     uint32_t ack_number = 0;
 
-    arp_get_specific_mac(
-        app->ethernet,
-        app->ethernet->ip_address,
-        (*(uint32_t*)app->ip_gateway & *(uint32_t*)app->ethernet->subnet_mask) ==
-                (*(uint32_t*)target_ip & *(uint32_t*)app->ethernet->subnet_mask) ?
-            target_ip :
-            app->ip_gateway,
-        app->ethernet->mac_address,
-        target_mac);
-
-    seq_act = OFP_TSEQ;
-    doSeqTests(app, target_ip);
+    // F0.5h — bail out cleanly when the next-hop MAC can't be resolved.
+    // Pre-fix the return was discarded and the scan ran with
+    // target_mac=00:00:00:00:00:00, putting frames on the wire that
+    // never reached the target — and showing NO_DETECTED that looked
+    // like a real fingerprint failure. Now app->os_guess stays NO_DETECTED
+    // and the scene reports UNKNOWN with a clear root cause: ARP failed.
+    if(!scanner_resolve_next_hop(&scanner, target_ip, target_mac)) {
+        app->os_guess = NO_DETECTED;
+        app->ports_count = 0;
+        scanner_session_deinit(&scanner);
+        return -1;
+    }
 
     uint8_t attemp = 0;
     ipv4_header_t ipv4_header;
@@ -723,6 +650,9 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
     }
 
     while(attemp != packet_count) {
+        // F0.3f — honor cancel between attempt rounds.
+        if(scanner_cancel_requested(&scanner)) break;
+
         memset(app->ethernet->rx_buffer, 0, 1500);
 
         for(uint8_t p = 0; p < probe_port_count; p++) {
@@ -796,6 +726,12 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
                                 if(probe_ports[k] == resp_port) {
                                     port_closed[k] = true;
                                     port_retries[k] = 0;
+                                    // F0.5h — also mirror into port_results so the
+                                    // UI prints CLOSED instead of UNKNOWN. Pre-fix
+                                    // only the local port_closed[] array was set;
+                                    // OsDetector.c rendered from port_results[].state
+                                    // and showed every RST'd port as UNKNOWN.
+                                    port_results[k].state = PORT_CLOSED;
                                     break;
                                 }
                             }
@@ -887,9 +823,6 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
                             if(tcp_opts_vec[attemp].has_ts) {
                                 ts_vals[attemp] = tcp_opts_vec[attemp].tsval;
                             }
-
-                            for(uint8_t k = 0; k < tcp_opts_vec[attemp].count; k++)
-                                ;
                         }
 
                         uint16_t windows_size;
@@ -944,9 +877,6 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
                         if(count_valid >= 6) {
                             port_responded[port_idx] = true;
                         }
-
-                        for(uint16_t i = 0; i < packen_len; i++)
-                            ;
 
                         continue; // salir del while de espera para enviar nuevos SYN a puertos restantes
                     }
@@ -1071,7 +1001,7 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
             port_results[i].last_sequence);
     }
 
-    if(os_icmp_probe(app, target_ip, &ttl, &rtt)) {
+    if(os_icmp_probe(&scanner, target_ip, &ttl, &rtt)) {
         ttl_icmp = ttl;
         icmp_valid = true;
     }
@@ -1482,19 +1412,23 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
 
     if(best >= STRONG_OS_THRESHOLD) {
         app->os_guess = false;
+        scanner_session_deinit(&scanner);
         return result;
 
     }
 
     else if(best >= GUESS_OS_THRESHOLD) {
         app->os_guess = true;
+        scanner_session_deinit(&scanner);
         return result;
 
     }
 
     else {
         app->os_guess = false;
+        scanner_session_deinit(&scanner);
         return NO_DETECTED;
     }
+    scanner_session_deinit(&scanner);
     return os_score_resolve(&sb);
 }

@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Discussion / question / show & tell
+    url: https://github.com/ElectronicCats/flipper-ENC28J60-ethernet/discussions
+    about: For questions, ideas, and "show & tell" — use Discussions, not issues.

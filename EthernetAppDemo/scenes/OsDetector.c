@@ -1,7 +1,7 @@
 #include "app_user.h"
 #include "../modules/os_detector_module.h"
 
-static uint8_t target_ip[4] = {0};
+// target_ip now lives in app->scan_params (F0.1)
 const char* os_texts[] = {"WINDOWS", "LINUX", "IOS/MAC OS", "NO DETECTED"};
 
 typedef enum {
@@ -33,7 +33,7 @@ void set_ip_address_os_detector(App* app) {
     ip_assigner_reset(app->ip_assigner);
     ip_assigner_set_header(app->ip_assigner, "Set Ip Address");
     ip_assigner_callback(app->ip_assigner, settings_start_ip_address_os_detector, app);
-    ip_assigner_set_ip_array(app->ip_assigner, target_ip);
+    ip_assigner_set_ip_array(app->ip_assigner, app->scan_params.target_ip);
 
     view_dispatcher_switch_to_view(
         app->view_dispatcher, IpAssignerView); // Switch to the input byte view
@@ -42,7 +42,7 @@ void set_ip_address_os_detector(App* app) {
 int32_t os_detector_thread(void* context) {
     App* app = context;
 
-    return os_scan(app, target_ip);
+    return os_scan(app, app->scan_params.target_ip);
 }
 
 void variable_list_os_detector_callback(void* context, uint32_t index) {
@@ -61,8 +61,7 @@ void variable_list_os_detector_callback(void* context, uint32_t index) {
 
     case START:
         if(app->is_dora) {
-            furi_thread_suspend(app->thread);
-
+            // F0.4c — no thread_suspend; os_scan uses scanner_session.
             app->thread_alternative =
                 furi_thread_alloc_ex("OS Detector", 5 * 1024, os_detector_thread, app);
 
@@ -75,15 +74,21 @@ void variable_list_os_detector_callback(void* context, uint32_t index) {
 
             furi_string_reset(app->text);
 
+            // F0.5h — disclosure header. The detector is heuristic-only,
+            // shares the chip RX FIFO with rx_dispatch, and has known
+            // sample-collision and ACK-validation issues. Results are
+            // best-effort. Hardening lives in F1.
+            furi_string_cat_printf(app->text, "[EXPERIMENTAL]\n");
+            furi_string_cat_printf(app->text, "Heuristic, may be wrong.\n\n");
             furi_string_cat_printf(app->text, "OS DETECTOR RESULT:\n\n");
 
             furi_string_cat_printf(
                 app->text,
                 "Target: %u.%u.%u.%u\n\n",
-                target_ip[0],
-                target_ip[1],
-                target_ip[2],
-                target_ip[3]);
+                app->scan_params.target_ip[0],
+                app->scan_params.target_ip[1],
+                app->scan_params.target_ip[2],
+                app->scan_params.target_ip[3]);
 
             if(value == NO_DETECTED) {
                 furi_string_cat_printf(app->text, "*OS NOT DETECTED*\n");
@@ -132,8 +137,7 @@ void variable_list_os_detector_callback(void* context, uint32_t index) {
             view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
 
             furi_thread_free(app->thread_alternative);
-
-            furi_thread_resume(app->thread);
+            // F0.4c — no thread_resume.
         } else {
             draw_dora_needed(app);
         }
@@ -156,20 +160,26 @@ void app_scene_os_detector_on_enter(void* context) {
     App* app = context;
 
     submenu_reset(app->submenu);
-    submenu_set_header(app->submenu, "OS DETECTOR");
+    submenu_set_header(app->submenu, "OS DETECTOR (EXPERIMENTAL)");
 
     // VIEW IP LIST
     submenu_add_item(
         app->submenu, "View scanned IPs", VIEW_RESULTS, variable_list_os_detector_callback, app);
 
     // TARGET IP
-    if(*(uint32_t*)target_ip == 0) memcpy(target_ip, app->ip_gateway, 4);
+    if(*(uint32_t*)app->scan_params.target_ip == 0)
+        memcpy(app->scan_params.target_ip, app->ip_gateway, 4);
 
     // TARGET IP
     furi_string_reset(app->text);
 
     furi_string_cat_printf(
-        app->text, "Target [%u.%u.%u.%u]", target_ip[0], target_ip[1], target_ip[2], target_ip[3]);
+        app->text,
+        "Target [%u.%u.%u.%u]",
+        app->scan_params.target_ip[0],
+        app->scan_params.target_ip[1],
+        app->scan_params.target_ip[2],
+        app->scan_params.target_ip[3]);
 
     submenu_add_item(
         app->submenu,

@@ -30,9 +30,6 @@ ADD_SCENE(app, arp_ip_show_details, arp_ip_show_details_option)
 // About US scene
 ADD_SCENE(app, about_us, about_us_option)
 
-// Testing scene
-ADD_SCENE(app, testing_scene, testing_scene_option)
-
 // Get IP scene
 ADD_SCENE(app, get_ip_scene, get_ip_option)
 

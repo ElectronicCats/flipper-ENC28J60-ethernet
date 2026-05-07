@@ -2,6 +2,25 @@
 #include "../modules/ping_module.h"
 #include "../modules/arp_module.h"
 
+// F0.4g — predicate context for the ping reply match. Lives only on
+// the ping_thread stack; predicate runs in rx_dispatch and writes
+// `received=true` as a side effect when it sees an echo reply for our
+// ping target.
+typedef struct {
+    uint8_t* target_ip;
+    bool received;
+} ping_reply_match_ctx_t;
+
+static bool ping_reply_match(const uint8_t* frame, uint16_t len, void* ctx) {
+    UNUSED(len);
+    ping_reply_match_ctx_t* c = (ping_reply_match_ctx_t*)ctx;
+    if(ping_packet_replied((uint8_t*)frame, c->target_ip)) {
+        c->received = true;
+        return true;
+    }
+    return false;
+}
+
 /**
  * Still on development, at this moment this file it can't be seen by the user
  * but if you want to see it you only need to add an option in Main menu to switch at any of these scenes
@@ -10,8 +29,7 @@
  * This problem will be solved but at the moment will be in development
  */
 
-// Ping to by default, it does ping to google
-uint8_t ip_ping[4] = {0, 0, 0, 0};
+// ip_ping now lives in app->scan_params (F0.1)
 
 // counter for messages sent
 uint16_t messages_sent = 0;
@@ -59,10 +77,16 @@ void app_scene_ping_menu_scene_on_enter(void* context) {
 
     furi_string_reset(app->text);
 
-    if(*(uint32_t*)ip_ping == 0) memcpy(ip_ping, app->ip_gateway, 4);
+    if(*(uint32_t*)app->scan_params.ip_ping == 0)
+        memcpy(app->scan_params.ip_ping, app->ip_gateway, 4);
 
     furi_string_cat_printf(
-        app->text, "PING TO %u:%u:%u:%u", ip_ping[0], ip_ping[1], ip_ping[2], ip_ping[3]);
+        app->text,
+        "PING TO %u:%u:%u:%u",
+        app->scan_params.ip_ping[0],
+        app->scan_params.ip_ping[1],
+        app->scan_params.ip_ping[2],
+        app->scan_params.ip_ping[3]);
 
     submenu_set_header(app->submenu, furi_string_get_cstr(app->text));
 
@@ -71,7 +95,12 @@ void app_scene_ping_menu_scene_on_enter(void* context) {
     submenu_add_item(app->submenu, "View scanned IPs", 2, menu_ping_options_callback, app);
 
     furi_string_cat_printf(
-        app->text, "IP to do ping %u:%u:%u:%u", ip_ping[0], ip_ping[1], ip_ping[2], ip_ping[3]);
+        app->text,
+        "IP to do ping %u:%u:%u:%u",
+        app->scan_params.ip_ping[0],
+        app->scan_params.ip_ping[1],
+        app->scan_params.ip_ping[2],
+        app->scan_params.ip_ping[3]);
 
     submenu_add_item(
         app->submenu, furi_string_get_cstr(app->text), 1, menu_ping_options_callback, app);
@@ -111,7 +140,12 @@ void draw_ping_packet_count(App* app) {
 
     furi_string_reset(app->text);
     furi_string_cat_printf(
-        app->text, "%u:%u:%u:%u", ip_ping[0], ip_ping[1], ip_ping[2], ip_ping[3]);
+        app->text,
+        "%u:%u:%u:%u",
+        app->scan_params.ip_ping[0],
+        app->scan_params.ip_ping[1],
+        app->scan_params.ip_ping[2],
+        app->scan_params.ip_ping[3]);
 
     widget_add_string_element(
         app->widget,
@@ -149,7 +183,7 @@ void app_scene_ping_set_ip_scene_on_enter(void* context) {
 
     ip_assigner_set_header(app->ip_assigner, "IP TO PING");
 
-    ip_assigner_set_ip_array(app->ip_assigner, ip_ping);
+    ip_assigner_set_ip_array(app->ip_assigner, app->scan_params.ip_ping);
 
     ip_assigner_callback(app->ip_assigner, input_bytes_for_ip_to_ping_callback, app);
 
@@ -185,8 +219,7 @@ void app_scene_ping_scene_on_enter(void* context) {
 
     view_dispatcher_switch_to_view(app->view_dispatcher, LoadingView);
 
-    furi_thread_suspend(app->thread);
-
+    // F0.4c — no thread_suspend; ping_thread uses scanner_session.
     // Allocate and start the thread
     app->thread_alternative = furi_thread_alloc_ex("PING", 10 * 1024, ping_thread, app);
     furi_thread_start(app->thread_alternative);
@@ -241,8 +274,7 @@ void app_scene_ping_scene_on_exit(void* context) {
     // Join and free the thread
     furi_thread_join(app->thread_alternative);
     furi_thread_free(app->thread_alternative);
-
-    furi_thread_resume(app->thread);
+    // F0.4c — no thread_resume.
 }
 
 /**
@@ -270,8 +302,12 @@ int32_t ping_thread(void* context) {
     // Variable to start the process
     bool start_ping = false;
 
-    // Array to get the MAC for the GATEWAY
+    // Array to get the MAC for the next hop (target if on-subnet, else gateway).
     uint8_t mac_to_send[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+
+    // F0.3a — scanner session (subnet-aware MAC resolve + cache).
+    scanner_session_t scanner;
+    scanner_session_init(&scanner, app);
 
     // reset the counters
     messages_sent = 0;
@@ -317,59 +353,75 @@ int32_t ping_thread(void* context) {
         goto finalize;
     }
 
-    // Get the MAC gateway
-    if(!arp_get_specific_mac(
-           ethernet,
-           app->ethernet->ip_address,
-           (*(uint32_t*)ethernet->ip_address & *(uint32_t*)ethernet->subnet_mask) ==
-                   (*(uint32_t*)ip_ping & *(uint32_t*)ethernet->subnet_mask) ?
-               ip_ping :
-               app->ip_gateway,
-           app->ethernet->mac_address,
-           app->mac_gateway) &&
-       start_ping && is_connected) {
+    // F0.3a — resolve next-hop MAC for the ping target.
+    // scanner_resolve_next_hop handles subnet check + ARP + cache, and
+    // updates app->mac_gateway when the resolved hop IS the gateway.
+    if(start_ping && is_connected &&
+       !scanner_resolve_next_hop(&scanner, app->scan_params.ip_ping, mac_to_send)) {
         start_ping = false;
-    } else {
-        memcpy(mac_to_send, app->mac_gateway, 6);
     }
 
-    // Here is where gonna make the ping
-    while(start_ping && is_connected && furi_hal_gpio_read(&gpio_button_back)) {
-        if((furi_get_tick() - last_time_ping > 1000)) {
-            packet_size = create_flipper_ping_packet(
-                packet_to_send,
-                ethernet->mac_address,
-                mac_to_send,
-                app->ethernet->ip_address,
-                ip_ping,
-                1,
-                sequence,
-                (uint8_t*)ping_data,
-                data_len);
+    // F0.4g — replaces the inline send + receive_packet poll. The poll
+    // raced rx_dispatch (which always wins on INT) and lost echo
+    // replies. ARP requests during the wait are handled by the
+    // already-registered auto_arp handler (app_user.c), so we no
+    // longer call arp_reply_requested here.
+    UNUSED(packet_to_receive);
+    UNUSED(packet_receive_len);
+    UNUSED(last_time_ping);
 
-            send_packet(ethernet, packet_to_send, packet_size);
+    while(start_ping && is_connected && !scanner_cancel_requested(&scanner)) {
+        uint32_t loop_start = furi_get_tick();
 
-            if(sequence == 0xffff) sequence = 0;
-            sequence++;
-            messages_sent++;
-            view_dispatcher_send_custom_event(app->view_dispatcher, 5); // Update the ping count
-            last_time_ping = furi_get_tick();
+        packet_size = create_flipper_ping_packet(
+            packet_to_send,
+            ethernet->mac_address,
+            mac_to_send,
+            app->ethernet->ip_address,
+            app->scan_params.ip_ping,
+            1,
+            sequence,
+            (uint8_t*)ping_data,
+            data_len);
+
+        if(sequence == 0xffff) sequence = 0;
+        sequence++;
+        messages_sent++;
+        view_dispatcher_send_custom_event(app->view_dispatcher, 5);
+
+        ping_reply_match_ctx_t pred_ctx = {
+            .target_ip = app->scan_params.ip_ping,
+            .received = false,
+        };
+        scanner_send_trigger_ctx_t trigger_ctx = {
+            .eth = ethernet,
+            .buf = packet_to_send,
+            .len = packet_size,
+        };
+        uint16_t got = 0;
+        if(scanner_wait_for_packet(
+               &scanner,
+               ping_reply_match,
+               &pred_ctx,
+               scanner_send_packet_trigger,
+               &trigger_ctx,
+               &got,
+               1000) &&
+           pred_ctx.received) {
+            ping_responses++;
+            view_dispatcher_send_custom_event(app->view_dispatcher, 5);
         }
-        packet_receive_len = receive_packet(ethernet, packet_to_receive, MAX_FRAMELEN);
 
-        if(packet_receive_len) {
-            if(ping_packet_replied(packet_to_receive, ip_ping)) {
-                ping_responses++;
-                view_dispatcher_send_custom_event(
-                    app->view_dispatcher, 5); // Update the ping count
-            } else {
-                arp_reply_requested(ethernet, packet_to_receive, ethernet->ip_address);
-            }
+        // Pace at ~1 pps. If a reply came in early, sleep the remaining
+        // window so the user sees the same cadence as a stock ping.
+        uint32_t elapsed = furi_get_tick() - loop_start;
+        if(elapsed < 1000 && furi_hal_gpio_read(&gpio_button_back)) {
+            furi_delay_ms(1000 - elapsed);
         }
     }
-    furi_delay_ms(1);
 
 finalize:
+    scanner_session_deinit(&scanner);
 
     return 0;
 }

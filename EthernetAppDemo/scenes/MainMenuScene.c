@@ -6,22 +6,27 @@
  * here the user selects an option that wants to do.
  */
 
-// Time to show the LOGO
-const uint32_t time_showing = 1000;
+// Time to show the LOGO. F0.7 — was 1000 ms. The splash blocks the GUI
+// thread for the entire delay and runs once on first entry to the
+// main menu. 250 ms is still legible as a splash but feels responsive.
+const uint32_t time_showing = 250;
 
 // List for the menu options
+// Order follows the natural network-audit flow:
+//   setup (Get IP) → discovery (Scan Hosts) → recon (Ping/Ports/OS)
+//   → attack (ARP Actions) → capture/analyze (Sniffer/Read Pcaps)
+//   → admin (Settings/About).
 enum {
-    SNIFFING_OPTION,
-    IP_SCANNER_OPTION,
-    DORA_PROCESS_OPTION,
+    GET_IP_OPTION,
+    SCAN_HOSTS_OPTION,
     PING_OPTION,
     PORTS_SCANNER_OPTION,
     OS_DETECTOR_OPTION,
     ARP_ACTIONS_OPTION,
+    SNIFFER_OPTION,
     READ_PCAPS_OPTION,
     SETTINGS_OPTION,
     ABOUT_US,
-    TESTING_OPTION
 } main_menu_options;
 
 // Function to display init at the start of the app
@@ -46,23 +51,16 @@ void main_menu_options_callback(void* context, uint32_t index) {
     scene_manager_set_scene_state(app->scene_manager, app_scene_main_menu_option, index);
 
     switch(index) {
-#if DEV_MODE
-    case TESTING_OPTION:
-
-        //printf("TEST OPTION\n");
-
-        break;
-#endif
-    case SNIFFING_OPTION:
-        scene_manager_next_scene(app->scene_manager, app_scene_sniffer_option);
+    case GET_IP_OPTION:
+        scene_manager_next_scene(app->scene_manager, app_scene_get_ip_option);
         break;
 
-    case IP_SCANNER_OPTION:
+    case SCAN_HOSTS_OPTION:
         scene_manager_next_scene(app->scene_manager, app_scene_arp_scanner_menu_option);
         break;
 
-    case DORA_PROCESS_OPTION:
-        scene_manager_next_scene(app->scene_manager, app_scene_get_ip_option);
+    case SNIFFER_OPTION:
+        scene_manager_next_scene(app->scene_manager, app_scene_sniffer_option);
         break;
 
     case PING_OPTION:
@@ -106,9 +104,8 @@ void app_scene_main_menu_on_enter(void* context) {
     static bool is_logo_shown = false;
     if(!is_logo_shown) draw_start(app);
 
-    if(furi_thread_is_suspended(furi_thread_get_id(app->thread))) {
-        furi_thread_resume(furi_thread_get_id(app->thread));
-    }
+    // F0.4c — the resume-on-entry guard is obsolete: scenes no longer
+    // suspend app->thread (rx_dispatch + scanner_session own the chip).
 
     is_logo_shown = true;
 
@@ -118,13 +115,10 @@ void app_scene_main_menu_on_enter(void* context) {
     // header for the  submenu
     submenu_set_header(app->submenu, "ETHERNET FUNCTIONS");
 
-    submenu_add_item(app->submenu, "Sniffer", SNIFFING_OPTION, main_menu_options_callback, app);
+    submenu_add_item(app->submenu, "Get IP", GET_IP_OPTION, main_menu_options_callback, app);
 
     submenu_add_item(
-        app->submenu, "IP Scanner", IP_SCANNER_OPTION, main_menu_options_callback, app);
-
-    submenu_add_item(
-        app->submenu, "DORA Process", DORA_PROCESS_OPTION, main_menu_options_callback, app);
+        app->submenu, "Scan Hosts", SCAN_HOSTS_OPTION, main_menu_options_callback, app);
 
     submenu_add_item(app->submenu, "Ping", PING_OPTION, main_menu_options_callback, app);
 
@@ -137,16 +131,14 @@ void app_scene_main_menu_on_enter(void* context) {
     submenu_add_item(
         app->submenu, "ARP Actions", ARP_ACTIONS_OPTION, main_menu_options_callback, app);
 
+    submenu_add_item(app->submenu, "Sniffer", SNIFFER_OPTION, main_menu_options_callback, app);
+
     submenu_add_item(
         app->submenu, "Read Pcaps", READ_PCAPS_OPTION, main_menu_options_callback, app);
 
     submenu_add_item(app->submenu, "Settings", SETTINGS_OPTION, main_menu_options_callback, app);
 
     submenu_add_item(app->submenu, "About Us", ABOUT_US, main_menu_options_callback, app);
-
-#if DEV_MODE
-    submenu_add_item(app->submenu, "...", TESTING_OPTION, main_menu_options_callback, app);
-#endif
 
     view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);
 
