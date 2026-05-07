@@ -2,6 +2,25 @@
 #include "../modules/ping_module.h"
 #include "../modules/arp_module.h"
 
+// F0.4g — predicate context for the ping reply match. Lives only on
+// the ping_thread stack; predicate runs in rx_dispatch and writes
+// `received=true` as a side effect when it sees an echo reply for our
+// ping target.
+typedef struct {
+    uint8_t* target_ip;
+    bool received;
+} ping_reply_match_ctx_t;
+
+static bool ping_reply_match(const uint8_t* frame, uint16_t len, void* ctx) {
+    UNUSED(len);
+    ping_reply_match_ctx_t* c = (ping_reply_match_ctx_t*)ctx;
+    if(ping_packet_replied((uint8_t*)frame, c->target_ip)) {
+        c->received = true;
+        return true;
+    }
+    return false;
+}
+
 /**
  * Still on development, at this moment this file it can't be seen by the user
  * but if you want to see it you only need to add an option in Main menu to switch at any of these scenes
@@ -342,41 +361,64 @@ int32_t ping_thread(void* context) {
         start_ping = false;
     }
 
-    // Here is where gonna make the ping
-    while(start_ping && is_connected && furi_hal_gpio_read(&gpio_button_back)) {
-        if((furi_get_tick() - last_time_ping > 1000)) {
-            packet_size = create_flipper_ping_packet(
-                packet_to_send,
-                ethernet->mac_address,
-                mac_to_send,
-                app->ethernet->ip_address,
-                app->scan_params.ip_ping,
-                1,
-                sequence,
-                (uint8_t*)ping_data,
-                data_len);
+    // F0.4g — replaces the inline send + receive_packet poll. The poll
+    // raced rx_dispatch (which always wins on INT) and lost echo
+    // replies. ARP requests during the wait are handled by the
+    // already-registered auto_arp handler (app_user.c), so we no
+    // longer call arp_reply_requested here.
+    UNUSED(packet_to_receive);
+    UNUSED(packet_receive_len);
+    UNUSED(last_time_ping);
 
-            send_packet(ethernet, packet_to_send, packet_size);
+    while(start_ping && is_connected && !scanner_cancel_requested(&scanner)) {
+        uint32_t loop_start = furi_get_tick();
 
-            if(sequence == 0xffff) sequence = 0;
-            sequence++;
-            messages_sent++;
-            view_dispatcher_send_custom_event(app->view_dispatcher, 5); // Update the ping count
-            last_time_ping = furi_get_tick();
+        packet_size = create_flipper_ping_packet(
+            packet_to_send,
+            ethernet->mac_address,
+            mac_to_send,
+            app->ethernet->ip_address,
+            app->scan_params.ip_ping,
+            1,
+            sequence,
+            (uint8_t*)ping_data,
+            data_len);
+
+        if(sequence == 0xffff) sequence = 0;
+        sequence++;
+        messages_sent++;
+        view_dispatcher_send_custom_event(app->view_dispatcher, 5);
+
+        ping_reply_match_ctx_t pred_ctx = {
+            .target_ip = app->scan_params.ip_ping,
+            .received = false,
+        };
+        scanner_send_trigger_ctx_t trigger_ctx = {
+            .eth = ethernet,
+            .buf = packet_to_send,
+            .len = packet_size,
+        };
+        uint16_t got = 0;
+        if(scanner_wait_for_packet(
+               &scanner,
+               ping_reply_match,
+               &pred_ctx,
+               scanner_send_packet_trigger,
+               &trigger_ctx,
+               &got,
+               1000) &&
+           pred_ctx.received) {
+            ping_responses++;
+            view_dispatcher_send_custom_event(app->view_dispatcher, 5);
         }
-        packet_receive_len = receive_packet(ethernet, packet_to_receive, MAX_FRAMELEN);
 
-        if(packet_receive_len) {
-            if(ping_packet_replied(packet_to_receive, app->scan_params.ip_ping)) {
-                ping_responses++;
-                view_dispatcher_send_custom_event(
-                    app->view_dispatcher, 5); // Update the ping count
-            } else {
-                arp_reply_requested(ethernet, packet_to_receive, ethernet->ip_address);
-            }
+        // Pace at ~1 pps. If a reply came in early, sleep the remaining
+        // window so the user sees the same cadence as a stock ping.
+        uint32_t elapsed = furi_get_tick() - loop_start;
+        if(elapsed < 1000 && furi_hal_gpio_read(&gpio_button_back)) {
+            furi_delay_ms(1000 - elapsed);
         }
     }
-    furi_delay_ms(1);
 
 finalize:
     scanner_session_deinit(&scanner);
