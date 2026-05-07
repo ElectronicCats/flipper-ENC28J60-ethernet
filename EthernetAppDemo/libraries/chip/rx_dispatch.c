@@ -80,20 +80,28 @@ static int32_t rx_dispatch_thread_fn(void* context) {
             uint16_t len = receive_packet(eth, rx, MAX_FRAMELEN);
             if(len == 0) break;
 
-            // Snapshot handlers under mutex so a concurrent register/
-            // unregister doesn't tear the iteration. Each call is short;
-            // the mutex isn't held while handlers run.
-            struct rx_handle snapshot[RX_DISPATCH_MAX_HANDLERS];
+            // F0.5d — hold the dispatch mutex through predicate AND
+            // handler invocation. Pre-fix this was a snapshot pattern
+            // (copy slots out, run handlers without the lock). That
+            // protected against torn iteration but NOT against the
+            // handler ctx being freed mid-call: scanner_wait_for_packet
+            // keeps its scanner_wait_state_t (with FuriSemaphore* signal)
+            // on the caller's stack and frees both right after rx_unregister.
+            // If the dispatcher was mid-handler when the caller timed out,
+            // the freed semaphore would be released into a dangling pointer.
+            // Holding the lock here makes rx_unregister wait for any
+            // in-flight invocation to finish before returning, so the
+            // caller's stack stays valid until the handler exits. Lock
+            // order: dispatch mutex (outer) → chip mutex via handler's
+            // send_packet (inner). No reverse path exists.
             furi_mutex_acquire(d->mutex, FuriWaitForever);
-            memcpy(snapshot, d->slots, sizeof(snapshot));
-            furi_mutex_release(d->mutex);
-
             for(uint8_t i = 0; i < RX_DISPATCH_MAX_HANDLERS; i++) {
-                if(!snapshot[i].in_use) continue;
-                if(snapshot[i].predicate(rx, len, snapshot[i].ctx)) {
-                    snapshot[i].handler(rx, len, snapshot[i].ctx);
+                if(!d->slots[i].in_use) continue;
+                if(d->slots[i].predicate(rx, len, d->slots[i].ctx)) {
+                    d->slots[i].handler(rx, len, d->slots[i].ctx);
                 }
             }
+            furi_mutex_release(d->mutex);
         }
     }
     return 0;

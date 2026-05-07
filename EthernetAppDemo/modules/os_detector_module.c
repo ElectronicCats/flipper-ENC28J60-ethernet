@@ -318,15 +318,23 @@ static bool os_icmp_probe(
 
     if(packet_len == 0) return false;
 
-    send_packet(ethernet, packet, packet_len);
-
+    // F0.5d — register predicate before sending so a fast echo-reply
+    // (LAN <1ms) doesn't get drained by rx_dispatch ahead of us.
     os_icmp_probe_ctx_t pred_ctx = {
         .out_ttl = out_ttl,
         .out_rtt = out_rtt,
         .start_time = start_time,
     };
+    scanner_send_trigger_ctx_t trigger_ctx = {
+        .eth = ethernet,
+        .buf = packet,
+        .len = packet_len,
+    };
     uint16_t got = 0;
-    return scanner_wait_for_packet(scanner, os_icmp_probe_match, &pred_ctx, &got, 1000);
+    return scanner_wait_for_packet(
+        scanner, os_icmp_probe_match, &pred_ctx,
+        scanner_send_packet_trigger, &trigger_ctx,
+        &got, 1000);
 }
 
 /* 8 options:

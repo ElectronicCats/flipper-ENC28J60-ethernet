@@ -26,6 +26,11 @@ void scanner_session_deinit(scanner_session_t* s) {
     // No-op for now. F0.4 will add RX handler unsubscription here.
 }
 
+void scanner_send_packet_trigger(void* ctx) {
+    scanner_send_trigger_ctx_t* c = (scanner_send_trigger_ctx_t*)ctx;
+    send_packet(c->eth, c->buf, c->len);
+}
+
 static bool same_subnet(const uint8_t a[4], const uint8_t b[4], const uint8_t mask[4]) {
     return ((*(uint32_t*)a) & (*(uint32_t*)mask)) ==
            ((*(uint32_t*)b) & (*(uint32_t*)mask));
@@ -74,6 +79,9 @@ bool scanner_resolve_next_hop(
     // the ARP request and let the registered handler signal us when a
     // matching reply arrives. No more rx_dispatch_pause/resume needed.
     //
+    // F0.5d — send via the trigger param so the rx handler is registered
+    // before the request goes out (closes the send→register race).
+    //
     // Retry budget mirrors legacy arp_get_specific_mac (10 attempts ×
     // 2 s/wait = up to 20 s worst case) so timing-sensitive callers
     // (e.g., port scan over the gateway) keep the same behavior.
@@ -85,17 +93,21 @@ bool scanner_resolve_next_hop(
         .target_mac = mac_out,
     };
 
+    uint8_t request_buf[ETHERNET_HEADER_LEN + ARP_LEN] = {0};
+    uint16_t request_len = 0;
+    if(!set_arp_request(request_buf, &request_len, (uint8_t*)resolve_ip)) return false;
+
+    scanner_send_trigger_ctx_t trigger_ctx = {s->ethernet, request_buf, request_len};
+
     bool ok = false;
     for(uint8_t attempt = 0; attempt < 10 && !ok; attempt++) {
         if(scanner_cancel_requested(s)) break;
 
-        uint8_t request_buf[ETHERNET_HEADER_LEN + ARP_LEN] = {0};
-        uint16_t request_len = 0;
-        if(!set_arp_request(request_buf, &request_len, (uint8_t*)resolve_ip)) break;
-        send_packet(s->ethernet, request_buf, request_len);
-
         uint16_t got = 0;
-        ok = scanner_wait_for_packet(s, arp_reply_match_predicate, &pred_ctx, &got, 2000);
+        ok = scanner_wait_for_packet(
+            s, arp_reply_match_predicate, &pred_ctx,
+            scanner_send_packet_trigger, &trigger_ctx,
+            &got, 2000);
     }
 
     if(ok) {
@@ -144,6 +156,8 @@ bool scanner_wait_for_packet(
     scanner_session_t* s,
     scanner_packet_predicate_fn pred,
     void* pred_ctx,
+    scanner_trigger_fn trigger_fn,
+    void* trigger_ctx,
     uint16_t* len_out,
     uint32_t timeout_ms) {
     furi_assert(s);
@@ -167,6 +181,11 @@ bool scanner_wait_for_packet(
         furi_semaphore_free(state.signal);
         return false;
     }
+
+    // F0.5d — fire the trigger only after the handler is in the registry,
+    // so a sub-millisecond reply to whatever the trigger sends still hits
+    // an armed predicate.
+    if(trigger_fn) trigger_fn(trigger_ctx);
 
     // Sleep on the semaphore in short slices so we can also poll the back
     // button (cancel). 50 ms per slice keeps cancel latency under 50 ms

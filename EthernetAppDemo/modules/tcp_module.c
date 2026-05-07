@@ -276,6 +276,28 @@ static bool tcp_scan_match(const uint8_t* frame, uint16_t len, void* ctx) {
     return false;
 }
 
+// F0.5d — closure-style trigger for tcp_send_syn. Used by tcp_syn_scan
+// to send the SYN AFTER the rx predicate is registered, closing the
+// race against rx_dispatch draining a fast SYN-ACK.
+typedef struct {
+    enc28j60_t* eth;
+    uint8_t* source_mac;
+    uint8_t* source_ip;
+    uint8_t* target_mac;
+    uint8_t* target_ip;
+    uint16_t source_port;
+    uint16_t dest_port;
+    uint32_t sequence;
+    uint32_t ack_number;
+} tcp_syn_trigger_ctx_t;
+
+static void tcp_syn_trigger(void* ctx) {
+    tcp_syn_trigger_ctx_t* c = (tcp_syn_trigger_ctx_t*)ctx;
+    tcp_send_syn(
+        c->eth, c->source_mac, c->source_ip, c->target_mac, c->target_ip,
+        c->source_port, c->dest_port, c->sequence, c->ack_number);
+}
+
 void tcp_syn_scan(void* context, uint8_t* target_ip, uint16_t init_port, uint16_t range_port) {
     App* app = context;
 
@@ -304,30 +326,30 @@ void tcp_syn_scan(void* context, uint8_t* target_ip, uint16_t init_port, uint16_
 
         uint16_t src_port = 32768 + (rand() % 28232);
 
-        tcp_send_syn(
-            app->ethernet,
-            app->ethernet->mac_address,
-            app->ethernet->ip_address,
-            target_mac,
-            target_ip,
-            src_port,
-            i,
-            sequence,
-            ack_number);
-
-        // F0.3e — scanner_wait_for_packet replaces the inline 100ms poll.
-        // Predicate matches our scan port and reports SYN-ACK (open) vs
-        // RST-ACK (closed) via pred_ctx.port_open. Returns true on either
-        // match so the wait breaks early on RST, preserving pre-F0.3e
-        // throughput on closed ports.
+        // F0.5d — predicate registered before the SYN goes out, via the
+        // trigger param of scanner_wait_for_packet.
         tcp_scan_pred_ctx_t pred_ctx = {
             .ethernet = app->ethernet,
             .my_mac = app->ethernet->mac_address,
             .expected_source_port = (uint16_t)i,
             .port_open = false,
         };
+        tcp_syn_trigger_ctx_t trigger_ctx = {
+            .eth = app->ethernet,
+            .source_mac = app->ethernet->mac_address,
+            .source_ip = app->ethernet->ip_address,
+            .target_mac = target_mac,
+            .target_ip = target_ip,
+            .source_port = src_port,
+            .dest_port = (uint16_t)i,
+            .sequence = sequence,
+            .ack_number = ack_number,
+        };
         uint16_t got = 0;
-        if(scanner_wait_for_packet(&scanner, tcp_scan_match, &pred_ctx, &got, 100) &&
+        if(scanner_wait_for_packet(
+               &scanner, tcp_scan_match, &pred_ctx,
+               tcp_syn_trigger, &trigger_ctx,
+               &got, 100) &&
            pred_ctx.port_open) {
             // SYN-ACK observed — record open port.
             furi_string_reset(app->text);

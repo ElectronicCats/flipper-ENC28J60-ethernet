@@ -115,6 +115,27 @@ static bool udp_scan_match(const uint8_t* frame, uint16_t len, void* ctx) {
     return (src_port == c->expected_source_port && dst_port == c->expected_dest_port);
 }
 
+// F0.5d — closure-style trigger for send_empty_udp_packet, used by
+// udp_port_scan to fire the probe after the rx predicate is registered.
+typedef struct {
+    enc28j60_t* eth;
+    uint8_t* ip_gateway;
+    uint8_t* source_mac;
+    uint8_t* target_mac;
+    uint8_t* source_ip;
+    uint8_t* target_ip;
+    uint16_t source_port;
+    uint16_t target_port;
+} udp_probe_trigger_ctx_t;
+
+static void udp_probe_trigger(void* ctx) {
+    udp_probe_trigger_ctx_t* c = (udp_probe_trigger_ctx_t*)ctx;
+    send_empty_udp_packet(
+        c->eth->tx_buffer, c->eth, c->ip_gateway,
+        c->source_mac, c->target_mac, c->source_ip, c->target_ip,
+        c->source_port, c->target_port);
+}
+
 void udp_port_scan(void* context, uint8_t* target_ip, uint16_t init_port, uint16_t range_port) {
     App* app = context;
 
@@ -138,28 +159,29 @@ void udp_port_scan(void* context, uint8_t* target_ip, uint16_t init_port, uint16
         furi_string_cat_printf(app->text, TEXT_PORT_FORMAT, i, TEXT_POINTS);
         submenu_change_item_label(app->submenu, submenu_index, furi_string_get_cstr(app->text));
 
-        send_empty_udp_packet(
-            app->ethernet->tx_buffer,
-            app->ethernet,
-            app->ip_gateway,
-            app->ethernet->mac_address,
-            target_mac,
-            app->ethernet->ip_address,
-            target_ip,
-            64892,
-            i);
-
-        // F0.3d — scanner_wait_for_packet replaces the inline 100ms poll
-        // loop. Predicate handles ARP auto-reply and matches the expected
-        // UDP source/dest port pair for our scan.
+        // F0.5d — predicate registered before the probe goes out, via the
+        // trigger param of scanner_wait_for_packet.
         udp_scan_pred_ctx_t pred_ctx = {
             .ethernet = app->ethernet,
             .my_mac = app->ethernet->mac_address,
             .expected_source_port = (uint16_t)i,
             .expected_dest_port = 64892,
         };
+        udp_probe_trigger_ctx_t trigger_ctx = {
+            .eth = app->ethernet,
+            .ip_gateway = app->ip_gateway,
+            .source_mac = app->ethernet->mac_address,
+            .target_mac = target_mac,
+            .source_ip = app->ethernet->ip_address,
+            .target_ip = target_ip,
+            .source_port = 64892,
+            .target_port = (uint16_t)i,
+        };
         uint16_t got = 0;
-        if(scanner_wait_for_packet(&scanner, udp_scan_match, &pred_ctx, &got, 100)) {
+        if(scanner_wait_for_packet(
+               &scanner, udp_scan_match, &pred_ctx,
+               udp_probe_trigger, &trigger_ctx,
+               &got, 100)) {
             // Port responded — append result.
             furi_string_reset(app->text);
             furi_string_cat_printf(app->text, TEXT_PORT_FORMAT, (uint32_t)i, "\0");

@@ -209,22 +209,26 @@ void arp_scan_network(
         // F0.3c — honor cancel between IPs.
         if(scanner_cancel_requested(scanner)) break;
 
-        // Set the arp packet request
+        // F0.5d — register first, send second (via trigger). The previous
+        // order (send → register inside scanner_wait_for_packet) had a
+        // sub-millisecond window where a fast reply could be drained by
+        // rx_dispatch before any predicate matched it.
         set_arp_request(tx_buffer, &packet_len, start_list);
 
-        // Send packet to lan
-        send_packet(ethernet, tx_buffer, packet_len);
-
-        // F0.3c — wait for matching ARP reply via scanner_session primitive.
-        // Replaces the inline `while((now - last) < 1000) { receive_packet; ... }`
-        // poll loop. The predicate writes list[counter].mac as a side effect via
-        // get_arp_reply, so on a true return we just record the IP.
+        scanner_send_trigger_ctx_t trigger_ctx = {
+            .eth = ethernet,
+            .buf = tx_buffer,
+            .len = packet_len,
+        };
         arp_reply_match_ctx_t ctx = {
             .target_ip = start_list,
             .target_mac = list[counter].mac,
         };
         uint16_t got = 0;
-        if(scanner_wait_for_packet(scanner, arp_reply_match_predicate, &ctx, &got, 1000)) {
+        if(scanner_wait_for_packet(
+               scanner, arp_reply_match_predicate, &ctx,
+               scanner_send_packet_trigger, &trigger_ctx,
+               &got, 1000)) {
             memcpy(list[counter].ip, start_list, 4);
             counter++;
         }
