@@ -15,6 +15,8 @@ typedef struct {
     FuriThread* thread;
     FuriMutex* mutex;
     volatile bool running;
+    volatile uint8_t pause_count;  // >0 = paused. Counter for nestable pause/resume.
+    volatile bool acked_pause;     // thread sets when it observes pause and idles
     struct rx_handle slots[RX_DISPATCH_MAX_HANDLERS];
 } rx_dispatch_t;
 
@@ -26,6 +28,16 @@ static int32_t rx_dispatch_thread_fn(void* context) {
     uint8_t* rx = eth->rx_buffer;
 
     while(d->running) {
+        // Honor pause requests so the worker thread (during DORA) gets
+        // exclusive chip access. F0.4b will replace this with a DHCP
+        // handler so the worker never reads the chip directly.
+        if(d->pause_count > 0) {
+            d->acked_pause = true;
+            furi_delay_ms(1);
+            continue;
+        }
+        d->acked_pause = false;
+
         uint16_t len = receive_packet(eth, rx, MAX_FRAMELEN);
         if(len == 0) {
             // F0.4a hotfix — initial 100 µs polling froze the device when
@@ -112,5 +124,24 @@ void rx_unregister(rx_handle_t* handle) {
     handle->predicate = NULL;
     handle->handler = NULL;
     handle->ctx = NULL;
+    furi_mutex_release(g_dispatch.mutex);
+}
+
+void rx_dispatch_pause(void) {
+    if(!g_dispatch.mutex) return;
+    furi_mutex_acquire(g_dispatch.mutex, FuriWaitForever);
+    g_dispatch.pause_count++;
+    g_dispatch.acked_pause = false;
+    furi_mutex_release(g_dispatch.mutex);
+    // Wait for the thread to ack — at most a few ms of polling.
+    for(uint8_t i = 0; i < 20 && !g_dispatch.acked_pause; i++) {
+        furi_delay_ms(2);
+    }
+}
+
+void rx_dispatch_resume(void) {
+    if(!g_dispatch.mutex) return;
+    furi_mutex_acquire(g_dispatch.mutex, FuriWaitForever);
+    if(g_dispatch.pause_count > 0) g_dispatch.pause_count--;
     furi_mutex_release(g_dispatch.mutex);
 }
