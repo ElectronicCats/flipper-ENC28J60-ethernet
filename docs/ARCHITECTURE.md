@@ -67,22 +67,28 @@ Scene inventory (15 scenes):
 | `SnifferScene`, `BrowserPcapScene`, `ReadPcapsScene` | sniff + PCAP I/O |
 | `TestingScene` | dev-mode placeholder, scheduled for removal in F0.6 |
 
-## RX flow today
+## RX flow today (post F0.4a / F0.5a / F0.5c)
 
-1. Worker polls `enc28j60_t.EPKTCNT` (`enc28j60.c:547`). No interrupt is
-   used — the chip's `/INT` line is wired to Flipper pin 10 (PA14 / SWCLK)
-   per D2 but is not yet leveraged in software.
-2. Reads next packet into `enc28j60_t.rx_buffer[1518]` (embedded in the
-   chip struct, `enc28j60.h:30-31`).
-3. Parses Ethernet header. If the frame is ARP or ICMP and the local IP
-   matches `ethernet->ip_address`, the worker constructs and sends the
-   reply directly. Otherwise the frame is discarded.
-4. Scenes that need raw frames suspend the worker (`furi_thread_suspend`)
-   and take exclusive ownership of the radio for the duration of the
-   scene. On exit they resume the worker.
-
-This will be replaced in F0.4 by a single `rx_dispatch` thread with a
-list of registrable handlers.
+1. ENC28J60 `/INT` (PA14 / SWCLK / Flipper pin 10) drives a falling-edge
+   GPIO ISR. The ISR sets `RX_FLAG_INT` on the dispatcher thread and
+   returns — no chip I/O, no mutex acquire (F0.5c).
+2. The single `rx_dispatch` thread (`libraries/chip/rx_dispatch.c`)
+   blocks on `furi_thread_flags_wait` with a 100 ms fallback timeout
+   (errata DS80349 safety net). On wakeup it drains all queued packets
+   in one pass via `receive_packet` until that returns 0.
+3. Each public chip function takes the per-instance `enc28j60_t.mutex`
+   so bank state and SPI transactions can't be torn between threads
+   (F0.5a, closes B-6).
+4. For each drained frame the dispatcher walks a registry of
+   `(predicate, handler, ctx)` slots and invokes handlers whose
+   predicate returns true. `app_alloc` registers two static handlers:
+   `auto_arp` and `auto_icmp` (gated on `is_static_ip`).
+5. Scenes that need exclusive chip access for short windows still call
+   `rx_dispatch_pause/_resume` — used by `GetIPScene` (DORA) and
+   `scanner_resolve_next_hop` (ARP-for-MAC). These two paths exist for
+   FIFO ordering, not bank-race protection. Settings/Sniffer no longer
+   need it (mutex is sufficient since F0.5a). Migrating the remaining
+   two onto `rx_dispatch` handlers is the F0.4f task.
 
 ## Driver layer
 
@@ -132,8 +138,11 @@ To be resolved during F0:
   → poll RX with timeout → mutate Submenu from worker thread" boilerplate.
 - F0.4 — "suspend worker, take radio" pattern blocks composition of
   features.
-- F0.5 — SPI per-byte acquire/release bottleneck in
-  `read_buffer`/`write_buffer`; INT pin polled despite being routed.
+- F0.5 — F0.5a closed B-6 (chip-level mutex; per-byte SPI
+  acquire/release pattern is now correctness-safe). F0.5c moved RX off
+  the 1 ms poll onto the PA14 INT line. F0.5b (bulk-SPI rewrite) was
+  skipped — chip protocol requires CS toggle per command, so the
+  practical win didn't justify the refactor.
 - F0.6 — `ofp_tseq` (`os_detector_module.c:517-585`) ignores its
   argument and uses hardcoded debug IPs in production; `TestingScene`
   registered but unreachable; `flipper_process_dora` (no-hostname
