@@ -6,7 +6,7 @@ will be fixed.
 
 ---
 
-## B-1 — DHCP DORA timeout too short (3s)
+## B-1 — DHCP DORA timeout too short (3s) ✅ CLOSED in F0.7
 
 **Found:** F0.3 hardware testing against a `dnsmasq` server doing standard
 ARP/ICMP collision check before sending DHCPOFFER.
