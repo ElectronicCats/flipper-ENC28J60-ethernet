@@ -3,7 +3,7 @@ name: enc28j60-fase-actual
 description: Active context for the ENC28J60 refactor. Consult before any commit, file creation, or direction change. Updated at the start of every sub-phase.
 ---
 
-# Current phase: F0.4 — RX dispatch decoupling (entering)
+# Current phase: F0.4 — closed. Entering F0.5 / F0.6 / F0.7 (TBD)
 
 ## What is done
 
@@ -24,24 +24,26 @@ description: Active context for the ENC28J60 refactor. Consult before any commit
 - ux fix     Main menu reordered to follow audit flow (Get IP first,
              then Scan Hosts, etc.). DORA Process → "Get IP".
              IP Scanner → "Scan Hosts".
+- v2.0-f0.4  RX dispatch decoupling. All chip RX flows go through
+             libraries/chip/rx_dispatch.{c,h}. Auto-ARP/ICMP replies +
+             scanner_wait_for_packet + sniffer all use registered
+             handlers. Sub-phases v2.0-f0.4a..d. Closes B-2, B-3, B-5.
+             Hardware-validated full stack (DORA, scan, ping, OS
+             detector, sniffer, MAC change in Settings).
 
 ## Where we are
 
-Entering F0.4 — RX dispatch decoupling. This is the architectural fix
-that makes most of the deferred bugs in docs/BACKLOG.md disappear at
-once.
-
-Sub-phase plan (proposed, awaiting Sabas confirm):
-  F0.4a — libraries/chip/rx_dispatch.{c,h} (single thread + handler
-          registry). Migrate auto-ARP-reply and auto-ICMP-reply
-          handlers. Delete app_worker.c.
-  F0.4b — Rewrite scanner_session.wait_for_packet on top of
-          rx_dispatch (register/wait_semaphore/unregister).
-  F0.4c — Remove all furi_thread_suspend/resume from scenes/.
-  F0.4d — SnifferScene re-implemented as a capture-everything handler.
-          Bug B-2 (busy-loop block) and B-3 (dead window) close as a
-          byproduct.
-  F0.4 final — verification + tag.
+F0.4 closed and hardware-validated. Choose next:
+  - F0.5 (recommended): bulk SPI rewrite + INT pin + chip-level mutex.
+    Closes B-6, removes the residual rx_dispatch_pause/_resume calls
+    everywhere (B-7 mostly).
+  - F0.6: dev scaffolding cleanup (delete TestingScene, ofp_tseq,
+    debug printfs, the dead `flipper_process_dora` no-hostname twin).
+  - F0.7: 8 bug fixes consolidated (PCAP timestamps, is_duplicated_ip
+    underflow, tcp_send_xmas_probe return, subnet_mask buffer,
+    pcap_scan overflow, MainMenu logo blocking, B-1 DORA timeout).
+  - F0.4e/f deferred: DORA into GetIPScene + delete ethernet_thread;
+    arp_get_specific_mac on rx_dispatch handler.
 
 ## What NOT to touch
 

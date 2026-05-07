@@ -30,7 +30,7 @@ latency.
 
 ---
 
-## B-2 — SnifferScene busy-loop on link-up wait blocks BACK
+## B-2 — SnifferScene busy-loop on link-up wait blocks BACK ✅ CLOSED in F0.4d
 
 **Found:** F0.3 hardware testing — pressed OK to start sniffing,
 ENC28J60 PHY momentarily reported link-down (probably a glitch from a
@@ -55,7 +55,7 @@ arch fix subsumes it.
 
 ---
 
-## B-3 — "Dead window" between sniffer entry and capture start
+## B-3 — "Dead window" between sniffer entry and capture start ✅ CLOSED in F0.4d
 
 **Found:** F0.3 hardware testing — generated traffic from laptop while
 SnifferScene was in its OK-wait + link-up-wait phase. Worker thread
@@ -102,7 +102,7 @@ payloads (DNS, NTP, SNMP, NetBIOS, mDNS, SSDP) that get real replies.
 
 ---
 
-## B-5 — LoadingView clock animation freezes during ARP scan
+## B-5 — LoadingView clock animation freezes during ARP scan ✅ CLOSED in F0.4b
 
 **Found:** F0.3a hardware testing — during a 30-IP ARP scan the
 spinning clock animation in the LoadingView stops updating. Scan still
@@ -116,6 +116,71 @@ just enough for the GUI thread's render timer to lag.
 **Severity:** Cosmetic.
 
 **Fix in:** F0.4 (rx_dispatch eliminates the polling pattern).
+
+---
+
+## B-6 — ENC28J60 driver `bank` is unprotected file-static
+
+**Found:** F0.4a hardware diagnosis. `enc28j60.c` keeps `static uint8_t
+bank` to track the chip's selected bank register. `set_bank_with_mask`
+reads/writes this without a mutex. Multiple threads (rx_dispatch,
+scanner_session callers, settings_load, etc.) racing in this code path
+corrupt the chip's actual register state. The MAADR corruption that
+broke F0.4a's first hardware test was an instance of this; we worked
+around it by reordering `settings_load` before `rx_dispatch_init` and
+by adding `rx_dispatch_pause/_resume` wrappers in `scanner_resolve_next_hop`,
+`SettingsScene`, and `SnifferScene`. The pauses are stop-gaps.
+
+**Location:** `EthernetAppDemo/libraries/chip/enc28j60.c` —
+`set_bank_with_mask` (~ line 296) and the `static uint8_t bank`
+file-scope variable.
+
+**Severity:** Medium. Currently masked by pause/resume discipline; a
+new caller that forgets to pause would re-introduce the race.
+
+**Fix in:** F0.5 (bulk SPI rewrite). Replace per-byte
+`furi_hal_spi_bus_acquire/release` with single-acquire bulk transfers
+AND add a chip-level mutex (FuriMutex held across `set_bank` +
+register-IO sequences). All `rx_dispatch_pause/_resume` stop-gaps
+introduced in F0.4 can be removed afterward.
+
+---
+
+## B-7 — Two scanner_session paths still poll the chip directly
+
+**Found:** F0.4 design review. Two code paths inside scanner_session
+were not migrated onto rx_dispatch:
+  - `scanner_resolve_next_hop` calls `arp_get_specific_mac` (in
+    `arp_module.c`) which still does its own send_packet + inline
+    `while ... receive_packet` poll loop. Wrapped in
+    `rx_dispatch_pause/_resume` as a stop-gap.
+  - `enable_promiscuous`, `pcap_capture_init` in SnifferScene also
+    pause/resume around chip access.
+
+**Location:** `EthernetAppDemo/libraries/scanner/scanner_session.c`
+`scanner_resolve_next_hop`; `EthernetAppDemo/scenes/SnifferScene.c`.
+
+**Severity:** Low. Functionality is correct; the pause/resume is
+ugly but works.
+
+**Fix in:** F0.4f (deferred sub-phase). Migrate `arp_get_specific_mac`
+to use a registered ARP-reply handler so the pause goes away.
+
+---
+
+## B-8 — `ethernet_thread` and `app_worker.c` survive as DORA-only stub
+
+**Found:** F0.4 closure. ethernet_thread no longer polls the chip; it
+just services `flag_dhcp_dora`. The thread is kept alive purely so
+GetIPScene can post the flag and have someone process it.
+
+**Location:** `EthernetAppDemo/app_worker.c`.
+
+**Severity:** Cosmetic / cleanup.
+
+**Fix in:** F0.4e (deferred sub-phase). Move DORA processing into
+GetIPScene's alt thread; delete `ethernet_thread`, `app_worker.c`,
+and the `flag_dhcp_dora` flag entirely.
 
 ---
 
