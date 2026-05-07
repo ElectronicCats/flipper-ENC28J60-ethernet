@@ -2,7 +2,9 @@
 #include <flipper_format/flipper_format.h>
 
 #define SETTINGS_FILETYPE "Flipper ENC28J60 Ethernet App Settings"
-#define SETTINGS_VERSION  1
+// F0.5f — bumped from 1 to 2 to add gateway/mac_gateway/is_dora.
+// load() of older v1 files still works (extra fields are just absent).
+#define SETTINGS_VERSION  2
 #define SETTINGS_PATH     PATHAPPEXT "/settings.cfg"
 
 void settings_load(App* app) {
@@ -21,7 +23,9 @@ void settings_load(App* app) {
     do {
         if(!flipper_format_file_open_existing(ff, SETTINGS_PATH)) break;
         if(!flipper_format_read_header(ff, file_type, &version)) break;
-        if(version != SETTINGS_VERSION) break;
+        // F0.5f — accept v1 (pre-gateway-persist) and v2 to avoid
+        // resetting users' persisted MAC/IP just because the schema grew.
+        if(version != 1 && version != 2) break;
         if(furi_string_cmp_str(file_type, SETTINGS_FILETYPE) != 0) break;
 
         // MAC — also push to chip registers if present. enc28j60_set_mac
@@ -41,6 +45,17 @@ void settings_load(App* app) {
         if(flipper_format_read_bool(ff, "is_static_ip", &flag, 1)) {
             app->is_static_ip = flag;
         }
+
+        // F0.5f — gateway / mac_gateway / is_dora. These were missing in
+        // v1 of the schema. Without them, a user with a static-IP setup
+        // had `is_static_ip=true` (auto-replies on) but `is_dora=false`
+        // (Ping/Ports/OS/ArpSpoof refused to start), an inconsistent
+        // half-restored state.
+        if(flipper_format_read_bool(ff, "is_dora", &flag, 1)) {
+            app->is_dora = flag;
+        }
+        flipper_format_read_hex(ff, "ip_gateway", app->ip_gateway, 4);
+        flipper_format_read_hex(ff, "mac_gateway", app->mac_gateway, 6);
 
         // scan_params block (F0.1).
         flipper_format_read_hex(ff, "scan_target_ip", app->scan_params.target_ip, 4);
@@ -82,6 +97,12 @@ void settings_save(App* app) {
         if(!flipper_format_write_hex(ff, "mac_address", app->ethernet->mac_address, 6)) break;
         if(!flipper_format_write_hex(ff, "ip_address", app->ethernet->ip_address, 4)) break;
         if(!flipper_format_write_bool(ff, "is_static_ip", &app->is_static_ip, 1)) break;
+
+        // F0.5f — paired writes for the new v2 fields (see load() for the
+        // motivation: was producing a half-restored static-IP state).
+        if(!flipper_format_write_bool(ff, "is_dora", &app->is_dora, 1)) break;
+        if(!flipper_format_write_hex(ff, "ip_gateway", app->ip_gateway, 4)) break;
+        if(!flipper_format_write_hex(ff, "mac_gateway", app->mac_gateway, 6)) break;
 
         if(!flipper_format_write_hex(ff, "scan_target_ip", app->scan_params.target_ip, 4)) break;
 

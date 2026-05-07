@@ -16,6 +16,10 @@
  * @param static_ip A pointer to a 4-byte buffer where the assigned IP address will be stored.
  * @param ip_router A pointer to a 4-byte buffer where the router's IP address will be stored.
  * @param host A string containing the host name to be included in the DHCP messages.
+ * @param cancel Optional. Pointer to a flag the caller can flip true to
+ *               abort the DORA loop early. NULL disables cancellation.
+ *               F0.5f — added so GetIPScene's Back can cancel a 10 s
+ *               wait instead of freezing the UI in furi_thread_join.
  * @return `true` if the DORA process was successful, `false` otherwise.
  */
 bool flipper_process_dora_with_host_name(
@@ -23,7 +27,8 @@ bool flipper_process_dora_with_host_name(
     uint8_t* static_ip,
     uint8_t* ip_router,
     uint8_t* mac_router,
-    const char* host);
+    const char* host,
+    volatile const bool* cancel);
 
 /**
  * @brief Retrieves the MAC address of the DHCP server.

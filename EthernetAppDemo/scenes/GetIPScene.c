@@ -15,9 +15,16 @@ static int32_t get_ip_dora_thread(void* context) {
     // flipper_process_dora_with_host_name's own receive_packet calls.
     // Without this, rx_dispatch consumes the OFFER and drops it (no
     // handler matches DHCP). F0.5 chip-mutex will let us drop the pause.
+    // F0.5f — pass app->dora_cancel so on_exit (Back) can interrupt
+    // the 10 s DORA timeout.
     rx_dispatch_pause();
     bool got_ip = flipper_process_dora_with_host_name(
-        ethernet, ethernet->ip_address, app->ip_gateway, ethernet->subnet_mask, "Flippa 0");
+        ethernet,
+        ethernet->ip_address,
+        app->ip_gateway,
+        ethernet->subnet_mask,
+        "Flippa 0",
+        &app->dora_cancel);
     rx_dispatch_resume();
 
     if(got_ip) {
@@ -47,6 +54,9 @@ void app_scene_get_ip_scene_on_enter(void* context) {
     if(app->enc28j60_connected) {
         // F0.4e — replaced flag_dhcp_dora signal-to-worker with a
         // dedicated alt thread that runs DORA directly.
+        // F0.5f — clear the cancel flag before starting; on_exit may
+        // have left it set from a prior cancelled run.
+        app->dora_cancel = false;
         app->thread_alternative =
             furi_thread_alloc_ex("Get IP DORA", 4 * 1024, get_ip_dora_thread, app);
         furi_thread_start(app->thread_alternative);
@@ -87,6 +97,10 @@ bool app_scene_get_ip_scene_on_event(void* context, SceneManagerEvent event) {
 void app_scene_get_ip_scene_on_exit(void* context) {
     App* app = (App*)context;
     if(app->thread_alternative) {
+        // F0.5f — request cancel before join. The DORA loop polls this
+        // flag every iteration and breaks out early, so join completes
+        // within ~ms instead of the 10 s DHCP timeout.
+        app->dora_cancel = true;
         furi_thread_join(app->thread_alternative);
         furi_thread_free(app->thread_alternative);
         app->thread_alternative = NULL;

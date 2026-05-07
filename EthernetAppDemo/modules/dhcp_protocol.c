@@ -190,7 +190,8 @@ bool flipper_process_dora_with_host_name(
     uint8_t* static_ip,
     uint8_t* ip_router,
     uint8_t* mac_router,
-    const char* host) {
+    const char* host,
+    volatile const bool* cancel) {
     uint32_t current_time = furi_get_tick();
 
     bool ret = false;
@@ -208,6 +209,11 @@ bool flipper_process_dora_with_host_name(
     enable_broadcast(ethernet);
 
     while(!ret && is_link_up(ethernet)) {
+        // F0.5f — early-out on caller-requested cancel (e.g. user
+        // pressed Back in GetIPScene). Without this, on_exit's
+        // furi_thread_join would block up to the 10 s timeout below.
+        if(cancel && *cancel) break;
+
         // F0.7 (B-1) — was 3000 ms, which is shorter than the time
         // a standards-compliant DHCP server takes to ARP-probe + ICMP-
         // probe a candidate IP before sending OFFER (≈ 2-3 s on

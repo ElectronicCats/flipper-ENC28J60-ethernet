@@ -215,6 +215,15 @@ void settings_input_byte_address(void* context) {
     if(state == MAC_OPTION_SETTING) {
         // F0.5a — chip mutex covers this; no rx_dispatch pause needed.
         enc28j60_set_mac(app->ethernet);
+    } else if(state == IP_OPTION_SETTING) {
+        // F0.5f — manually-set IP must mark the device static-configured
+        // AND DORA-equivalent. Pre-fix the byte_input wrote the IP into
+        // app->ethernet->ip_address but left is_static_ip / is_dora
+        // false, so auto-replies stayed off and Ping/Ports/OS/ArpSpoof
+        // refused to start. The user explicitly chose this IP, so we
+        // treat it as if DORA had succeeded.
+        app->is_static_ip = true;
+        app->is_dora = true;
     }
 
     scene_manager_previous_scene(app->scene_manager);
