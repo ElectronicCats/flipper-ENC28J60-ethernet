@@ -197,8 +197,8 @@ void build_ip_submenu(App* app, uint32_t selection);
 
 // Function to set the thread and the view
 void draw_the_arp_list(App* app) {
-    furi_thread_suspend(furi_thread_get_id(app->thread));
-
+    // F0.4c — no longer suspends app->thread; rx_dispatch keeps running and
+    // arp_scanner_thread uses scanner_session (rx_dispatch-aware).
     app->thread_alternative =
         furi_thread_alloc_ex("ARP SCANNER", 10 * 1024, arp_scanner_thread, app);
 
@@ -211,7 +211,6 @@ void draw_the_arp_list(App* app) {
 void finished_arp_thread(App* app) {
     furi_thread_join(app->thread_alternative);
     furi_thread_free(app->thread_alternative);
-    furi_thread_resume(furi_thread_get_id(app->thread));
 }
 
 //  Callback for the Input

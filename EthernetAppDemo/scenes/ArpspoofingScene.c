@@ -12,7 +12,8 @@ int32_t arpspoofing_thread(void* context);
 // ArpSpoofing on enter
 void app_scene_arp_spoofing_on_enter(void* context) {
     App* app = (App*)context;
-    furi_thread_suspend(furi_thread_get_id(app->thread));
+    // F0.4c — no thread_suspend; arpspoofing_thread is pure TX with
+    // scanner_cancel_requested.
     app->thread_alternative =
         furi_thread_alloc_ex("ArpSpoofing", 10 * 1024, arpspoofing_thread, app);
     furi_thread_start(app->thread_alternative);
@@ -32,7 +33,7 @@ void app_scene_arp_spoofing_on_exit(void* context) {
     App* app = (App*)context;
     furi_thread_join(app->thread_alternative);
     furi_thread_free(app->thread_alternative);
-    furi_thread_resume(furi_thread_get_id(app->thread));
+    // F0.4c — no thread_resume.
 }
 
 /**

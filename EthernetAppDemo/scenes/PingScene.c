@@ -200,8 +200,7 @@ void app_scene_ping_scene_on_enter(void* context) {
 
     view_dispatcher_switch_to_view(app->view_dispatcher, LoadingView);
 
-    furi_thread_suspend(app->thread);
-
+    // F0.4c — no thread_suspend; ping_thread uses scanner_session.
     // Allocate and start the thread
     app->thread_alternative = furi_thread_alloc_ex("PING", 10 * 1024, ping_thread, app);
     furi_thread_start(app->thread_alternative);
@@ -256,8 +255,7 @@ void app_scene_ping_scene_on_exit(void* context) {
     // Join and free the thread
     furi_thread_join(app->thread_alternative);
     furi_thread_free(app->thread_alternative);
-
-    furi_thread_resume(app->thread);
+    // F0.4c — no thread_resume.
 }
 
 /**

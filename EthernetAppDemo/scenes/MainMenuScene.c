@@ -110,9 +110,8 @@ void app_scene_main_menu_on_enter(void* context) {
     static bool is_logo_shown = false;
     if(!is_logo_shown) draw_start(app);
 
-    if(furi_thread_is_suspended(furi_thread_get_id(app->thread))) {
-        furi_thread_resume(furi_thread_get_id(app->thread));
-    }
+    // F0.4c — the resume-on-entry guard is obsolete: scenes no longer
+    // suspend app->thread (rx_dispatch + scanner_session own the chip).
 
     is_logo_shown = true;
 

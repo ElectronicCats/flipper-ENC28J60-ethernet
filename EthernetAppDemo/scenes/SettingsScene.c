@@ -112,9 +112,15 @@ void callback_random_mac(void* context, uint32_t index) {
 
     generate_random_mac(app->ethernet->mac_address);
 
-    furi_thread_suspend(app->thread);
+    // F0.4c — pause rx_dispatch around enc28j60_set_mac. The driver
+    // writes MAADR0..5 byte by byte; if the dispatcher polls chip
+    // registers in the middle, the unprotected file-static `bank` in
+    // enc28j60.c can race and corrupt MAC bytes (same class of bug
+    // diagnosed in F0.4a's settings_load reorder fix). F0.5 will add
+    // a chip-level mutex and the pause won't be needed.
+    rx_dispatch_pause();
     enc28j60_set_mac(app->ethernet);
-    furi_thread_resume(app->thread);
+    rx_dispatch_resume();
 
     scene_manager_previous_scene(app->scene_manager);
 }
@@ -212,9 +218,10 @@ void settings_input_byte_address(void* context) {
         scene_manager_get_scene_state(app->scene_manager, app_scene_set_address_option);
 
     if(state == MAC_OPTION_SETTING) {
-        furi_thread_suspend(app->thread);
+        // F0.4c — see commentary on the other enc28j60_set_mac call.
+        rx_dispatch_pause();
         enc28j60_set_mac(app->ethernet);
-        furi_thread_resume(app->thread);
+        rx_dispatch_resume();
     }
 
     scene_manager_previous_scene(app->scene_manager);

@@ -61,8 +61,7 @@ void variable_list_os_detector_callback(void* context, uint32_t index) {
 
     case START:
         if(app->is_dora) {
-            furi_thread_suspend(app->thread);
-
+            // F0.4c — no thread_suspend; os_scan uses scanner_session.
             app->thread_alternative =
                 furi_thread_alloc_ex("OS Detector", 5 * 1024, os_detector_thread, app);
 
@@ -132,8 +131,7 @@ void variable_list_os_detector_callback(void* context, uint32_t index) {
             view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
 
             furi_thread_free(app->thread_alternative);
-
-            furi_thread_resume(app->thread);
+            // F0.4c — no thread_resume.
         } else {
             draw_dora_needed(app);
         }

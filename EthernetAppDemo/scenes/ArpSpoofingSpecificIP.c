@@ -130,7 +130,8 @@ void set_ip_to_spoof(App* app) {
 
 // Set the spoofing and the scene and start the alternative thread
 void spoofing_specific_ip(App* app) {
-    furi_thread_suspend(furi_thread_get_id(app->thread));
+    // F0.4c — no thread_suspend; thread_for_spoofing_specific_ip uses
+    // scanner_session for the target ARP resolve and pure TX after.
 
     // Start the other thread
     app->thread_alternative = furi_thread_alloc_ex(
@@ -148,7 +149,7 @@ void spoofing_specific_ip(App* app) {
 void finish_spoofing_specific_ip_thread(App* app) {
     furi_thread_join(app->thread_alternative);
     furi_thread_free(app->thread_alternative);
-    furi_thread_resume(furi_thread_get_id(app->thread));
+    // F0.4c — no thread_resume.
 }
 
 // Scene on enter for spoofing

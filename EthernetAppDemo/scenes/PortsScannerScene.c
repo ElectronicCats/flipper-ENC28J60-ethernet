@@ -134,8 +134,8 @@ void variable_list_ports_scanner_callback(void* context, uint32_t index) {
     case START:
 
         if(app->is_dora) {
-            furi_thread_suspend(app->thread);
-
+            // F0.4c — no longer suspends app->thread; rx_dispatch keeps
+            // running and ports_scanner_thread uses scanner_session.
             submenu_reset(app->submenu);
             submenu_set_header(app->submenu, "PORTS OPEN");
 
@@ -314,7 +314,8 @@ bool app_scene_ports_scanner_on_event(void* context, SceneManagerEvent event) {
         case PORTS_SCANNER_SCENE_SHOW_PORTS:
             furi_thread_join(app->thread_alternative);
             furi_thread_free(app->thread_alternative);
-            furi_thread_resume(app->thread);
+            // F0.4c — no thread_resume; rx_dispatch + scanner_session
+            // make app->thread no longer the chip owner.
             /* fall through */
         case PORTS_SCANNER_SCENE_BYTE_INPUT:
         case PORTS_SCANNER_SCENE_IP_INPUT:

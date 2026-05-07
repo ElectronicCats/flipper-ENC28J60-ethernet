@@ -7,13 +7,11 @@ int32_t sniffer_thread(void* context);
 void app_scene_sniffer_on_enter(void* context) {
     App* app = (App*)context;
 
-    // Veremos si se suspede hilo
-    printf("Antes de suspender hilo");
-
-    // Suspend thread
-    furi_thread_suspend(furi_thread_get_id(app->thread));
-
-    printf("Se suspendio hilo\n");
+    // F0.4c — pause rx_dispatch so the sniffer thread has exclusive
+    // chip access for its promiscuous receive loop. F0.4d will migrate
+    // the sniffer to a registered "capture-everything" handler so this
+    // pause is no longer needed.
+    rx_dispatch_pause();
 
     // Allocate and start the thread
     app->thread_alternative =
@@ -58,7 +56,7 @@ void app_scene_sniffer_on_exit(void* context) {
     furi_thread_join(app->thread_alternative);
     furi_thread_free(app->thread_alternative);
 
-    furi_thread_resume(furi_thread_get_id(app->thread));
+    rx_dispatch_resume();
 }
 
 /**
