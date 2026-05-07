@@ -172,13 +172,11 @@ App* app_alloc() {
     settings_load(app);
 
     // F0.4a — start RX dispatcher and register the two auto-reply handlers.
-    // These previously lived inline in ethernet_thread (app_worker.c).
+    // These previously lived inline in ethernet_thread (app_worker.c, deleted
+    // in F0.4e).
     rx_dispatch_init(app);
     app->auto_arp_handle = rx_register(auto_arp_predicate, auto_arp_handler, app);
     app->auto_icmp_handle = rx_register(auto_icmp_predicate, auto_icmp_handler, app);
-
-    app->thread = furi_thread_alloc_ex("Ethernet Thread", 10 * 1024, ethernet_thread, app);
-    furi_thread_start(app->thread);
 
     return app;
 }
@@ -194,10 +192,8 @@ void app_free(App* app) {
     rx_unregister(app->auto_icmp_handle);
     rx_dispatch_deinit(app);
 
-    furi_thread_flags_set(furi_thread_get_id(app->thread), flag_stop);
-
-    furi_thread_join(app->thread);
-    furi_thread_free(app->thread);
+    // F0.4e — app->thread / ethernet_thread / app_worker.c are gone;
+    // DORA runs in GetIPScene's alt thread now.
 
     //  Free all the views from the View Dispatcher
     view_dispatcher_remove_view(app->view_dispatcher, SubmenuView);

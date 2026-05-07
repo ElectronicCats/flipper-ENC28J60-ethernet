@@ -49,17 +49,11 @@
 
 #define PATHPCAPS PATHAPPEXT "/files" // Path to save pcaps
 
-// Create flags
-typedef enum {
-    flag_stop = 1,
-    flag_dhcp_dora,
-} ethernet_app_flags_t;
-
-#define ALL_FLAGS (flag_stop | flag_dhcp_dora)
-
-#define MASK_FLAGS 0xfffffffe
-
-#define IS_NOT_LINK_UP 0xff
+// F0.4e — ethernet_app_flags_t / ALL_FLAGS / MASK_FLAGS / IS_NOT_LINK_UP
+// were the worker thread's signaling protocol (flag_dhcp_dora set by
+// GetIPScene, processed in ethernet_thread). With the worker thread
+// gone, DORA runs in GetIPScene's alt thread and these flags are
+// dead. Removed.
 
 // For GET IP scene Events
 typedef enum {
@@ -122,8 +116,10 @@ typedef struct {
     FuriString* text; // String for general use
     FuriString* path; // String to get path from file browser
 
-    FuriThread* thread; // For the threads
-    FuriThread* thread_alternative; // For the threads
+    // F0.4e — `thread` (the long-running worker that handled DORA flags)
+    // is gone; rx_dispatch owns the chip and per-scene alt threads do
+    // any heavy lifting.
+    FuriThread* thread_alternative; // Per-scene alt thread (one at a time)
 
     port_result_t ports[MAX_OS_SCAN_PORTS];
     uint8_t ports_count;
@@ -181,5 +177,4 @@ void draw_port_not_open(App* app); // Draw when the port is not open
 void draw_ask_for_ip(App* app); // Draw to ask a new IP
 void draw_text(App* app, const char* text); // Draw text
 
-// Thread
-int32_t ethernet_thread(void* context);
+// F0.4e — ethernet_thread declaration removed; the function is gone.
