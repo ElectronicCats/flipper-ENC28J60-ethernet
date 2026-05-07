@@ -245,7 +245,16 @@ bool flipper_process_dora_with_host_name(
 
                 // This part helps to know if it is dhcp acknowledge
                 if(deconstruct_dhcp_ack(rx_buffer)) {
-                    get_subnet_mask(mac_router);
+                    // F0.7 — was `get_subnet_mask(mac_router)` which wrote
+                    // the 4-byte subnet mask into the caller's 6-byte MAC
+                    // buffer (so mac_router got 4 bytes of subnet + 2
+                    // bytes of garbage and the chip's subnet_mask field
+                    // never got populated). Now populates the chip's
+                    // subnet_mask AND copies the resolved DHCP-server MAC
+                    // (saved during deconstruct_dhcp_offer) into
+                    // mac_router as advertised in the function contract.
+                    get_subnet_mask(ethernet->subnet_mask);
+                    memcpy(mac_router, MAC_DESTINATION, 6);
                     state = DHCP_OK; // state ok
                     ret = true;
 

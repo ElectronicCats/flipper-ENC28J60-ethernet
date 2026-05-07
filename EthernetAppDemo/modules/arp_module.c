@@ -334,5 +334,9 @@ uint8_t is_duplicated_ip(uint8_t* ip, arp_list* list, uint8_t total_list) {
         if(is_the_ip(list[i].ip, ip)) count_of_duplicated++;
     }
 
-    return count_of_duplicated - 1;
+    // F0.7 — was `return count - 1` which underflowed to 0xFF when the
+    // IP wasn't in the list (count == 0), making callers that treat the
+    // return as a bool see a "duplicated" answer for IPs that never
+    // existed in the list.
+    return count_of_duplicated == 0 ? 0 : count_of_duplicated - 1;
 }

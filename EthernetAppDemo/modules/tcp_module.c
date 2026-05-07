@@ -843,5 +843,5 @@ bool tcp_send_xmas_probe(
 
     send_packet(ethernet, ethernet->tx_buffer, ETHERNET_HEADER_LEN + IP_HEADER_LEN + tcp_len);
 
-    { return false; }
+    return true; // F0.7 — was `return false` after a successful send.
 }
