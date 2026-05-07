@@ -3,7 +3,7 @@ name: enc28j60-fase-actual
 description: Active context for the ENC28J60 refactor. Consult before any commit, file creation, or direction change. Updated at the start of every sub-phase.
 ---
 
-# Current phase: F0.4 — closed. Entering F0.5 / F0.6 / F0.7 (TBD)
+# Current phase: F0 — F0.7 closed. F0.5 / F0.8 / F0.4e/f remaining
 
 ## What is done
 
@@ -30,20 +30,42 @@ description: Active context for the ENC28J60 refactor. Consult before any commit
              handlers. Sub-phases v2.0-f0.4a..d. Closes B-2, B-3, B-5.
              Hardware-validated full stack (DORA, scan, ping, OS
              detector, sniffer, MAC change in Settings).
+- v2.0-f0.6  Dev scaffolding cleanup. ~366 lines deleted across
+             TestingScene, ofp_tseq + doSeqTests, dead DORA path
+             (flipper_process_dora + helpers), byte_input dead path
+             in PortsScannerScene, two empty for-loops. Flipped
+             enc28j60 DEBUG_MESSAGE / SHOW_PACKETS_RECEIVED off,
+             gated tcp/udp DEBUG behind DEV_MODE.
+             Hardware-validated.
+- v2.0-f0.7  Eight bugs from F0.0 audit + F0.3 hardware findings:
+             pcap timestamps via furi_hal_rtc_get_timestamp,
+             is_duplicated_ip underflow, tcp_send_xmas_probe always-
+             false return, subnet_mask wrote into mac_router buffer,
+             pcap_scan overflow on packet_positions[2000], auto-reply
+             using default IP before DORA, MainMenu logo blocking
+             1s → 250ms, B-1 DORA timeout 3s → 10s.
+             Hardware-validated. Test rig no longer needs
+             dnsmasq --no-ping workaround.
 
 ## Where we are
 
-F0.4 closed and hardware-validated. Choose next:
-  - F0.5 (recommended): bulk SPI rewrite + INT pin + chip-level mutex.
-    Closes B-6, removes the residual rx_dispatch_pause/_resume calls
-    everywhere (B-7 mostly).
-  - F0.6: dev scaffolding cleanup (delete TestingScene, ofp_tseq,
-    debug printfs, the dead `flipper_process_dora` no-hostname twin).
-  - F0.7: 8 bug fixes consolidated (PCAP timestamps, is_duplicated_ip
-    underflow, tcp_send_xmas_probe return, subnet_mask buffer,
-    pcap_scan overflow, MainMenu logo blocking, B-1 DORA timeout).
-  - F0.4e/f deferred: DORA into GetIPScene + delete ethernet_thread;
-    arp_get_specific_mac on rx_dispatch handler.
+F0.0 → F0.7 closed and hardware-validated (except F0.0 Task 9 —
+GitHub Discussions enablement, pending user manual action). Branch
+refactor/phase-0 has ~70 commits since main. All v2.0-f0.* tags are
+local-only (no push yet).
+
+Remaining to close F0:
+  - F0.8 — dual CI build (.github/workflows/build.yml produces
+    ethernet-admin.fap [PENTEST_MODE=0] and ethernet-pentest.fap
+    [PENTEST_MODE=1]). Smallest of the remaining; ~30 lines of YAML.
+  - F0.5 (deferred until needed) — bulk SPI rewrite + INT pin +
+    chip-level mutex. Closes B-6 + B-7. Big and risky; postpone
+    unless throughput becomes a blocker for F1.
+  - F0.4e/f (deferred cleanup) — move DORA into GetIPScene + delete
+    ethernet_thread; migrate arp_get_specific_mac onto rx_dispatch.
+    Cosmetic; no urgency.
+
+After F0.8, F0 is releasable (v2.0). F1 features can start.
 
 ## What NOT to touch
 
