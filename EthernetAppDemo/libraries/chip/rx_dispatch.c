@@ -28,7 +28,13 @@ static int32_t rx_dispatch_thread_fn(void* context) {
     while(d->running) {
         uint16_t len = receive_packet(eth, rx, MAX_FRAMELEN);
         if(len == 0) {
-            furi_delay_us(100);
+            // F0.4a hotfix — initial 100 µs polling froze the device when
+            // entering some menus (notably PingScene). Plausible causes:
+            // ENC28J60 SPI per-byte acquire/release saturating the bus
+            // mutex against GUI/scene threads, or chip RX state machine
+            // needing more recovery time. 1 ms matches the pre-F0.4a
+            // worker cadence that was hardware-validated in F0.3.
+            furi_delay_ms(1);
             continue;
         }
 
