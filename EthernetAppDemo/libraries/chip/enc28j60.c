@@ -16,7 +16,10 @@
  * To debug the message it lands
  */
 
-#define DEBUG_MESSAGE true
+// F0.6 — flipped off for release. Was forced on in tree, printf'ing the
+// hex dump of every received frame to UART (cost: throughput on busy LANs).
+// Re-enable from a local checkout when debugging the chip driver.
+#define DEBUG_MESSAGE false
 
 void show_message(uint8_t* buffer, uint16_t len) {
     UNUSED(buffer);
@@ -33,7 +36,8 @@ void show_message(uint8_t* buffer, uint16_t len) {
 #endif
 }
 
-#define SHOW_PACKETS_RECEIVED 1
+// F0.6 — flipped off for release. Same rationale as DEBUG_MESSAGE.
+#define SHOW_PACKETS_RECEIVED 0
 
 #if SHOW_PACKETS_RECEIVED
 #include "../protocol_tools/debug_packets.h"

@@ -10,7 +10,14 @@
 #define TEXT_PORT_FORMAT "%lu%s"
 #define TEXT_POINTS      "..."
 
+// F0.6 — gated behind DEV_MODE. Was a manual toggle that re-enabled
+// printf hex dumps inside scan/handshake; keeping it gated prevents
+// accidental release with debug spew.
+#if DEV_MODE
+#define DEBUG 1
+#else
 #define DEBUG 0
+#endif
 
 #define SCAN_TTL 64
 

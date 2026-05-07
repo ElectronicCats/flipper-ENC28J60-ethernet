@@ -11,7 +11,12 @@
 #define TEXT_PORT_FORMAT "%lu%s"
 #define TEXT_POINTS      "..."
 
+// F0.6 — gated behind DEV_MODE. See tcp_module.c for rationale.
+#if DEV_MODE
+#define DEBUG 1
+#else
 #define DEBUG 0
+#endif
 
 bool send_empty_udp_packet(
     uint8_t* buffer,
