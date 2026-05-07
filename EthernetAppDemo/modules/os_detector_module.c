@@ -9,8 +9,6 @@
 #include "../modules/tcp_module.h"
 #include "../libraries/protocol_tools/icmp.h"
 #include "../modules/ping_module.h"
-#define OPTS_LEN     13
-#define OPTS_PROBES  6
 #define packet_count 9
 #define TCP_OPTS_MAX 9
 #define MAX_RETRIES  9
@@ -481,123 +479,14 @@ static uint8_t clasificar_tcp_options(const tcp_opts_t* opts) {
     return NO_DETECTED;
 }
 
-static struct {
-    uint8_t* val;
-    uint16_t len;
-} prbOpts[OPTS_LEN] = {
-    {(uint8_t*)"\x03\x03\x0A\x01\x02\x04\x05\xb4\x08\x0A\xff\xff\xff\xff\x00\x00\x00\x00\x04\x02",
-     20},
-    {(uint8_t*)"\x02\x04\x05\x78\x03\x03\x00\x04\x02\x08\x0A\xff\xff\xff\xff\x00\x00\x00\x00\x00",
-     20},
-    {(uint8_t*)"\x08\x0A\xff\xff\xff\xff\x00\x00\x00\x00\x01\x01\x03\x03\x05\x01\x02\x04\x02\x80",
-     20},
-    {(uint8_t*)"\x04\x02\x08\x0A\xff\xff\xff\xff\x00\x00\x00\x00\x03\x03\x0A\x00", 16},
-    {(uint8_t*)"\x02\x04\x02\x18\x04\x02\x08\x0A\xff\xff\xff\xff\x00\x00\x00\x00\x03\x03\x0A\x00",
-     20},
-    {(uint8_t*)"\x02\x04\x01\x09\x04\x02\x08\x0A\xff\xff\xff\xff\x00\x00\x00\x00", 16},
-    {(uint8_t*)"\x03\x03\x0A\x01\x02\x04\x05\xb4\x04\x02\x01\x01", 12},
-    {(uint8_t*)"\x03\x03\x0A\x01\x02\x04\x01\x09\x08\x0A\xff\xff\xff\xff\x00\x00\x00\x00\x04\x02",
-     20},
-    {(uint8_t*)"\x03\x03\x0A\x01\x02\x04\x01\x09\x08\x0A\xff\xff\xff\xff\x00\x00\x00\x00\x04\x02",
-     20},
-    {(uint8_t*)"\x03\x03\x0A\x01\x02\x04\x01\x09\x08\x0A\xff\xff\xff\xff\x00\x00\x00\x00\x04\x02",
-     20},
-    {(uint8_t*)"\x03\x03\x0A\x01\x02\x04\x01\x09\x08\x0A\xff\xff\xff\xff\x00\x00\x00\x00\x04\x02",
-     20},
-    {(uint8_t*)"\x03\x03\x0A\x01\x02\x04\x01\x09\x08\x0A\xff\xff\xff\xff\x00\x00\x00\x00\x04\x02",
-     20},
-    {(uint8_t*)"\x03\x03\x0f\x01\x02\x04\x01\x09\x08\x0A\xff\xff\xff\xff\x00\x00\x00\x00\x04\x02",
-     20}};
+// F0.6 — prbOpts[] and prbWindowSz[] were the TCP option/window probe
+// tables consumed only by ofp_tseq. Deleted along with their consumer.
 
-/* TCP Window sizes. Numbering is the same as for prbOpts[] */
-uint16_t prbWindowSz[] = {1, 63, 4, 4, 16, 512, 3, 128, 256, 1024, 31337, 32768, 65535};
-
-uint8_t seq_act = OFP_TSEQ;
-
-void ofp_tseq(App* app, uint8_t* target_ip);
-
-void doSeqTests(App* app, uint8_t* target_ip) {
-    if(seq_act == OFP_UNSET) return;
-
-    switch(seq_act) {
-    case OFP_TSEQ:
-        ofp_tseq(app, target_ip);
-        break;
-    default:
-        break;
-    }
-}
-
-void ofp_tseq(App* app, uint8_t* target_ip) {
-    for(uint8_t i = 0; i < OPTS_LEN; i++) {
-        for(uint8_t j = 0; j < prbOpts[i].len; j++)
-            ;
-    }
-
-    UNUSED(target_ip);
-    uint8_t source_mac[6] = {0x00, 0xE0, 0x4C, 0x68, 0x0E, 0xC5};
-    uint8_t target_mac[6] = {0xCC, 0x73, 0x14, 0x17, 0xA3, 0x45};
-    uint8_t source_ip[4] = {192, 168, 0, 105};
-    uint8_t target_ip_debug[4] = {192, 168, 0, 103};
-    uint16_t ip_id[6] = {63073, 63326, 35094, 25039, 36881, 19500};
-    uint16_t ip_flags_offset = 0;
-    uint8_t ttl_vec[6];
-
-    for(uint8_t i = 0; i < 6; i++) {
-        ttl_vec[i] = 64 + (furi_hal_random_get() % 64); // rango 64–127
-    }
-    uint16_t source_port = 63954;
-    uint16_t target_port = 2121;
-    uint32_t sequence = 1354199039;
-    uint32_t ack_number = 64547392;
-
-    uint16_t tcp_len = 0;
-
-    for(uint8_t i = 0; i < OPTS_PROBES; i++) {
-        set_tcp_header_tseq(
-            app->ethernet->tx_buffer + ETHERNET_HEADER_LEN + IP_HEADER_LEN,
-            source_ip,
-            target_ip_debug,
-            source_port + i,
-            target_port,
-            sequence + i,
-            ack_number,
-            prbWindowSz[i],
-            0,
-            &(prbOpts[i].len),
-            prbOpts[i].val,
-            &tcp_len);
-
-        set_ipv4_header(
-            app->ethernet->tx_buffer + ETHERNET_HEADER_LEN,
-            6,
-            tcp_len,
-            source_ip,
-            target_ip_debug,
-            ip_id[i],
-            ip_flags_offset,
-            ttl_vec[i]);
-
-        set_ethernet_header(app->ethernet->tx_buffer, source_mac, target_mac, 0x0800);
-
-        send_packet(
-            app->ethernet,
-            app->ethernet->tx_buffer,
-            ETHERNET_HEADER_LEN + IP_HEADER_LEN + tcp_len);
-
-        for(uint16_t j = 0; j < (ETHERNET_HEADER_LEN + IP_HEADER_LEN + tcp_len); j++)
-            ;
-
-        uint32_t sequences_vector[6] = {0};
-        uint16_t len_receive = receive_packet(app->ethernet, app->ethernet->rx_buffer, 1500);
-        UNUSED(len_receive);
-        if(is_tcp(app->ethernet->rx_buffer)) {
-            tcp_header_t tcp_header = tcp_get_header(app->ethernet->rx_buffer);
-            bytes_to_uint(sequences_vector + i, tcp_header.sequence, sizeof(uint32_t));
-        }
-    }
-}
-
+// F0.6 — ofp_tseq, doSeqTests and the seq_act global were dev scaffolding
+// that ignored their target_ip argument and used hardcoded debug IPs/MACs
+// (192.168.0.103 target, 192.168.0.105 source, 00:E0:4C:68:0E:C5 source MAC,
+// CC:73:14:17:A3:45 target MAC). They sent packets to nowhere on any real
+// network. Deleted.
 static void os_scoreboard_init(os_scoreboard_t* sb) {
     sb->windows_score = 0;
     sb->linux_score = 0;
@@ -712,9 +601,6 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
     // continued with target_mac=0 on failure. Whether the scan produces
     // useful results in that case is a separate question (it doesn't).
     scanner_resolve_next_hop(&scanner, target_ip, target_mac);
-
-    seq_act = OFP_TSEQ;
-    doSeqTests(app, target_ip);
 
     uint8_t attemp = 0;
     ipv4_header_t ipv4_header;
