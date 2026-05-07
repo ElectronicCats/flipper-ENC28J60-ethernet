@@ -378,7 +378,11 @@ static void parse_tcp_options(const uint8_t* tcp_start, uint8_t tcp_header_len, 
 
         if(kind == 1) { // NOP
             opts->has_nop = true;
-            opts->order[opts->count++] = 1;
+            // F0.5h — was unbounded; a packet with > TCP_OPTS_MAX
+            // consecutive NOPs would write past order[16]. Now clamp
+            // the order-write but keep walking so we still skip the
+            // NOPs and reach trailing options like MSS/TS.
+            if(opts->count < TCP_OPTS_MAX) opts->order[opts->count++] = 1;
             i++;
             continue;
         }
@@ -389,40 +393,43 @@ static void parse_tcp_options(const uint8_t* tcp_start, uint8_t tcp_header_len, 
 
         if(len < 2 || (i + len) > opts_len) break;
 
+        // F0.5h — len is attacker-controlled. Pre-fix only checked it
+        // against opts_len; switch arms then read fixed payload sizes
+        // (MSS=4, WS=3, TS=10) without verifying the option actually
+        // declared that length. A malformed packet with kind=8 len=2
+        // would pass the outer guard then read ptr[i+2..i+9] off the
+        // end of the option (and possibly off the end of the frame).
         switch(kind) {
-        case 2: // MSS
+        case 2: // MSS — fixed length 4
+            if(len < 4) break;
             opts->has_mss = true;
             opts->mss_value = (ptr[i + 2] << 8) | ptr[i + 3];
             if(opts->count < TCP_OPTS_MAX) opts->order[opts->count++] = 2;
             break;
 
-        case 3: // Window Scale
+        case 3: // Window Scale — fixed length 3
+            if(len < 3) break;
             opts->has_ws = true;
             opts->ws_value = ptr[i + 2];
             if(opts->count < TCP_OPTS_MAX) opts->order[opts->count++] = 3;
             break;
 
-        case 4: // SACK Permitted
+        case 4: // SACK Permitted — fixed length 2
             opts->has_sack = true;
             if(opts->count < TCP_OPTS_MAX) opts->order[opts->count++] = 4;
             break;
 
-        case 5: // SACK blocks
+        case 5: // SACK blocks — variable length, just record presence
             opts->has_sack = true;
-
             if(opts->count < TCP_OPTS_MAX) opts->order[opts->count++] = 5;
-
             break;
 
-        case 8: // Timestamp
+        case 8: // Timestamp — fixed length 10
+            if(len < 10) break;
             opts->has_ts = true;
-
             opts->tsval = (ptr[i + 2] << 24) | (ptr[i + 3] << 16) | (ptr[i + 4] << 8) | ptr[i + 5];
-
             opts->tsecr = (ptr[i + 6] << 24) | (ptr[i + 7] << 16) | (ptr[i + 8] << 8) | ptr[i + 9];
-
             if(opts->count < TCP_OPTS_MAX) opts->order[opts->count++] = 8;
-
             break;
         }
 
@@ -607,12 +614,18 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
 
     uint32_t ack_number = 0;
 
-    // F0.3f — replaces inline subnet check + arp_get_specific_mac.
-    // Return value intentionally ignored to preserve original behavior:
-    // pre-F0.3f the code also ignored arp_get_specific_mac's return and
-    // continued with target_mac=0 on failure. Whether the scan produces
-    // useful results in that case is a separate question (it doesn't).
-    scanner_resolve_next_hop(&scanner, target_ip, target_mac);
+    // F0.5h — bail out cleanly when the next-hop MAC can't be resolved.
+    // Pre-fix the return was discarded and the scan ran with
+    // target_mac=00:00:00:00:00:00, putting frames on the wire that
+    // never reached the target — and showing NO_DETECTED that looked
+    // like a real fingerprint failure. Now app->os_guess stays NO_DETECTED
+    // and the scene reports UNKNOWN with a clear root cause: ARP failed.
+    if(!scanner_resolve_next_hop(&scanner, target_ip, target_mac)) {
+        app->os_guess = NO_DETECTED;
+        app->ports_count = 0;
+        scanner_session_deinit(&scanner);
+        return -1;
+    }
 
     uint8_t attemp = 0;
     ipv4_header_t ipv4_header;
@@ -713,6 +726,12 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
                                 if(probe_ports[k] == resp_port) {
                                     port_closed[k] = true;
                                     port_retries[k] = 0;
+                                    // F0.5h — also mirror into port_results so the
+                                    // UI prints CLOSED instead of UNKNOWN. Pre-fix
+                                    // only the local port_closed[] array was set;
+                                    // OsDetector.c rendered from port_results[].state
+                                    // and showed every RST'd port as UNKNOWN.
+                                    port_results[k].state = PORT_CLOSED;
                                     break;
                                 }
                             }

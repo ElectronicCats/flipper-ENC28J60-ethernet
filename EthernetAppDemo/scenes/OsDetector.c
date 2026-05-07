@@ -74,6 +74,12 @@ void variable_list_os_detector_callback(void* context, uint32_t index) {
 
             furi_string_reset(app->text);
 
+            // F0.5h — disclosure header. The detector is heuristic-only,
+            // shares the chip RX FIFO with rx_dispatch, and has known
+            // sample-collision and ACK-validation issues. Results are
+            // best-effort. Hardening lives in F1.
+            furi_string_cat_printf(app->text, "[EXPERIMENTAL]\n");
+            furi_string_cat_printf(app->text, "Heuristic, may be wrong.\n\n");
             furi_string_cat_printf(app->text, "OS DETECTOR RESULT:\n\n");
 
             furi_string_cat_printf(
@@ -154,7 +160,7 @@ void app_scene_os_detector_on_enter(void* context) {
     App* app = context;
 
     submenu_reset(app->submenu);
-    submenu_set_header(app->submenu, "OS DETECTOR");
+    submenu_set_header(app->submenu, "OS DETECTOR (EXPERIMENTAL)");
 
     // VIEW IP LIST
     submenu_add_item(
