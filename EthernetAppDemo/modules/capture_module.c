@@ -32,20 +32,11 @@ void create_pcap_name(FuriString* complete_path, const char* PATH, const char* n
 }
 
 bool pcap_capture_init(File* file, const char* filename) {
-    // Initialize timestamp reference
-    DateTime datetime;
-    furi_hal_rtc_get_datetime(&datetime);
-
-    // Start with a base timestamp for the current date
-    // This is an approximation since Flipper Zero doesn't have a full Unix timestamp
-    // Using 2023-01-01 as arbitrary epoch for demonstration
-    base_timestamp_sec =
-        (uint32_t)(datetime.year - 2023) * 365 * 24 * 3600 + // Years (approximate)
-        (uint32_t)(datetime.month * 30) * 24 * 3600 + // Months (approximate)
-        (uint32_t)(datetime.day) * 24 * 3600 + // Days
-        (uint32_t)(datetime.hour) * 3600 + // Hours
-        (uint32_t)(datetime.minute) * 60 + // Minutes
-        (uint32_t)(datetime.second); // Seconds
+    // F0.7 — use the SDK's Unix timestamp helper. The previous code
+    // approximated months as 30 days and ignored leap years, producing
+    // PCAP timestamps that drifted by days/weeks vs wall clock and
+    // confused Wireshark's relative-time display.
+    base_timestamp_sec = furi_hal_rtc_get_timestamp();
 
     // Store the current tick for relative time calculation
     base_tick = furi_get_tick();
