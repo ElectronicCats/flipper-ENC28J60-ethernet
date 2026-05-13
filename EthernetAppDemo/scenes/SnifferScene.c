@@ -11,6 +11,11 @@ typedef struct {
     volatile bool stopped;
 } sniffer_state_t;
 
+typedef enum {
+    SnifferEventStop,
+    SnifferEventOpenPcap,
+} SnifferCustomEvent;
+
 // Forward decls
 int32_t sniffer_thread(void* context);
 
@@ -38,19 +43,40 @@ void solve_paths(Storage* storage, FuriString* path) {
     } while(storage_file_exists(storage, furi_string_get_cstr(path)));
 }
 
+static void sniffer_button_callback(GuiButtonType type, InputType input_type, void* context) {
+    App* app = context;
+
+    if(input_type != InputTypeShort) {
+        return;
+    }
+
+    if(type == GuiButtonTypeCenter) {
+        app->open_pcap_after_sniff = true;
+        app->sniffer_stop = true;
+    }
+}
+
 // Draw helpers
 void draw_count_packets(App* app, uint32_t packets) {
-    Widget* widget = app->widget;
-    widget_reset(widget);
+    widget_reset(app->widget);
+
+    widget_add_button_element(
+        app->widget, GuiButtonTypeCenter, "Open", sniffer_button_callback, app);
+
     widget_add_string_element(
-        widget, 64, 20, AlignCenter, AlignCenter, FontSecondary, "Packets Received");
+        app->widget, 64, 20, AlignCenter, AlignCenter, FontSecondary, "Packets Received");
 
     furi_string_reset(app->text);
     furi_string_cat_printf(app->text, "%lu", packets);
 
     widget_add_string_element(
-        widget, 64, 32, AlignCenter, AlignCenter, FontPrimary, furi_string_get_cstr(app->text));
-    widget_add_button_element(widget, GuiButtonTypeCenter, "Stop", NULL, NULL);
+        app->widget,
+        64,
+        32,
+        AlignCenter,
+        AlignCenter,
+        FontPrimary,
+        furi_string_get_cstr(app->text));
 }
 
 // rx_dispatch handler — captures every received frame.
@@ -79,6 +105,10 @@ void app_scene_sniffer_on_enter(void* context) {
     widget_reset(app->widget);
     view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
 
+    app->open_pcap_after_sniff = false;
+    app->sniffer_stop = false;
+    app->sniffer_finished = false;
+
     // Allocate and start the UI thread (does no chip I/O — only counter
     // display + back-button poll).
     app->thread_alternative =
@@ -88,29 +118,39 @@ void app_scene_sniffer_on_enter(void* context) {
 
 // Function for the testing scene on event
 bool app_scene_sniffer_on_event(void* context, SceneManagerEvent event) {
-    bool consumed = false;
-    App* app = (App*)context;
+    App* app = context;
+
+    if(event.type == SceneManagerEventTypeBack) {
+        app->open_pcap_after_sniff = false;
+        app->sniffer_stop = true;
+        return true;
+    }
 
     if(event.type == SceneManagerEventTypeCustom) {
-        switch(event.event) {
-        case 1:
-            scene_manager_next_scene(app->scene_manager, app_scene_read_pcap_option);
-            break;
-        case 0xff:
+        if(event.event == SnifferEventStop) {
             scene_manager_previous_scene(app->scene_manager);
-            break;
-        default:
-            break;
+            app->sniffer_stop = true;
+            return true;
+        }
+
+        if(event.event == SnifferEventOpenPcap) {
+            scene_manager_next_scene(app->scene_manager, app_scene_read_pcap_option);
+            return true;
         }
     }
-    return consumed;
+
+    return false;
 }
 
 // Function for the testing scene on exit
 void app_scene_sniffer_on_exit(void* context) {
     App* app = (App*)context;
-    furi_thread_join(app->thread_alternative);
-    furi_thread_free(app->thread_alternative);
+
+    if(app->thread_alternative) {
+        furi_thread_join(app->thread_alternative);
+        furi_thread_free(app->thread_alternative);
+        app->thread_alternative = NULL;
+    }
 }
 
 /**
@@ -147,7 +187,6 @@ int32_t sniffer_thread(void* context) {
     if(!start) {
         draw_device_no_connected(app);
         furi_delay_ms(1500);
-        view_dispatcher_send_custom_event(app->view_dispatcher, 0xff);
         return 0;
     }
 
@@ -156,7 +195,6 @@ int32_t sniffer_thread(void* context) {
     if(!is_link_up(ethernet)) {
         draw_network_not_connected(app);
         furi_delay_ms(1500);
-        view_dispatcher_send_custom_event(app->view_dispatcher, 0xff);
         return 0;
     }
 
@@ -174,7 +212,6 @@ int32_t sniffer_thread(void* context) {
     // counter still ticked up, but every frame was lost (no file).
     if(!pcap_capture_init(app->file, furi_string_get_cstr(app->path))) {
         disable_promiscuous(ethernet);
-        view_dispatcher_send_custom_event(app->view_dispatcher, 0xff);
         return 0;
     }
 
@@ -184,7 +221,6 @@ int32_t sniffer_thread(void* context) {
         // Out of handler slots. Cleanup and exit.
         pcap_close(app->file);
         disable_promiscuous(ethernet);
-        view_dispatcher_send_custom_event(app->view_dispatcher, 0xff);
         return 0;
     }
 
@@ -194,12 +230,16 @@ int32_t sniffer_thread(void* context) {
     // UI poll loop. ~10 Hz redraws + back-button check. Yields to the
     // scheduler — no busy loop, no chip I/O here.
     uint32_t last_drawn = 0xFFFFFFFF;
-    while(furi_hal_gpio_read(&gpio_button_back)) {
+
+    // Wait for button release before entering sniff loop
+    while(!app->sniffer_stop) {
         uint32_t snapshot = state.counter;
-        if(snapshot != last_drawn) {
+
+        if((snapshot - last_drawn) >= 10 || last_drawn == 0xFFFFFFFF) {
             draw_count_packets(app, snapshot);
             last_drawn = snapshot;
         }
+
         furi_delay_ms(100);
     }
 
@@ -213,9 +253,20 @@ int32_t sniffer_thread(void* context) {
 
     pcap_close(app->file);
 
+    furi_delay_ms(100);
+
     // Signal the scene to navigate back. The user pressed BACK; we honor
     // that by going to the previous scene rather than offering a follow-up
     // "show captured" prompt (Read Pcaps is a top-menu item now).
-    view_dispatcher_send_custom_event(app->view_dispatcher, 0xff);
+    // Notify main thread AFTER cleanup
+
+    app->sniffer_stop = true;
+
+    if(app->sniffer_stop && !app->open_pcap_after_sniff) {
+        view_dispatcher_send_custom_event(app->view_dispatcher, SnifferEventStop);
+    } else {
+        view_dispatcher_send_custom_event(app->view_dispatcher, SnifferEventOpenPcap);
+    }
+
     return 0;
 }

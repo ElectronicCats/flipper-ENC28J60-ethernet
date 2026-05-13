@@ -97,8 +97,11 @@ typedef struct {
     bool enc28j60_connected; // To know if the enc28j60 is connected
     bool is_dora;
     volatile bool dora_cancel; // F0.5f — flipped by GetIPScene on_exit so the
-        // alt thread's DORA loop can break out before
-        // its 10 s timeout fires.
+    // alt thread's DORA loop can break out before
+    // its 10 s timeout fires.
+    bool open_pcap_after_sniff;
+    volatile bool sniffer_stop;
+    volatile bool sniffer_finished;
 
     SceneManager* scene_manager;
     ViewDispatcher* view_dispatcher;
