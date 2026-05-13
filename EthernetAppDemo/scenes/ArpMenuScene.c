@@ -40,13 +40,13 @@ void app_scene_arp_actions_menu_on_enter(void* context) {
     App* app = (App*)context;
 
     submenu_reset(app->submenu);
-    submenu_set_header(app->submenu, "ARP ACTIONS MENU");
+    submenu_set_header(app->submenu, "ARP ACTIONS");
 
     submenu_add_item(
         app->submenu, "View scanned IPs", VIEW_IP_LIST_OPTION, arp_actions_menu_callback, app);
 
     submenu_add_item(
-        app->submenu, "Arp Spoofing all", ARP_SPOOFING_OPTION, arp_actions_menu_callback, app);
+        app->submenu, "Spoof All Hosts", ARP_SPOOFING_OPTION, arp_actions_menu_callback, app);
 
 #if DEV_MODE
     submenu_add_item(

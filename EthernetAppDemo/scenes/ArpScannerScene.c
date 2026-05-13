@@ -409,7 +409,7 @@ void app_scene_arp_ip_show_details_on_exit(void* context) {
 
 void build_ip_submenu(App* app, uint32_t selection) {
     submenu_reset(app->submenu);
-    submenu_set_header(app->submenu, "SCANNED IPs");
+    submenu_set_header(app->submenu, "SCANNED HOSTS");
 
     for(uint8_t i = 0; i < app->ip_counter; i++) {
         furi_string_reset(app->text);
