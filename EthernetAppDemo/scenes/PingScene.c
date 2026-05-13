@@ -80,23 +80,17 @@ void app_scene_ping_menu_scene_on_enter(void* context) {
     if(*(uint32_t*)app->scan_params.ip_ping == 0)
         memcpy(app->scan_params.ip_ping, app->ip_gateway, 4);
 
-    furi_string_cat_printf(
-        app->text,
-        "PING TO %u:%u:%u:%u",
-        app->scan_params.ip_ping[0],
-        app->scan_params.ip_ping[1],
-        app->scan_params.ip_ping[2],
-        app->scan_params.ip_ping[3]);
+    furi_string_cat_printf(app->text, "PING HOST");
 
     submenu_set_header(app->submenu, furi_string_get_cstr(app->text));
 
     furi_string_reset(app->text);
 
-    submenu_add_item(app->submenu, "View scanned IPs", 2, menu_ping_options_callback, app);
+    submenu_add_item(app->submenu, "View Scanned Hosts", 2, menu_ping_options_callback, app);
 
     furi_string_cat_printf(
         app->text,
-        "IP to do ping %u:%u:%u:%u",
+        "Target IP [%u:%u:%u:%u]",
         app->scan_params.ip_ping[0],
         app->scan_params.ip_ping[1],
         app->scan_params.ip_ping[2],
@@ -105,7 +99,7 @@ void app_scene_ping_menu_scene_on_enter(void* context) {
     submenu_add_item(
         app->submenu, furi_string_get_cstr(app->text), 1, menu_ping_options_callback, app);
 
-    submenu_add_item(app->submenu, "Ping", 0, menu_ping_options_callback, app);
+    submenu_add_item(app->submenu, "Start Ping", 0, menu_ping_options_callback, app);
 
     view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);
 }

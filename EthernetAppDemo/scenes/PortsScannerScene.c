@@ -199,15 +199,14 @@ void variable_list_ports_scanner_callback(void* context, uint32_t index) {
     }
 
     case PROTOCOL:
-        // Toggle between TCP and UDP. Pre-F0 the protocol switcher used a
-        // VariableItemList with left/right arrows; commit eae1f70 migrated
-        // the scene to Submenu, which doesn't support in-place value
-        // changes — so the click-to-toggle pattern is the natural fit.
         app->scan_params.protocols_index =
             (app->scan_params.protocols_index == PORTS_SCANNER_TCP) ? PORTS_SCANNER_UDP :
                                                                       PORTS_SCANNER_TCP;
-        // Rebuild the submenu so the "Protocol [TCP/UDP]" label updates.
+
         app_scene_ports_scanner_on_enter(app);
+
+        submenu_set_selected_item(app->submenu, PROTOCOL);
+
         break;
     }
 }
@@ -223,11 +222,15 @@ void app_scene_ports_scanner_on_enter(void* context) {
     App* app = (App*)context;
 
     submenu_reset(app->submenu);
-    submenu_set_header(app->submenu, "PORT SCANNER");
+    submenu_set_header(app->submenu, "SCAN PORTS");
 
     // VIEW IP LIST
     submenu_add_item(
-        app->submenu, "View scanned IPs", VIEW_IP_LIST, variable_list_ports_scanner_callback, app);
+        app->submenu,
+        "View Scanned Hosts",
+        VIEW_IP_LIST,
+        variable_list_ports_scanner_callback,
+        app);
 
     // TARGET IP
     if(*(uint32_t*)app->scan_params.target_ip == 0)
@@ -251,7 +254,7 @@ void app_scene_ports_scanner_on_enter(void* context) {
 
     // TARGET PORT
     furi_string_reset(app->text);
-    furi_string_cat_printf(app->text, "Target Port [%u]", app->scan_params.target_port);
+    furi_string_cat_printf(app->text, "Start Port [%u]", app->scan_params.target_port);
 
     submenu_add_item(
         app->submenu,
@@ -285,7 +288,7 @@ void app_scene_ports_scanner_on_enter(void* context) {
 
     // START
     submenu_add_item(
-        app->submenu, "Start Scanner", START, variable_list_ports_scanner_callback, app);
+        app->submenu, "Start Scanning", START, variable_list_ports_scanner_callback, app);
 
     view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);
 }

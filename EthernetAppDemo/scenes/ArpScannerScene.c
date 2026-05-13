@@ -137,7 +137,7 @@ void app_scene_arp_scanner_menu_on_enter(void* context) {
 
     submenu_reset(app->submenu);
 
-    submenu_set_header(app->submenu, "IP SCANNER");
+    submenu_set_header(app->submenu, "SCAN HOSTS");
 
     // SET IP
     furi_string_reset(app->text);
@@ -145,7 +145,7 @@ void app_scene_arp_scanner_menu_on_enter(void* context) {
         memcpy(app->scan_params.ip_start, app->ip_gateway, 4);
     furi_string_cat_printf(
         app->text,
-        "Set IP [%u.%u.%u.%u]",
+        "Start IP [%u.%u.%u.%u]",
         app->scan_params.ip_start[0],
         app->scan_params.ip_start[1],
         app->scan_params.ip_start[2],
@@ -162,10 +162,10 @@ void app_scene_arp_scanner_menu_on_enter(void* context) {
         app->submenu, furi_string_get_cstr(app->text), SET_RANGE, arp_menu_callback, app);
 
     // START
-    submenu_add_item(app->submenu, "Start Scanner", START_SCANNER, arp_menu_callback, app);
+    submenu_add_item(app->submenu, "Start Scanning", START_SCANNER, arp_menu_callback, app);
 
     // VIEW RESULTS
-    submenu_add_item(app->submenu, "View Results", VIEW_RESULTS, arp_menu_callback, app);
+    submenu_add_item(app->submenu, "View Scanned Hosts", VIEW_RESULTS, arp_menu_callback, app);
 
     view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);
 }

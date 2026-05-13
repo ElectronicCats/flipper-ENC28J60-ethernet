@@ -38,7 +38,7 @@ void app_scene_settings_on_enter(void* context) {
     submenu_reset(app->submenu);
 
     // Set the submenu
-    submenu_set_header(app->submenu, "DEVICE SETTINGS");
+    submenu_set_header(app->submenu, "SETTINGS");
 
     // Get the text for the label
     furi_string_reset(app->text);

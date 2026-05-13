@@ -120,10 +120,10 @@ void app_scene_main_menu_on_enter(void* context) {
     submenu_add_item(
         app->submenu, "Scan Hosts", SCAN_HOSTS_OPTION, main_menu_options_callback, app);
 
-    submenu_add_item(app->submenu, "Ping", PING_OPTION, main_menu_options_callback, app);
+    submenu_add_item(app->submenu, "Ping Host", PING_OPTION, main_menu_options_callback, app);
 
     submenu_add_item(
-        app->submenu, "Ports Scanner", PORTS_SCANNER_OPTION, main_menu_options_callback, app);
+        app->submenu, "Scan Ports", PORTS_SCANNER_OPTION, main_menu_options_callback, app);
 
     submenu_add_item(
         app->submenu, "Detect OS", OS_DETECTOR_OPTION, main_menu_options_callback, app);
@@ -131,10 +131,11 @@ void app_scene_main_menu_on_enter(void* context) {
     submenu_add_item(
         app->submenu, "ARP Actions", ARP_ACTIONS_OPTION, main_menu_options_callback, app);
 
-    submenu_add_item(app->submenu, "Sniffer", SNIFFER_OPTION, main_menu_options_callback, app);
+    submenu_add_item(
+        app->submenu, "Packet Sniffer", SNIFFER_OPTION, main_menu_options_callback, app);
 
     submenu_add_item(
-        app->submenu, "Read Pcaps", READ_PCAPS_OPTION, main_menu_options_callback, app);
+        app->submenu, "View Packets", READ_PCAPS_OPTION, main_menu_options_callback, app);
 
     submenu_add_item(app->submenu, "Settings", SETTINGS_OPTION, main_menu_options_callback, app);
 
