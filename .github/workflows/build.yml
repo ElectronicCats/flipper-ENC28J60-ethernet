@@ -37,11 +37,10 @@ jobs:
           sdk-channel: release
           app-dir: ./EthernetAppDemo/
 
-- name: Rename FAP Artifact
-  run: |
-    for file in ${{ steps.build-app.outputs.fap-artifacts }}/*.fap; do
-      mv "$file" "${file%.fap}_${{ env.TAG_NAME }}.fap"
-    done
+      - name: Rename FAP Artifact
+        run: |
+          file="${{ steps.build-app.outputs.fap-artifacts }}"
+          mv "$file" "${file%.fap}_${{ env.TAG_NAME }}.fap"
 
       - name: Upload app artifacts
         uses: actions/upload-artifact@v4
