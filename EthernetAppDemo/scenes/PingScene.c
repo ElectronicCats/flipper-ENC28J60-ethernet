@@ -408,9 +408,12 @@ int32_t ping_thread(void* context) {
 
         // Pace at ~1 pps. If a reply came in early, sleep the remaining
         // window so the user sees the same cadence as a stock ping.
-        uint32_t elapsed = furi_get_tick() - loop_start;
-        if(elapsed < 1000 && furi_hal_gpio_read(&gpio_button_back)) {
-            furi_delay_ms(1000 - elapsed);
+        while((furi_get_tick() - loop_start) < 1000) {
+            if(scanner_cancel_requested(&scanner)) {
+                break;
+            }
+
+            furi_delay_ms(10);
         }
     }
 

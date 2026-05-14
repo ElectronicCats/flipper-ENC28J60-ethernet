@@ -33,7 +33,8 @@ typedef enum {
     PORTS_SCANNER_SCENE_SHOW_PORTS,
 } PORTS_SCANNER_SCENE_STATES;
 
-const char* protocols[] = {"TCP", "UDP"};
+//const char* protocols[] = {"TCP", "UDP"};
+const char* protocols[] = {"TCP"};
 // protocols_index now lives in app->scan_params (F0.1)
 
 void number_input_ports_callback(void* context, int32_t value) {
@@ -199,9 +200,9 @@ void variable_list_ports_scanner_callback(void* context, uint32_t index) {
     }
 
     case PROTOCOL:
-        app->scan_params.protocols_index =
+        /*app->scan_params.protocols_index =
             (app->scan_params.protocols_index == PORTS_SCANNER_TCP) ? PORTS_SCANNER_UDP :
-                                                                      PORTS_SCANNER_TCP;
+                                                                      PORTS_SCANNER_TCP;*/
 
         app_scene_ports_scanner_on_enter(app);
 
