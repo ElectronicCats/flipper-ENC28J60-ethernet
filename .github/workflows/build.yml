@@ -1,22 +1,60 @@
 name: "FAP: Build and lint"
-on: [push, pull_request]
+on:
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - '**'
+  pull_request:
+
 jobs:
   ufbt-build-action:
     runs-on: ubuntu-latest
-    name: 'ufbt: Build for Dev branch'
+    name: 'ufbt: Build App'
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Extract Version
+        id: version
+        run: |
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+          else
+            echo "TAG_NAME=Dev-${GITHUB_SHA::7}" >> $GITHUB_ENV
+          fi
+
       - name: Build with ufbt
         uses: flipperdevices/flipperzero-ufbt-action@v0.1
         id: build-app
+        env:
+          EXTRA_CFLAGS: '-DFAP_APP_VERSION=\"${{ env.TAG_NAME }}\"'
         with:
           # Set to 'release' to build for latest published release version or dev for develop
           sdk-index-url: https://up.unleashedflip.com/directory.json
           sdk-channel: release
           app-dir: ./EthernetAppDemo/
+
+      - name: Rename FAP Artifact
+        run: |
+          cd ${{ steps.build-app.outputs.fap-artifacts }}
+          for file in *.fap; do
+            mv "$file" "${file%.fap}_${{ env.TAG_NAME }}.fap"
+          done
+
       - name: Upload app artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ github.event.repository.name }}-${{ steps.build-app.outputs.suffix }}
+          name: ${{ github.event.repository.name }}-${{ env.TAG_NAME }}
           path: ${{ steps.build-app.outputs.fap-artifacts }}
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: ${{ steps.build-app.outputs.fap-artifacts }}/*.fap
+          name: Release ${{ env.TAG_NAME }}
+          draft: false
+          prerelease: false

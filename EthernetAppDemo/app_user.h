@@ -40,8 +40,11 @@
 #define DEV_MODE 0
 
 // Version of the app
-#define APP_NAME    "ETHERNET APP"
-#define APP_VERSION "v1.1.1.2"
+#define APP_NAME "ETHERNET APP"
+#ifndef FAP_APP_VERSION
+#define FAP_APP_VERSION "v1.1.1.2"
+#endif
+#define APP_VERSION FAP_APP_VERSION
 
 // Path for the files
 #define PATHAPP    "apps_data/ethernet" // Path
