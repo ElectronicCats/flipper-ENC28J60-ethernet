@@ -38,21 +38,26 @@ jobs:
           app-dir: ./EthernetAppDemo/
 
       - name: Rename FAP Artifact
+        id: rename-fap
         run: |
-          file="${{ steps.build-app.outputs.fap-artifacts }}"
-          mv "$file" "${file%.fap}_${{ env.TAG_NAME }}.fap"
+          ORIGINAL="${{ steps.build-app.outputs.fap-artifacts }}"
+          RENAMED="${ORIGINAL%.fap}_${{ env.TAG_NAME }}.fap"
+
+          mv "$ORIGINAL" "$RENAMED"
+
+          echo "RENAMED_FAP=$RENAMED" >> $GITHUB_ENV
 
       - name: Upload app artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.event.repository.name }}-${{ env.TAG_NAME }}
-          path: ${{ steps.build-app.outputs.fap-artifacts }}
+          path: ${{ env.RENAMED_FAP }}
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: ${{ steps.build-app.outputs.fap-artifacts }}/*.fap
+          files: ${{ env.RENAMED_FAP }}
           name: Release ${{ env.TAG_NAME }}
           draft: false
           prerelease: false
