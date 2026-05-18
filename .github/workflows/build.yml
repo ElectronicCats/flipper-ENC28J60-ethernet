@@ -1,18 +1,22 @@
-name: "FAP: Build and lint"
+name: "FAP: Build and Release"
+
 on:
   push:
     tags:
       - 'v*'
     branches:
       - '**'
+
   pull_request:
 
 jobs:
   ufbt-build-action:
     runs-on: ubuntu-latest
-    name: 'ufbt: Build App'
+    name: "ufbt: Build App"
+
     permissions:
       contents: write
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -32,7 +36,6 @@ jobs:
         env:
           EXTRA_CFLAGS: '-DFAP_APP_VERSION=\"${{ env.TAG_NAME }}\"'
         with:
-          # Set to 'release' to build for latest published release version or dev for develop
           sdk-index-url: https://up.unleashedflip.com/directory.json
           sdk-channel: release
           app-dir: ./EthernetAppDemo/
@@ -53,11 +56,18 @@ jobs:
           name: ${{ github.event.repository.name }}-${{ env.TAG_NAME }}
           path: ${{ env.RENAMED_FAP }}
 
-      - name: Create Release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: ${{ env.RENAMED_FAP }}
+          tag_name: ${{ env.TAG_NAME }}
           name: Release ${{ env.TAG_NAME }}
+
+          body_path: release-notes/${{ env.TAG_NAME }}.md
+
+          files: |
+            ${{ env.RENAMED_FAP }}
+
           draft: false
           prerelease: false
+          generate_release_notes: false
