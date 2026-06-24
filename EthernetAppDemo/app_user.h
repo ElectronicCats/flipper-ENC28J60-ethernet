@@ -170,9 +170,7 @@ typedef enum {
     ARP_STATE_START_SCAN = 0,
     ARP_STATE_SET_IP,
     ARP_STATE_SHOW_LIST,
-    ARP_STATE_SPOOF,
-    ARP_STATE_SELECT_IP,
-    ARP_STATE_SET_RANGE,
+    IF_PENTEST(ARP_STATE_SPOOF, ) IF_PENTEST(ARP_STATE_SELECT_IP, ) ARP_STATE_SET_RANGE,
 } ARP_SCENE_STATES;
 
 // This functions works only to draw repetitive views in widgets

@@ -13,14 +13,14 @@ ADD_SCENE(app, browser_pcaps, browser_pcaps_option)
 ADD_SCENE(app, read_pcap, read_pcap_option)
 
 // ARP Actions menu Scene
-ADD_SCENE(app, arp_actions_menu, arp_action_menu_option)
+IF_PENTEST(ADD_SCENE(app, arp_actions_menu, arp_action_menu_option))
 
 // ARPSpoofing Scene
-ADD_SCENE(app, arp_spoofing, arp_spoofing_option)
+IF_PENTEST(ADD_SCENE(app, arp_spoofing, arp_spoofing_option))
 
 // ArpSpoofing a specific IP
-ADD_SCENE(app, arp_spoofing_specific_ip_menu, arp_spoofing_specific_ip_menu_option)
-ADD_SCENE(app, arp_spoofing_specific_ip, arp_spoofing_specific_ip_option)
+IF_PENTEST(ADD_SCENE(app, arp_spoofing_specific_ip_menu, arp_spoofing_specific_ip_menu_option))
+IF_PENTEST(ADD_SCENE(app, arp_spoofing_specific_ip, arp_spoofing_specific_ip_option))
 
 // ARP scanner scene
 ADD_SCENE(app, arp_scanner_menu, arp_scanner_menu_option)

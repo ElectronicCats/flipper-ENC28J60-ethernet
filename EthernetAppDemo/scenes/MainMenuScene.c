@@ -1,4 +1,6 @@
 #include "../app_user.h"
+#if PENTEST_MODE
+#endif
 #include <stdio.h>
 
 /**
@@ -22,8 +24,7 @@ enum {
     PING_OPTION,
     PORTS_SCANNER_OPTION,
     OS_DETECTOR_OPTION,
-    ARP_ACTIONS_OPTION,
-    SNIFFER_OPTION,
+    IF_PENTEST(ARP_ACTIONS_OPTION, ) SNIFFER_OPTION,
     READ_PCAPS_OPTION,
     SETTINGS_OPTION,
     ABOUT_US,
@@ -75,9 +76,10 @@ void main_menu_options_callback(void* context, uint32_t index) {
         scene_manager_next_scene(app->scene_manager, app_scene_os_detector_option);
         break;
 
-    case ARP_ACTIONS_OPTION:
-        scene_manager_next_scene(app->scene_manager, app_scene_arp_action_menu_option);
-        break;
+        IF_PENTEST(
+            case ARP_ACTIONS_OPTION
+            : scene_manager_next_scene(app->scene_manager, app_scene_arp_action_menu_option);
+            break;)
 
     case READ_PCAPS_OPTION:
         scene_manager_next_scene(app->scene_manager, app_scene_browser_pcaps_option);
@@ -113,29 +115,45 @@ void app_scene_main_menu_on_enter(void* context) {
     submenu_reset(app->submenu);
 
     // header for the  submenu
-    submenu_set_header(app->submenu, "ETHERNET FUNCTIONS");
+    IF_PENTEST(submenu_set_header(app->submenu, "ETHERNET PENTEST");)
+#if !PENTEST_MODE
+    submenu_set_header(app->submenu, "ETHERNET ADMIN");
+#endif
 
+#if !PENTEST_MODE
     submenu_add_item(app->submenu, "Get IP", GET_IP_OPTION, main_menu_options_callback, app);
+#endif
 
+#if !PENTEST_MODE
     submenu_add_item(
         app->submenu, "Scan Hosts", SCAN_HOSTS_OPTION, main_menu_options_callback, app);
+#endif
 
+#if !PENTEST_MODE
     submenu_add_item(app->submenu, "Ping Host", PING_OPTION, main_menu_options_callback, app);
+#endif
 
+#if !PENTEST_MODE
     submenu_add_item(
         app->submenu, "Scan Ports", PORTS_SCANNER_OPTION, main_menu_options_callback, app);
+#endif
 
+#if !PENTEST_MODE
     submenu_add_item(
         app->submenu, "Detect OS", OS_DETECTOR_OPTION, main_menu_options_callback, app);
+#endif
 
-    submenu_add_item(
-        app->submenu, "ARP Actions", ARP_ACTIONS_OPTION, main_menu_options_callback, app);
+    IF_PENTEST(
+        submenu_add_item(
+            app->submenu, "ARP Actions", ARP_ACTIONS_OPTION, main_menu_options_callback, app);)
 
-    submenu_add_item(
-        app->submenu, "Packet Sniffer", SNIFFER_OPTION, main_menu_options_callback, app);
+    IF_PENTEST(
+        submenu_add_item(
+            app->submenu, "Packet Sniffer", SNIFFER_OPTION, main_menu_options_callback, app);)
 
-    submenu_add_item(
-        app->submenu, "View Packets", READ_PCAPS_OPTION, main_menu_options_callback, app);
+    IF_PENTEST(
+        submenu_add_item(
+            app->submenu, "View Packets", READ_PCAPS_OPTION, main_menu_options_callback, app);)
 
     submenu_add_item(app->submenu, "Settings", SETTINGS_OPTION, main_menu_options_callback, app);
 

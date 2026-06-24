@@ -35,10 +35,11 @@ void variable_list_enter_callback(void* context, uint32_t index) {
     case START_SCANNER:
         next_state = ARP_STATE_START_SCAN;
 
-        if(scene_manager_get_scene_state(app->scene_manager, app_scene_arp_scanner_menu_option) ==
-           2) {
-            next_state = ARP_STATE_SPOOF;
-        }
+        IF_PENTEST(
+            if(scene_manager_get_scene_state(
+                   app->scene_manager, app_scene_arp_scanner_menu_option) == 2) {
+                next_state = ARP_STATE_SPOOF;
+            })
         break;
 
     case VIEW_RESULTS:
@@ -112,10 +113,11 @@ void arp_menu_callback(void* context, uint32_t index) {
     case START_SCANNER:
         next_state = ARP_STATE_START_SCAN;
 
-        if(scene_manager_get_scene_state(app->scene_manager, app_scene_arp_scanner_menu_option) ==
-           2) {
-            next_state = ARP_STATE_SPOOF;
-        }
+        IF_PENTEST(
+            if(scene_manager_get_scene_state(
+                   app->scene_manager, app_scene_arp_scanner_menu_option) == 2) {
+                next_state = ARP_STATE_SPOOF;
+            })
         break;
 
     case VIEW_RESULTS:
@@ -242,7 +244,7 @@ void app_scene_arp_scanner_on_enter(void* context) {
 
     switch(scene_manager_get_scene_state(app->scene_manager, app_scene_arp_scanner_option)) {
     case ARP_STATE_START_SCAN:
-    case ARP_STATE_SPOOF:
+        IF_PENTEST(case ARP_STATE_SPOOF:)
         draw_the_arp_list(app);
         break;
 
@@ -288,7 +290,7 @@ void app_scene_arp_scanner_on_exit(void* context) {
     // If scene is in state 0 it finished the
     switch(scene_manager_get_scene_state(app->scene_manager, app_scene_arp_scanner_option)) {
     case ARP_STATE_START_SCAN:
-    case ARP_STATE_SPOOF:
+        IF_PENTEST(case ARP_STATE_SPOOF:)
 
     default:
         break;
@@ -310,17 +312,18 @@ void ip_list_callback(void* context, uint32_t index) {
     scene_manager_next_scene(app->scene_manager, app_scene_arp_ip_show_details_option);
 }
 
-// For the arp spoofing
-void ip_list_spoofing_callback(void* context, uint32_t index) {
-    App* app = (App*)context;
+IF_PENTEST(
+    // For the arp spoofing
+    void ip_list_spoofing_callback(void* context, uint32_t index) {
+        App* app = (App*)context;
 
-    // copy the IP
-    memcpy(app->ip_helper, app->ip_list[index].ip, 4);
-    memcpy(app->mac_helper, app->ip_list[index].mac, 6);
+        // copy the IP
+        memcpy(app->ip_helper, app->ip_list[index].ip, 4);
+        memcpy(app->mac_helper, app->ip_list[index].mac, 6);
 
-    // Return to the last view that is the spoofing
-    scene_manager_previous_scene(app->scene_manager);
-}
+        // Return to the last view that is the spoofing
+        scene_manager_previous_scene(app->scene_manager);
+    })
 
 /**
  * This scene is to show the MAC address from the IP
@@ -428,10 +431,11 @@ void build_ip_submenu(App* app, uint32_t selection) {
         if(selection == ARP_STATE_START_SCAN) {
             submenu_add_item(
                 app->submenu, furi_string_get_cstr(app->text), i, ip_list_callback, app);
-        } else {
+        }
+        IF_PENTEST(else {
             submenu_add_item(
                 app->submenu, furi_string_get_cstr(app->text), i, ip_list_spoofing_callback, app);
-        }
+        })
     }
 }
 

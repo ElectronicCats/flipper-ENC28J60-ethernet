@@ -1,12 +1,31 @@
+ETHERNET_APP_COMMON = {
+    "apptype": FlipperAppType.EXTERNAL,
+    "entry_point": "app_main",
+    "requires": ["gui"],
+    "stack_size": 30 * 1024,
+    "fap_icon": "assets/logo_icon.png",
+    "fap_category": "Electronic Cats",
+    "fap_icon_assets": "assets",
+    "fap_icon_assets_symbol": "ethernet_app",
+    "fap_version": (1, 0),
+}
+
 App(
-    appid="ethernet_app",
-    name="Ethernet App",
-    apptype=FlipperAppType.EXTERNAL,
-    entry_point="app_main",
-    requires=["gui"],
-    stack_size=30 * 1024,
-    fap_icon="assets/logo_icon.png",
-    fap_category="ElectronicCats",
-    fap_icon_assets="assets",
-    fap_version=(1, 0),
+    appid="ethernet_admin",
+    name="Ethernet App (Admin)",
+    cdefines=[("PENTEST_MODE", 0)],
+    sources=[
+        "*.c*",
+        "!ArpMenuScene.c",
+        "!ArpspoofingScene.c",
+        "!ArpSpoofingSpecificIP.c",
+    ],
+    **ETHERNET_APP_COMMON,
+)
+
+App(
+    appid="ethernet_pentest",
+    name="Ethernet App (Pentest)",
+    cdefines=[("PENTEST_MODE", 1)],
+    **ETHERNET_APP_COMMON,
 )
