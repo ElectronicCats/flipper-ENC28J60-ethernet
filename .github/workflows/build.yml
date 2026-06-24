@@ -39,22 +39,41 @@ jobs:
           sdk-index-url: https://up.unleashedflip.com/directory.json
           sdk-channel: release
           app-dir: ./EthernetAppDemo/
-
       - name: Rename FAP Artifact
         id: rename-fap
         run: |
-          ORIGINAL="${{ steps.build-app.outputs.fap-artifacts }}"
-          RENAMED="${ORIGINAL%.fap}_${{ env.TAG_NAME }}.fap"
+          FILES="${{ steps.build-app.outputs.fap-artifacts }}"
 
-          mv "$ORIGINAL" "$RENAMED"
+          RENAMED_FILES=""
 
-          echo "RENAMED_FAP=$RENAMED" >> $GITHUB_ENV
+          while IFS= read -r FILE; do
+            [ -z "$FILE" ] && continue
+
+            RENAMED="${FILE%.fap}_${{ env.TAG_NAME }}.fap"
+
+            mv "$FILE" "$RENAMED"
+
+            RENAMED_FILES="${RENAMED_FILES}${RENAMED}"$'\n'
+          done <<< "$FILES"
+
+          {
+            echo "RENAMED_FAPS<<EOF"
+            echo "$RENAMED_FILES"
+            echo "EOF"
+          } >> "$GITHUB_ENV"
+
+      - name: Debug renamed files
+        run: |
+          echo "==== RENAMED_FAPS ===="
+          printf '%s\n' "${{ env.RENAMED_FAPS }}"
+          echo "======================"
 
       - name: Upload app artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.event.repository.name }}-${{ env.TAG_NAME }}
-          path: ${{ env.RENAMED_FAP }}
+          path: |
+            ${{ env.RENAMED_FAPS }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -66,7 +85,7 @@ jobs:
           body_path: release-notes/${{ env.TAG_NAME }}.md
 
           files: |
-            ${{ env.RENAMED_FAP }}
+            ${{ env.RENAMED_FAPS }}
 
           draft: false
           prerelease: false
