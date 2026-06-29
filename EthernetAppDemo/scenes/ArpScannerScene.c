@@ -449,7 +449,7 @@ void ip_list_select_callback(void* context, uint32_t index) {
     scene_manager_previous_scene(app->scene_manager);
 }
 
-/**
+/**+
  * Thread for the ARP Scanner
  */
 
@@ -469,13 +469,18 @@ int32_t arp_scanner_thread(void* context) {
         // F0.3c — arp_scan_network now takes a scanner_session_t.
         scanner_session_t scanner;
         scanner_session_init(&scanner, app);
+
         arp_scan_network(
             &scanner,
             app->ip_list,
             app->scan_params.ip_start,
             &app->ip_counter,
             app->scan_params.range_ip);
+
         scanner_session_deinit(&scanner);
+
+        // Persist ARP cache so both FAPs share the latest scan results.
+        settings_save(app);
     }
 
     view_dispatcher_send_custom_event(app->view_dispatcher, 1);

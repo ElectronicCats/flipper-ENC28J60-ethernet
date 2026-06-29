@@ -258,6 +258,8 @@ int32_t thread_for_spoofing_specific_ip(void* context) {
     App* app = (App*)context;
 
     enc28j60_t* ethernet = app->ethernet;
+    scanner_session_t scanner;
+    scanner_session_init(&scanner, app);
 
     // frames to send
     uint8_t buffer_to_ip[MAX_FRAMELEN] = {0}; // Frame to send to the specific IP
@@ -266,11 +268,6 @@ int32_t thread_for_spoofing_specific_ip(void* context) {
     // Just the addreses for the specific device to disconnect
     uint8_t* ip_device_to_disconnect = app->scan_params.target_ip; // IP address
     uint8_t mac_device_to_disconnect[6] = {0}; // Mac address
-
-    // Just an alternative to get the gateway IP
-    // (This is unuseful, is not to get the real IP for the mac address ofour flipper)
-    uint8_t ip_alternative[4] = {192, 168, 0, 1};
-    uint8_t mac_alternative[6] = {1, 1, 1, 1, 1, 2};
 
     // Variable for time
     uint32_t time_out = 0;
@@ -304,20 +301,13 @@ int32_t thread_for_spoofing_specific_ip(void* context) {
     // draw the waiting attack
     if(program_loop) {
         // then get mac gateway
-        if(!arp_get_specific_mac(
-               ethernet, ip_alternative, app->ip_gateway, mac_alternative, app->mac_gateway)) {
+        if(!scanner_resolve_next_hop(&scanner, ip_device_to_disconnect, mac_device_to_disconnect)) {
             draw_process_failed(app);
-            //goto finalize_arp_spoofing_ip;
             program_loop = false;
         }
 
         // get the mac of the device
-        if(!arp_get_specific_mac(
-               ethernet,
-               ethernet->ip_address, //ip_alternative,
-               ip_device_to_disconnect,
-               ethernet->mac_address, //mac_alternative,
-               mac_device_to_disconnect)) {
+        if(!scanner_resolve_next_hop(&scanner, app->ip_gateway, app->mac_gateway)) {
             draw_process_failed(app);
             program_loop = false;
         }
@@ -359,6 +349,8 @@ int32_t thread_for_spoofing_specific_ip(void* context) {
 
         furi_delay_ms(1);
     }
+
+    scanner_session_deinit(&scanner);
 
     return 0;
 }

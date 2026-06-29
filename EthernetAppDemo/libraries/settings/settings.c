@@ -4,7 +4,7 @@
 #define SETTINGS_FILETYPE "Flipper ENC28J60 Ethernet App Settings"
 // F0.5f — bumped from 1 to 2 to add gateway/mac_gateway/is_dora.
 // load() of older v1 files still works (extra fields are just absent).
-#define SETTINGS_VERSION  2
+#define SETTINGS_VERSION  3
 #define SETTINGS_PATH     PATHAPPEXT "/settings.cfg"
 
 void settings_load(App* app) {
@@ -25,7 +25,7 @@ void settings_load(App* app) {
         if(!flipper_format_read_header(ff, file_type, &version)) break;
         // F0.5f — accept v1 (pre-gateway-persist) and v2 to avoid
         // resetting users' persisted MAC/IP just because the schema grew.
-        if(version != 1 && version != 2) break;
+        if(version != 1 && version != 2 && version != 3) break;
         if(furi_string_cmp_str(file_type, SETTINGS_FILETYPE) != 0) break;
 
         // MAC — also push to chip registers if present. enc28j60_set_mac
@@ -76,6 +76,21 @@ void settings_load(App* app) {
         if(flipper_format_read_uint32(ff, "scan_range_ip", &u32_tmp, 1)) {
             app->scan_params.range_ip = (uint8_t)u32_tmp;
         }
+
+        if(flipper_format_read_uint32(ff, "arp_count", &u32_tmp, 1)) {
+            if(u32_tmp <= 255) {
+                app->ip_counter = (uint8_t)u32_tmp;
+
+                if(app->ip_counter > 0) {
+                    flipper_format_read_hex(
+                        ff,
+                        "arp_cache",
+                        (uint8_t*)app->ip_list,
+                        sizeof(arp_list) * app->ip_counter);
+                }
+            }
+        }
+
     } while(false);
 
     furi_string_free(file_type);
@@ -118,6 +133,20 @@ void settings_save(App* app) {
 
         u32_tmp = app->scan_params.range_ip;
         if(!flipper_format_write_uint32(ff, "scan_range_ip", &u32_tmp, 1)) break;
+
+        // ARP cache
+        u32_tmp = app->ip_counter;
+        if(!flipper_format_write_uint32(ff, "arp_count", &u32_tmp, 1)) break;
+
+        if(app->ip_counter > 0) {
+            if(!flipper_format_write_hex(
+                   ff,
+                   "arp_cache",
+                   (const uint8_t*)app->ip_list,
+                   sizeof(arp_list) * app->ip_counter))
+                break;
+        }
+
     } while(false);
 
     flipper_format_free(ff);

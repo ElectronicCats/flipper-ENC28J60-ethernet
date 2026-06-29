@@ -117,7 +117,7 @@ Scene inventory (14 scenes):
 - `enc28j60.{c,h}` — port of EtherCard's ENC28J60 driver
   (snake_case, Furi HAL SPI). GPL-2.0-or-later carve-out, D1.
   Per-instance `FuriMutex* mutex` serializes register access (F0.5a).
-  RX ring 3 KB at `0x0000-0x0BFF`, TX 1.5 KB at `0x0C00-0x11FF`.
+  RX ring 6 KB at `0x0000-0x17FF`, TX 2 KB at `0x1800-0x1FFF`.
 - `Spi_lib.{c,h}` — Electronic Cats Furi HAL SPI shim, MIT.
   Bus pins 2/3/4/5 = PA7/PA6/PA4/PB3.
 - `rx_dispatch.{c,h}` — single-thread RX dispatcher, INT-driven,

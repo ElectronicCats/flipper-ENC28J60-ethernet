@@ -135,6 +135,13 @@ bool arp_get_specific_mac(
     uint8_t* sender_mac,
     uint8_t* target_mac);
 
+bool arp_resolve_target_mac(
+    struct ScannerSession* scanner,
+    uint8_t sender_ip[4],
+    uint8_t sender_mac[6],
+    uint8_t target_ip[4],
+    uint8_t target_mac[6]);
+
 /**
  * @brief Checks if an incoming packet is a requested ARP.
  *
