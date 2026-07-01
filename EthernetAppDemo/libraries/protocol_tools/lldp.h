@@ -33,8 +33,11 @@ typedef struct {
     char port_id[64];
     char system_name[64];
     char system_description[128];
+    char management_address[48];
 
     uint16_t ttl;
+    uint16_t system_capabilities;
+    uint16_t enabled_capabilities;
 
     bool valid;
 } lldp_info_t;
