@@ -16,6 +16,55 @@ static void lldp_mac_to_string(const uint8_t* mac, char* output, size_t output_s
         mac[5]);
 }
 
+static void lldp_parse_chassis_id(const uint8_t* ptr, uint16_t tlv_length, lldp_info_t* info) {
+    if(tlv_length < 2) return;
+
+    uint8_t subtype = ptr[0];
+
+    switch(subtype) {
+    case LLDP_CHASSIS_MAC_ADDRESS:
+
+        if(tlv_length == 7) {
+            lldp_mac_to_string(&ptr[1], info->chassis_id, sizeof(info->chassis_id));
+        }
+
+        break;
+
+    default:
+        break;
+    }
+}
+
+static void lldp_parse_port_id(const uint8_t* ptr, uint16_t tlv_length, lldp_info_t* info) {
+    if(tlv_length < 2) return;
+
+    size_t port_length = tlv_length - 1;
+
+    if(port_length >= sizeof(info->port_id)) port_length = sizeof(info->port_id) - 1;
+
+    memcpy(info->port_id, &ptr[1], port_length);
+
+    info->port_id[port_length] = '\0';
+}
+
+static void lldp_parse_ttl(const uint8_t* ptr, uint16_t tlv_length, lldp_info_t* info) {
+    if(tlv_length != 2) return;
+
+    info->ttl = ((uint16_t)ptr[0] << 8) | ptr[1];
+}
+
+static void lldp_parse_system_name(const uint8_t* ptr, uint16_t tlv_length, lldp_info_t* info) {
+    if(tlv_length == 0) return;
+
+    size_t length = tlv_length;
+
+    if(length >= sizeof(info->system_name)) length = sizeof(info->system_name) - 1;
+
+    memcpy(info->system_name, ptr, length);
+
+    info->system_name[length] = '\0';
+}
+
 bool is_lldp(uint8_t* buffer) {
     if(buffer == NULL) return false;
 
@@ -27,10 +76,12 @@ bool is_lldp(uint8_t* buffer) {
 }
 
 bool lldp_parse(const uint8_t* frame, uint16_t length, lldp_info_t* info) {
+    if(!frame || !info) return false;
+
+    if(length <= ETHERNET_HEADER_LEN) return false;
+
     const uint8_t* ptr = frame + ETHERNET_HEADER_LEN;
     const uint8_t* end = frame + length;
-
-    if(!frame || !info) return false;
 
     memset(info, 0, sizeof(*info));
 
@@ -45,10 +96,26 @@ bool lldp_parse(const uint8_t* frame, uint16_t length, lldp_info_t* info) {
 
         if(ptr + tlv_length > end) return false;
 
-        if(tlv_type == LLDP_TLV_END) break;
+        if(tlv_type == LLDP_TLV_END) {
+            info->valid = true;
+            return true;
+        }
 
         switch(tlv_type) {
         case LLDP_TLV_CHASSIS_ID:
+            lldp_parse_chassis_id(ptr, tlv_length, info);
+            break;
+
+        case LLDP_TLV_PORT_ID:
+            lldp_parse_port_id(ptr, tlv_length, info);
+            break;
+
+        case LLDP_TLV_TTL:
+            lldp_parse_ttl(ptr, tlv_length, info);
+            break;
+
+        case LLDP_TLV_SYSTEM_NAME:
+            lldp_parse_system_name(ptr, tlv_length, info);
             break;
 
         default:
@@ -56,44 +123,6 @@ bool lldp_parse(const uint8_t* frame, uint16_t length, lldp_info_t* info) {
         }
 
         ptr += tlv_length;
-    }
-
-    uint8_t dummy_mac[6] = {0};
-
-    lldp_mac_to_string(dummy_mac, info->chassis_id, sizeof(info->chassis_id));
-
-    if(length <= ETHERNET_HEADER_LEN) return false;
-
-    uint16_t offset = ETHERNET_HEADER_LEN;
-
-    while(offset + 2 <= length) {
-        uint16_t tlv = ((uint16_t)frame[offset] << 8) | frame[offset + 1];
-
-        uint8_t type = tlv >> 9;
-        uint16_t tlv_length = tlv & 0x01FF;
-
-        offset += 2;
-
-        if(offset + tlv_length > length) break;
-
-        switch(type) {
-        case LLDP_TLV_TTL:
-
-            if(tlv_length == 2) {
-                info->ttl = ((uint16_t)frame[offset] << 8) | frame[offset + 1];
-            }
-
-            break;
-
-        case LLDP_TLV_END:
-            info->valid = true;
-            return true;
-
-        default:
-            break;
-        }
-
-        offset += tlv_length;
     }
 
     return false;
