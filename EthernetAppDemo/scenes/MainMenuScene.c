@@ -21,6 +21,7 @@ const uint32_t time_showing = 250;
 enum {
     GET_IP_OPTION,
     SCAN_HOSTS_OPTION,
+    PASSIVE_DISCOVERY_OPTION,
     PING_OPTION,
     PORTS_SCANNER_OPTION,
     OS_DETECTOR_OPTION,
@@ -58,6 +59,10 @@ void main_menu_options_callback(void* context, uint32_t index) {
 
     case SCAN_HOSTS_OPTION:
         scene_manager_next_scene(app->scene_manager, app_scene_arp_scanner_menu_option);
+        break;
+
+    case PASSIVE_DISCOVERY_OPTION:
+        scene_manager_next_scene(app->scene_manager, app_scene_passive_discovery_option);
         break;
 
     case SNIFFER_OPTION:
@@ -127,6 +132,15 @@ void app_scene_main_menu_on_enter(void* context) {
 #if !PENTEST_MODE
     submenu_add_item(
         app->submenu, "Scan Hosts", SCAN_HOSTS_OPTION, main_menu_options_callback, app);
+#endif
+
+#if !PENTEST_MODE
+    submenu_add_item(
+        app->submenu,
+        "Passive Discovery",
+        PASSIVE_DISCOVERY_OPTION,
+        main_menu_options_callback,
+        app);
 #endif
 
 #if !PENTEST_MODE
