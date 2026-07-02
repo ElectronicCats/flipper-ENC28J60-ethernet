@@ -6,6 +6,9 @@
 
 #define LLDP_ETHERTYPE 0x88CC
 
+/**
+ * @brief LLDP TLV types defined by IEEE 802.1AB.
+ */
 typedef enum {
     LLDP_TLV_END = 0,
     LLDP_TLV_CHASSIS_ID = 1,
@@ -18,6 +21,9 @@ typedef enum {
     LLDP_TLV_MANAGEMENT_ADDRESS = 8,
 } lldp_tlv_type_t;
 
+/**
+ * @brief LLDP Chassis ID subtypes defined by IEEE 802.1AB.
+ */
 typedef enum {
     LLDP_CHASSIS_COMPONENT = 1,
     LLDP_CHASSIS_INTERFACE_ALIAS = 2,
@@ -28,6 +34,13 @@ typedef enum {
     LLDP_CHASSIS_LOCAL = 7,
 } lldp_chassis_subtype_t;
 
+/**
+ * @brief Parsed information extracted from an LLDP Data Unit (LLDPDU).
+ *
+ * This structure stores the most relevant information advertised by a
+ * neighboring device according to IEEE 802.1AB. Fields that are not
+ * present in the received LLDP frame remain empty or set to zero.
+ */
 typedef struct {
     char chassis_id[64];
     char port_id[64];
