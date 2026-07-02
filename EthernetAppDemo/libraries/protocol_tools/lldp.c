@@ -108,37 +108,26 @@ static void
 }
 
 bool lldp_fill_neighbor(const lldp_info_t* info, neighbor_t* neighbor) {
-    if(!info || !neighbor) {
+    if(!info || !neighbor || !info->valid) {
         return false;
     }
 
-    memset(neighbor, 0, sizeof(*neighbor));
+    memset(neighbor, 0, sizeof(neighbor_t));
 
-    memcpy(neighbor->mac, info->source_mac, sizeof(neighbor->mac));
+    memcpy(neighbor->mac, info->source_mac, 6);
 
-    lldp_copy_string_field(
-        (const uint8_t*)info->system_name,
-        strlen(info->system_name),
-        neighbor->name,
-        sizeof(neighbor->name));
-
-    lldp_copy_string_field(
-        (const uint8_t*)info->port_id,
-        strlen(info->port_id),
-        neighbor->port,
-        sizeof(neighbor->port));
-
-    lldp_copy_string_field(
-        (const uint8_t*)info->management_address,
-        strlen(info->management_address),
+    strncpy(neighbor->name, info->system_name, sizeof(neighbor->name) - 1);
+    strncpy(neighbor->port, info->port_id, sizeof(neighbor->port) - 1);
+    strncpy(
         neighbor->management_address,
-        sizeof(neighbor->management_address));
+        info->management_address,
+        sizeof(neighbor->management_address) - 1);
 
     neighbor->ttl = info->ttl;
-
-    neighbor->capabilities = info->enabled_capabilities;
+    neighbor->capabilities = info->system_capabilities;
 
     neighbor->discovery_sources = NEIGHBOR_SOURCE_LLDP;
+    neighbor->occupied = true;
 
     return true;
 }

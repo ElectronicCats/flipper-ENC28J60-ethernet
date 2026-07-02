@@ -9,7 +9,9 @@ void lldp_module_reset(void) {
 }
 
 bool lldp_module_process_frame(uint8_t* frame, uint16_t length) {
-    if(!frame) return false;
+    if(!frame) {
+        return false;
+    }
 
     if(!is_lldp(frame)) {
         return false;
@@ -27,7 +29,7 @@ bool lldp_module_process_frame(uint8_t* frame, uint16_t length) {
         return false;
     }
 
-    return neighbor_db_add(&neighbor);
+    return neighbor_db_update(&neighbor);
 }
 
 bool lldp_packet_predicate(const uint8_t* frame, uint16_t len, void* ctx) {
