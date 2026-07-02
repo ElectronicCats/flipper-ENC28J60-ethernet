@@ -6,6 +6,8 @@
 
 #define LLDP_ETHERTYPE 0x88CC
 
+#include "neighbor_db.h"
+
 /**
  * @brief LLDP TLV types defined by IEEE 802.1AB.
  */
@@ -48,6 +50,7 @@ typedef struct {
     char system_description[128];
     char management_address[48];
 
+    uint8_t source_mac[6];
     uint16_t ttl;
     uint16_t system_capabilities;
     uint16_t enabled_capabilities;
@@ -78,5 +81,7 @@ bool is_lldp(uint8_t* buffer);
  * @return false otherwise.
  */
 bool lldp_parse(const uint8_t* frame, uint16_t length, lldp_info_t* info);
+
+bool lldp_fill_neighbor(const lldp_info_t* info, neighbor_t* neighbor);
 
 #endif

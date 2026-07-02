@@ -1,5 +1,6 @@
 #include "lldp.h"
 #include "ethernet_protocol.h"
+#include "neighbor_db.h"
 
 static void lldp_mac_to_string(const uint8_t* mac, char* output, size_t output_size) {
     if(!mac || !output || output_size < 18) return;
@@ -106,6 +107,42 @@ static void
     lldp_ipv4_to_string(&ptr[2], info->management_address, sizeof(info->management_address));
 }
 
+bool lldp_fill_neighbor(const lldp_info_t* info, neighbor_t* neighbor) {
+    if(!info || !neighbor) {
+        return false;
+    }
+
+    memset(neighbor, 0, sizeof(*neighbor));
+
+    memcpy(neighbor->mac, info->source_mac, sizeof(neighbor->mac));
+
+    lldp_copy_string_field(
+        (const uint8_t*)info->system_name,
+        strlen(info->system_name),
+        neighbor->name,
+        sizeof(neighbor->name));
+
+    lldp_copy_string_field(
+        (const uint8_t*)info->port_id,
+        strlen(info->port_id),
+        neighbor->port,
+        sizeof(neighbor->port));
+
+    lldp_copy_string_field(
+        (const uint8_t*)info->management_address,
+        strlen(info->management_address),
+        neighbor->management_address,
+        sizeof(neighbor->management_address));
+
+    neighbor->ttl = info->ttl;
+
+    neighbor->capabilities = info->enabled_capabilities;
+
+    neighbor->discovery_sources = NEIGHBOR_SOURCE_LLDP;
+
+    return true;
+}
+
 bool is_lldp(uint8_t* buffer) {
     if(buffer == NULL) return false;
 
@@ -125,6 +162,10 @@ bool lldp_parse(const uint8_t* frame, uint16_t length, lldp_info_t* info) {
     const uint8_t* end = frame + length;
 
     memset(info, 0, sizeof(*info));
+
+    ethernet_header_t header = ethernet_get_header((uint8_t*)frame);
+
+    memcpy(info->source_mac, header.mac_source, sizeof(info->source_mac));
 
     while(ptr + 2 <= end) {
         uint16_t tlv_header = (ptr[0] << 8) | ptr[1];
