@@ -65,6 +65,27 @@ typedef enum {
     ip_gotten_event,
 } get_ip_events;
 
+// For Passive Discovery scene
+typedef enum {
+    PassiveDiscoveryStateConfig,
+    PassiveDiscoveryStateListening,
+    PassiveDiscoveryStateFinished,
+} passive_discovery_state_t;
+
+// For Passive Discovery scene protocols
+typedef enum {
+    PassiveProtocolLLDP = 0,
+    PassiveProtocolEAPOL,
+    PassiveProtocolCDP,
+    PassiveProtocolCount,
+} passive_protocol_t;
+
+// For Passive Discovery scene protocol names
+typedef struct {
+    passive_discovery_state_t state;
+    passive_protocol_t protocol;
+} passive_discovery_context_t;
+
 // Cross-scene scan parameters (formerly file-static globals scattered
 // across scenes; centralized in F0.1 to remove name collisions and
 // enable persistence in F0.2).
@@ -105,6 +126,7 @@ typedef struct {
     bool open_pcap_after_sniff;
     volatile bool sniffer_stop;
     volatile bool sniffer_finished;
+    volatile bool passive_discovery_stop;
 
     SceneManager* scene_manager;
     ViewDispatcher* view_dispatcher;
@@ -140,6 +162,8 @@ typedef struct {
     uint16_t selected_menu_index;
 
     scan_params_t scan_params; // F0.1 — centralized cross-scene targets
+
+    passive_discovery_context_t passive_discovery; // F1.1 — Passive Discovery scene state & protocol
 
     rx_handle_t* auto_arp_handle;
     rx_handle_t* auto_icmp_handle;
