@@ -127,6 +127,7 @@ typedef struct {
     volatile bool sniffer_stop;
     volatile bool sniffer_finished;
     volatile bool passive_discovery_stop;
+    uint16_t passive_neighbor_count;
 
     SceneManager* scene_manager;
     ViewDispatcher* view_dispatcher;

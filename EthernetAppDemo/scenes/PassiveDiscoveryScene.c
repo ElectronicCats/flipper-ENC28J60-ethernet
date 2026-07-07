@@ -48,6 +48,10 @@ static void passive_discovery_draw_config(App* app) {
 }
 
 static void passive_discovery_draw_listening(App* app) {
+    char neighbors_text[32];
+
+    snprintf(neighbors_text, sizeof(neighbors_text), "Neighbors: %u", app->passive_neighbor_count);
+
     widget_reset(app->widget);
 
     widget_add_string_element(
@@ -55,6 +59,9 @@ static void passive_discovery_draw_listening(App* app) {
 
     widget_add_string_element(
         app->widget, 64, 30, AlignCenter, AlignCenter, FontSecondary, "Listening...");
+
+    widget_add_string_element(
+        app->widget, 64, 45, AlignCenter, AlignCenter, FontPrimary, neighbors_text);
 
     widget_add_button_element(
         app->widget, GuiButtonTypeCenter, "Stop", passive_discovery_button_callback, app);
@@ -76,11 +83,13 @@ static void passive_discovery_refresh(App* app) {
 }
 
 void app_scene_passive_discovery_on_enter(void* context) {
+    printf("PASSIVE SCENE ENTER\n");
     App* app = context;
 
     app->passive_discovery.state = PassiveDiscoveryStateConfig;
     app->passive_discovery.protocol = PassiveProtocolLLDP;
     app->passive_discovery_stop = false;
+    app->passive_neighbor_count = 0;
 
     passive_discovery_refresh(app);
 
@@ -88,14 +97,39 @@ void app_scene_passive_discovery_on_enter(void* context) {
 }
 
 bool app_scene_passive_discovery_on_event(void* context, SceneManagerEvent event) {
-    UNUSED(context);
-    UNUSED(event);
+    App* app = context;
+
+    if(event.type == SceneManagerEventTypeBack) {
+        if(app->passive_discovery.state == PassiveDiscoveryStateListening) {
+            app->passive_discovery_stop = true;
+
+            if(app->thread_alternative) {
+                furi_thread_join(app->thread_alternative);
+
+                furi_thread_free(app->thread_alternative);
+
+                app->thread_alternative = NULL;
+            }
+        }
+
+        return scene_manager_previous_scene(app->scene_manager);
+    }
+
+    if(event.type == SceneManagerEventTypeCustom) {
+        if(event.event == 1) {
+            passive_discovery_refresh(app);
+
+            return true;
+        }
+    }
 
     return false;
 }
 
 void app_scene_passive_discovery_on_exit(void* context) {
     App* app = context;
+
+    app->passive_discovery_stop = true;
 
     if(app->thread_alternative) {
         furi_thread_join(app->thread_alternative);
@@ -150,6 +184,18 @@ static void
             furi_thread_start(app->thread_alternative);
         } else if(app->passive_discovery.state == PassiveDiscoveryStateListening) {
             app->passive_discovery_stop = true;
+
+            if(app->thread_alternative) {
+                furi_thread_join(app->thread_alternative);
+
+                furi_thread_free(app->thread_alternative);
+
+                app->thread_alternative = NULL;
+            }
+
+            app->passive_discovery.state = PassiveDiscoveryStateConfig;
+
+            passive_discovery_refresh(app);
         }
         break;
 
@@ -159,6 +205,7 @@ static void
 }
 
 int32_t passive_discovery_thread(void* context) {
+    printf("PASSIVE THREAD ENTERED\n");
     App* app = context;
     enc28j60_t* ethernet = app->ethernet;
 
@@ -180,6 +227,8 @@ int32_t passive_discovery_thread(void* context) {
         furi_delay_ms(1500);
         return 0;
     }
+
+    rx_dispatch_init(app);
 
     scanner_session_t session;
 
@@ -204,7 +253,19 @@ int32_t passive_discovery_thread(void* context) {
         switch(app->passive_discovery.protocol) {
         case PassiveProtocolLLDP:
 
-            lldp_module_run(&session, 500);
+            bool result = lldp_module_run(&session, 500);
+
+            if(result) {
+                FURI_LOG_I("PASSIVE", "LLDP packet processed");
+            }
+
+            uint16_t count = neighbor_db_count();
+
+            if(count != app->passive_neighbor_count) {
+                app->passive_neighbor_count = count;
+
+                view_dispatcher_send_custom_event(app->view_dispatcher, 1);
+            }
 
             break;
 
@@ -220,6 +281,8 @@ int32_t passive_discovery_thread(void* context) {
     }
 
     scanner_session_deinit(&session);
+
+    rx_dispatch_deinit(app);
 
     return 0;
 }
