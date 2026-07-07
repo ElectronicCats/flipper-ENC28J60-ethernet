@@ -163,14 +163,23 @@ bool lldp_parse(const uint8_t* frame, uint16_t length, lldp_info_t* info) {
 
         uint16_t tlv_length = tlv_header & 0x1FF;
 
+        FURI_LOG_I("LLDP", "TLV type=%u length=%u", tlv_type, tlv_length);
+
         ptr += 2;
 
-        if(ptr + tlv_length > end) return false;
+        if(ptr + tlv_length > end) {
+            FURI_LOG_E("LLDP", "TLV exceeds frame (type=%u len=%u)", tlv_type, tlv_length);
+
+            return false;
+        }
 
         if(tlv_type == LLDP_TLV_END) {
+            FURI_LOG_I("LLDP", "END TLV reached");
             info->valid = true;
             return true;
         }
+
+        FURI_LOG_I("LLDP", "TLV=%u LEN=%u", tlv_type, tlv_length);
 
         switch(tlv_type) {
         case LLDP_TLV_CHASSIS_ID:

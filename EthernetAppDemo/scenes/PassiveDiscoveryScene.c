@@ -236,6 +236,7 @@ int32_t passive_discovery_thread(void* context) {
 
     switch(app->passive_discovery.protocol) {
     case PassiveProtocolLLDP:
+        enable_multicast(ethernet);
         lldp_module_init();
         break;
 
