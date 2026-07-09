@@ -37,9 +37,13 @@ static void
 }
 
 static void lldp_parse_chassis_id(const uint8_t* ptr, uint16_t tlv_length, lldp_info_t* info) {
-    if(tlv_length < 2) return;
+    if(tlv_length < 2) {
+        return;
+    }
 
     uint8_t subtype = ptr[0];
+
+    info->chassis_subtype = subtype;
 
     switch(subtype) {
     case LLDP_CHASSIS_MAC_ADDRESS:
@@ -50,7 +54,34 @@ static void lldp_parse_chassis_id(const uint8_t* ptr, uint16_t tlv_length, lldp_
 
         break;
 
+    case LLDP_CHASSIS_NETWORK_ADDRESS:
+
+        if(tlv_length >= 6 && ptr[1] == 1) {
+            lldp_ipv4_to_string(&ptr[2], info->chassis_id, sizeof(info->chassis_id));
+        }
+
+        break;
+
+    case LLDP_CHASSIS_INTERFACE_NAME:
+
+    case LLDP_CHASSIS_INTERFACE_ALIAS:
+
+    case LLDP_CHASSIS_LOCAL:
+
+    case LLDP_CHASSIS_COMPONENT:
+
+    case LLDP_CHASSIS_PORT_COMPONENT:
+
+        lldp_copy_string_field(
+            &ptr[1], tlv_length - 1, info->chassis_id, sizeof(info->chassis_id));
+
+        break;
+
     default:
+
+        lldp_copy_string_field(
+            &ptr[1], tlv_length - 1, info->chassis_id, sizeof(info->chassis_id));
+
         break;
     }
 }
@@ -79,6 +110,11 @@ static void
 
     lldp_copy_string_field(
         ptr, tlv_length, info->system_description, sizeof(info->system_description));
+
+    lldp_copy_string_field(
+        ptr, tlv_length, info->system_description, sizeof(info->system_description));
+
+    FURI_LOG_I("LLDP", "Description='%s'", info->system_description);
 }
 
 static void
@@ -116,12 +152,18 @@ bool lldp_fill_neighbor(const lldp_info_t* info, neighbor_t* neighbor) {
 
     memcpy(neighbor->mac, info->source_mac, 6);
 
+    strncpy(neighbor->chassis_id, info->chassis_id, sizeof(neighbor->chassis_id) - 1);
+
+    neighbor->chassis_subtype = info->chassis_subtype;
+
     strncpy(neighbor->name, info->system_name, sizeof(neighbor->name) - 1);
     strncpy(neighbor->port, info->port_id, sizeof(neighbor->port) - 1);
     strncpy(
         neighbor->management_address,
         info->management_address,
         sizeof(neighbor->management_address) - 1);
+
+    strncpy(neighbor->description, info->system_description, sizeof(neighbor->description) - 1);
 
     neighbor->ttl = info->ttl;
     neighbor->capabilities = info->system_capabilities;

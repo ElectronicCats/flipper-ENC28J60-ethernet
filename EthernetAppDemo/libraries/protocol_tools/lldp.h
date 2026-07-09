@@ -51,6 +51,9 @@ typedef struct {
     char management_address[48];
 
     uint8_t source_mac[6];
+
+    lldp_chassis_subtype_t chassis_subtype;
+
     uint16_t ttl;
     uint16_t system_capabilities;
     uint16_t enabled_capabilities;

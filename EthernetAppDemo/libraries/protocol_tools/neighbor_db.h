@@ -29,7 +29,10 @@ typedef enum {
 typedef struct {
     uint8_t mac[6];
 
+    char chassis_id[64];
+    uint8_t chassis_subtype;
     char name[64];
+    char description[128];
     char port[64];
     char management_address[48];
 

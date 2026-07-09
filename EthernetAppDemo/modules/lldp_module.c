@@ -1,6 +1,7 @@
 #include "lldp_module.h"
 
 void lldp_module_init(void) {
+    FURI_LOG_W("LLDP", "neighbor_db_clear()");
     neighbor_db_clear();
 }
 
