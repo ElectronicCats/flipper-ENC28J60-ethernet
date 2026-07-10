@@ -62,6 +62,19 @@ bool neighbor_db_add(const neighbor_t* neighbor);
 
 bool neighbor_db_update(const neighbor_t* neighbor);
 
+/**
+ * @brief Saves the current neighbor database to persistent storage.
+ */
+void neighbor_db_save(void);
+
+/**
+ * @brief Loads the last neighbor database from persistent storage.
+ *
+ * @return true if a database was restored.
+ * @return false if no valid database exists.
+ */
+bool neighbor_db_load(void);
+
 neighbor_t* neighbor_db_get(size_t index);
 
 size_t neighbor_db_count(void);

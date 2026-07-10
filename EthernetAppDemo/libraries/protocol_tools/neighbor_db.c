@@ -1,4 +1,7 @@
 #include "neighbor_db.h"
+#include <storage/storage.h>
+
+#define NEIGHBOR_DB_FILE EXT_PATH("apps_data/ethernet/neighbors.db")
 
 static neighbor_t neighbors[NEIGHBOR_DB_MAX_ENTRIES];
 
@@ -8,6 +11,42 @@ void neighbor_db_clear(void) {
 
 void neighbor_db_init(void) {
     neighbor_db_clear();
+}
+
+void neighbor_db_save(void) {
+    Storage* storage = furi_record_open(RECORD_STORAGE);
+
+    File* file = storage_file_alloc(storage);
+
+    if(storage_file_open(file, NEIGHBOR_DB_FILE, FSAM_WRITE, FSOM_CREATE_ALWAYS)) {
+        storage_file_write(file, neighbors, sizeof(neighbors));
+    }
+
+    storage_file_close(file);
+    storage_file_free(file);
+
+    furi_record_close(RECORD_STORAGE);
+}
+
+bool neighbor_db_load(void) {
+    Storage* storage = furi_record_open(RECORD_STORAGE);
+
+    File* file = storage_file_alloc(storage);
+
+    bool ok = false;
+
+    if(storage_file_open(file, NEIGHBOR_DB_FILE, FSAM_READ, FSOM_OPEN_EXISTING)) {
+        if(storage_file_read(file, neighbors, sizeof(neighbors)) == sizeof(neighbors)) {
+            ok = true;
+        }
+    }
+
+    storage_file_close(file);
+    storage_file_free(file);
+
+    furi_record_close(RECORD_STORAGE);
+
+    return ok;
 }
 
 size_t neighbor_db_count(void) {
@@ -63,6 +102,8 @@ bool neighbor_db_add(const neighbor_t* neighbor) {
         *existing = *neighbor;
         existing->occupied = true;
 
+        neighbor_db_save();
+
         return true;
     }
 
@@ -70,6 +111,8 @@ bool neighbor_db_add(const neighbor_t* neighbor) {
         if(!neighbors[i].occupied) {
             neighbors[i] = *neighbor;
             neighbors[i].occupied = true;
+
+            neighbor_db_save();
 
             return true;
         }
@@ -91,6 +134,8 @@ bool neighbor_db_update(const neighbor_t* neighbor) {
 
     *existing = *neighbor;
     existing->occupied = true;
+
+    neighbor_db_save();
 
     return true;
 }

@@ -2,7 +2,7 @@
 
 void lldp_module_init(void) {
     FURI_LOG_W("LLDP", "neighbor_db_clear()");
-    neighbor_db_clear();
+    neighbor_db_load();
 }
 
 void lldp_module_reset(void) {

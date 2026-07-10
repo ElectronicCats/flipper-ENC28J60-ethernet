@@ -213,7 +213,9 @@ void app_scene_passive_discovery_on_enter(void* context) {
     app->passive_discovery.state = PassiveDiscoveryStateConfig;
     app->passive_discovery.protocol = PassiveProtocolLLDP;
     app->passive_discovery_stop = false;
-    app->passive_neighbor_count = 0;
+    neighbor_db_load();
+
+    app->passive_neighbor_count = passive_discovery_module_get_neighbor_count();
 
     passive_discovery_refresh(app);
 

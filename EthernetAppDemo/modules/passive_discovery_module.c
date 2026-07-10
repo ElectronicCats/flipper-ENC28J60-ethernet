@@ -153,6 +153,8 @@ static int32_t passive_discovery_thread(void* context) {
     scanner_session_init(&session, app);
 
     const PassiveProtocolHandler* handler = get_handler(app->passive_discovery.protocol);
+    neighbor_db_clear();
+    neighbor_db_save();
     if(handler && handler->init) {
         handler->init(app);
     }
