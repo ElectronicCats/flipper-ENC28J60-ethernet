@@ -122,3 +122,118 @@ size_t lldp_module_count(void) {
 neighbor_t* lldp_module_get(size_t index) {
     return neighbor_db_get(index);
 }
+
+static const char* lldp_get_display_name(void) {
+    return "LLDP";
+}
+
+static void lldp_init(App* app) {
+    enable_multicast(app->ethernet);
+    lldp_module_init();
+}
+
+static bool lldp_run(scanner_session_t* session, uint32_t timeout_ms) {
+    return lldp_module_run(session, timeout_ms);
+}
+
+static void lldp_cleanup(App* app) {
+    disable_multicast(app->ethernet);
+}
+
+static uint8_t lldp_get_details_page_count(neighbor_t* neighbor) {
+    UNUSED(neighbor);
+    return 3;
+}
+
+static void lldp_build_details_page(
+    neighbor_t* neighbor,
+    uint8_t page,
+    char* line1,
+    size_t line1_size,
+    char* line2,
+    size_t line2_size,
+    char* line3,
+    size_t line3_size,
+    char* line4,
+    size_t line4_size) {
+    if(!neighbor) return;
+
+    const char* chassis_type = "Unknown";
+
+    switch(neighbor->chassis_subtype) {
+    case LLDP_CHASSIS_MAC_ADDRESS:
+        chassis_type = "MAC";
+        break;
+    case LLDP_CHASSIS_NETWORK_ADDRESS:
+        chassis_type = "IPv4";
+        break;
+    case LLDP_CHASSIS_INTERFACE_NAME:
+        chassis_type = "IfName";
+        break;
+    case LLDP_CHASSIS_INTERFACE_ALIAS:
+        chassis_type = "Alias";
+        break;
+    case LLDP_CHASSIS_LOCAL:
+        chassis_type = "Local";
+        break;
+    case LLDP_CHASSIS_COMPONENT:
+        chassis_type = "Component";
+        break;
+    case LLDP_CHASSIS_PORT_COMPONENT:
+        chassis_type = "Port";
+        break;
+    }
+
+    switch(page) {
+    case 0:
+        snprintf(line1, line1_size, "Name:");
+        if(neighbor->name[0]) {
+            snprintf(line2, line2_size, "%s", neighbor->name);
+        } else {
+            snprintf(
+                line2,
+                line2_size,
+                "%02X:%02X:%02X:%02X:%02X:%02X",
+                neighbor->mac[0],
+                neighbor->mac[1],
+                neighbor->mac[2],
+                neighbor->mac[3],
+                neighbor->mac[4],
+                neighbor->mac[5]);
+        }
+        snprintf(line3, line3_size, "Chassis(%s)", chassis_type);
+        snprintf(
+            line4, line4_size, "%.20s", neighbor->chassis_id[0] ? neighbor->chassis_id : "Unknown");
+        break;
+
+    case 1:
+        snprintf(line1, line1_size, "Port: %.20s", neighbor->port[0] ? neighbor->port : "N/A");
+        snprintf(
+            line2,
+            line2_size,
+            "IP: %s",
+            neighbor->management_address[0] ? neighbor->management_address : "N/A");
+        snprintf(line3, line3_size, "TTL: %u", neighbor->ttl);
+        snprintf(line4, line4_size, "CAP: 0x%04X", neighbor->capabilities);
+        break;
+
+    case 2:
+        snprintf(line1, line1_size, "Description");
+        snprintf(line2, line2_size, "%.21s", neighbor->description);
+        snprintf(line3, line3_size, "%.21s", neighbor->description + 21);
+        snprintf(line4, line4_size, "%.21s", neighbor->description + 42);
+        break;
+
+    default:
+        break;
+    }
+}
+
+const PassiveProtocolHandler lldp_protocol_handler = {
+    .get_display_name = lldp_get_display_name,
+    .init = lldp_init,
+    .run = lldp_run,
+    .cleanup = lldp_cleanup,
+    .get_details_page_count = lldp_get_details_page_count,
+    .build_details_page = lldp_build_details_page,
+};

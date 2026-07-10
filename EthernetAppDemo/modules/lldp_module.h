@@ -4,12 +4,10 @@
 #include "../libraries/protocol_tools/lldp.h"
 #include "../libraries/protocol_tools/neighbor_db.h"
 #include "../libraries/scanner/scanner_session.h"
+#include "passive_protocol_handler.h"
 
 #include <stdint.h>
 #include <stdbool.h>
-
-#include "../libraries/protocol_tools/lldp.h"
-#include "../libraries/protocol_tools/neighbor_db.h"
 
 /**
  * @brief Initializes the LLDP discovery module.
@@ -56,3 +54,5 @@ neighbor_t* lldp_module_get(size_t index);
 bool lldp_packet_predicate(const uint8_t* frame, uint16_t len, void* ctx);
 
 bool lldp_module_run(scanner_session_t* session, uint32_t timeout_ms);
+
+extern const PassiveProtocolHandler lldp_protocol_handler;

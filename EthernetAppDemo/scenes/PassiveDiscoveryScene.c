@@ -1,20 +1,5 @@
 #include "../app_user.h"
-#include "../modules/lldp_module.h"
-
-typedef struct {
-    App* app;
-    volatile bool stopped;
-} passive_discovery_thread_state_t;
-
-static const char* passive_protocol_names[] = {
-    "LLDP",
-    "EAPOL",
-    "CDP",
-};
-
-int32_t passive_discovery_thread(void* context);
-
-static App* passive_discovery_app = NULL;
+#include "../modules/passive_discovery_module.h"
 
 static void
     passive_discovery_button_callback(GuiButtonType type, InputType input_type, void* context);
@@ -38,10 +23,10 @@ static void build_neighbor_submenu(App* app) {
 
     submenu_set_header(app->submenu, "DISCOVERED DEVICES");
 
-    FURI_LOG_I("PASSIVE", "DB count = %u", neighbor_db_count());
+    FURI_LOG_I("PASSIVE", "DB count = %u", passive_discovery_module_get_neighbor_count());
 
     for(size_t i = 0; i < NEIGHBOR_DB_MAX_ENTRIES; i++) {
-        neighbor_t* neighbor = neighbor_db_get(i);
+        neighbor_t* neighbor = passive_discovery_module_get_neighbor(i);
 
         FURI_LOG_I("PASSIVE", "slot=%u ptr=%p", i, neighbor);
 
@@ -83,7 +68,7 @@ static void show_neighbor_list(App* app) {
 }
 
 static void show_neighbor_details(App* app) {
-    neighbor_t* neighbor = neighbor_db_get(app->passive_selected_neighbor);
+    neighbor_t* neighbor = passive_discovery_module_get_neighbor(app->passive_selected_neighbor);
 
     widget_reset(app->widget);
 
@@ -94,108 +79,26 @@ static void show_neighbor_details(App* app) {
         return;
     }
 
-    char line1[64];
-    char line2[64];
-    char line3[64];
-    char line4[64];
+    char line1[64] = {0};
+    char line2[64] = {0};
+    char line3[64] = {0};
+    char line4[64] = {0};
 
-    const char* chassis_type = "Unknown";
+    uint8_t page_count =
+        passive_discovery_module_get_details_page_count(app->passive_discovery.protocol, neighbor);
 
-    switch(neighbor->chassis_subtype) {
-    case LLDP_CHASSIS_MAC_ADDRESS:
-        chassis_type = "MAC";
-        break;
-
-    case LLDP_CHASSIS_NETWORK_ADDRESS:
-        chassis_type = "IPv4";
-        break;
-
-    case LLDP_CHASSIS_INTERFACE_NAME:
-        chassis_type = "IfName";
-        break;
-
-    case LLDP_CHASSIS_INTERFACE_ALIAS:
-        chassis_type = "Alias";
-        break;
-
-    case LLDP_CHASSIS_LOCAL:
-        chassis_type = "Local";
-        break;
-
-    case LLDP_CHASSIS_COMPONENT:
-        chassis_type = "Component";
-        break;
-
-    case LLDP_CHASSIS_PORT_COMPONENT:
-        chassis_type = "Port";
-        break;
-    }
-
-    switch(app->details_page) {
-    case 0:
-
-        snprintf(line1, sizeof(line1), "Name:");
-
-        snprintf(line2, sizeof(line2), "%s", neighbor->name[0] ? neighbor->name : "Unknown");
-
-        if(neighbor->name[0]) {
-            snprintf(line2, sizeof(line2), "%s", neighbor->name);
-        } else {
-            snprintf(
-                line2,
-                sizeof(line2),
-                "%02X:%02X:%02X:%02X:%02X:%02X",
-                neighbor->mac[0],
-                neighbor->mac[1],
-                neighbor->mac[2],
-                neighbor->mac[3],
-                neighbor->mac[4],
-                neighbor->mac[5]);
-        }
-
-        snprintf(line3, sizeof(line3), "Chassis(%s)", chassis_type);
-
-        snprintf(
-            line4,
-            sizeof(line4),
-            "%.20s",
-            neighbor->chassis_id[0] ? neighbor->chassis_id : "Unknown");
-
-        break;
-
-    case 1:
-
-        snprintf(line1, sizeof(line1), "Port: %.20s", neighbor->port[0] ? neighbor->port : "N/A");
-
-        snprintf(
-            line2,
-            sizeof(line2),
-            "IP: %s",
-            neighbor->management_address[0] ? neighbor->management_address : "N/A");
-
-        snprintf(line3, sizeof(line3), "TTL: %u", neighbor->ttl);
-
-        snprintf(line4, sizeof(line4), "CAP: 0x%04X", neighbor->capabilities);
-
-        break;
-
-    case 2:
-
-        snprintf(line1, sizeof(line1), "Description");
-
-        snprintf(line2, sizeof(line2), "%.21s", neighbor->description);
-
-        snprintf(line3, sizeof(line3), "%.21s", neighbor->description + 21);
-
-        snprintf(line4, sizeof(line4), "%.21s", neighbor->description + 42);
-
-        //snprintf(line1, sizeof(line1), "SOURCE: LLDP");
-
-        break;
-
-    default:
-        break;
-    }
+    passive_discovery_module_build_details_page(
+        app->passive_discovery.protocol,
+        neighbor,
+        app->details_page,
+        line1,
+        sizeof(line1),
+        line2,
+        sizeof(line2),
+        line3,
+        sizeof(line3),
+        line4,
+        sizeof(line4));
 
     widget_add_string_element(
         app->widget, 64, 10, AlignCenter, AlignCenter, FontPrimary, "Neighbor Details");
@@ -210,7 +113,7 @@ static void show_neighbor_details(App* app) {
 
     char page_text[16];
 
-    snprintf(page_text, sizeof(page_text), "%u/3", app->details_page + 1);
+    snprintf(page_text, sizeof(page_text), "%u/%u", app->details_page + 1, page_count);
 
     widget_add_string_element(
         app->widget, 120, 5, AlignCenter, AlignCenter, FontSecondary, page_text);
@@ -235,7 +138,7 @@ static void passive_discovery_draw_config(App* app) {
         protocol_text,
         sizeof(protocol_text),
         "< %s >",
-        passive_protocol_names[app->passive_discovery.protocol]);
+        passive_discovery_module_get_protocol_name(app->passive_discovery.protocol));
 
     widget_add_string_element(
         app->widget, 64, 10, AlignCenter, AlignCenter, FontPrimary, "Passive Discovery");
@@ -307,8 +210,6 @@ void app_scene_passive_discovery_on_enter(void* context) {
     printf("PASSIVE SCENE ENTER\n");
     App* app = context;
 
-    passive_discovery_app = app;
-
     app->passive_discovery.state = PassiveDiscoveryStateConfig;
     app->passive_discovery.protocol = PassiveProtocolLLDP;
     app->passive_discovery_stop = false;
@@ -338,15 +239,7 @@ bool app_scene_passive_discovery_on_event(void* context, SceneManagerEvent event
         }
 
         if(app->passive_discovery.state == PassiveDiscoveryStateListening) {
-            app->passive_discovery_stop = true;
-
-            if(app->thread_alternative) {
-                furi_thread_join(app->thread_alternative);
-
-                furi_thread_free(app->thread_alternative);
-
-                app->thread_alternative = NULL;
-            }
+            passive_discovery_module_stop(app);
         }
 
         return scene_manager_previous_scene(app->scene_manager);
@@ -368,15 +261,7 @@ bool app_scene_passive_discovery_on_event(void* context, SceneManagerEvent event
 void app_scene_passive_discovery_on_exit(void* context) {
     App* app = context;
 
-    app->passive_discovery_stop = true;
-
-    if(app->thread_alternative) {
-        furi_thread_join(app->thread_alternative);
-
-        furi_thread_free(app->thread_alternative);
-
-        app->thread_alternative = NULL;
-    }
+    passive_discovery_module_stop(app);
 
     widget_reset(app->widget);
 }
@@ -393,7 +278,7 @@ static void
     case GuiButtonTypeLeft:
 
         if(app->passive_discovery.state == PassiveDiscoveryStateConfig) {
-            if(neighbor_db_count() > 0) {
+            if(passive_discovery_module_get_neighbor_count() > 0) {
                 app->passive_discovery.state = PassiveDiscoveryStateNeighborList;
 
                 show_neighbor_list(app);
@@ -423,12 +308,15 @@ static void
 
     case GuiButtonTypeRight:
         if(app->passive_discovery.state == PassiveDiscoveryStateConfig) {
-            app->passive_discovery.protocol =
-                (app->passive_discovery.protocol + 1) % PassiveProtocolCount;
+            app->passive_discovery.protocol = (app->passive_discovery.protocol + 1) %
+                                              passive_discovery_module_get_protocol_count();
 
             passive_discovery_refresh(app);
         } else if(app->passive_discovery.state == PassiveDiscoveryStateNeighborDetails) {
-            if(app->details_page < 2) {
+            uint8_t page_count = passive_discovery_module_get_details_page_count(
+                app->passive_discovery.protocol,
+                passive_discovery_module_get_neighbor(app->passive_selected_neighbor));
+            if(app->details_page < page_count - 1) {
                 app->details_page++;
             }
 
@@ -447,20 +335,9 @@ static void
 
             passive_discovery_refresh(app);
 
-            app->thread_alternative =
-                furi_thread_alloc_ex("Passive Discovery", 4096, passive_discovery_thread, app);
-
-            furi_thread_start(app->thread_alternative);
+            passive_discovery_module_start(app);
         } else if(app->passive_discovery.state == PassiveDiscoveryStateListening) {
-            app->passive_discovery_stop = true;
-
-            if(app->thread_alternative) {
-                furi_thread_join(app->thread_alternative);
-
-                furi_thread_free(app->thread_alternative);
-
-                app->thread_alternative = NULL;
-            }
+            passive_discovery_module_stop(app);
 
             app->passive_discovery.state = PassiveDiscoveryStateNeighborList;
 
@@ -470,88 +347,4 @@ static void
     default:
         break;
     }
-}
-
-int32_t passive_discovery_thread(void* context) {
-    printf("PASSIVE THREAD ENTERED\n");
-    App* app = context;
-    enc28j60_t* ethernet = app->ethernet;
-
-    bool start = app->enc28j60_connected;
-
-    if(!start) {
-        start = enc28j60_start(ethernet) != 0xff;
-        app->enc28j60_connected = start;
-    }
-
-    if(!start) {
-        draw_device_no_connected(app);
-        furi_delay_ms(1500);
-        return 0;
-    }
-
-    if(!is_link_up(ethernet)) {
-        draw_network_not_connected(app);
-        furi_delay_ms(1500);
-        return 0;
-    }
-
-    rx_dispatch_init(app);
-
-    scanner_session_t session;
-
-    scanner_session_init(&session, app);
-
-    switch(app->passive_discovery.protocol) {
-    case PassiveProtocolLLDP:
-        enable_multicast(ethernet);
-        lldp_module_init();
-        break;
-
-    case PassiveProtocolEAPOL:
-        break;
-
-    case PassiveProtocolCDP:
-        break;
-
-    default:
-        break;
-    }
-
-    while(!app->passive_discovery_stop) {
-        FURI_LOG_I("PASSIVE", "Protocol=%u", app->passive_discovery.protocol);
-        switch(app->passive_discovery.protocol) {
-        case PassiveProtocolLLDP:
-
-            FURI_LOG_I("PASSIVE", "Calling lldp_module_run");
-
-            bool result = lldp_module_run(&session, 500);
-
-            FURI_LOG_I("PASSIVE", "lldp_module_run returned %d", result);
-
-            if(result) {
-                FURI_LOG_I("PASSIVE", "LLDP packet processed");
-            }
-
-            uint16_t count = neighbor_db_count();
-
-            if(count != app->passive_neighbor_count) {
-                app->passive_neighbor_count = count;
-                view_dispatcher_send_custom_event(app->view_dispatcher, 1);
-            }
-
-            break;
-
-        case PassiveProtocolEAPOL:
-            break;
-
-        case PassiveProtocolCDP:
-            break;
-
-        default:
-            break;
-        }
-    }
-
-    return 0;
 }
