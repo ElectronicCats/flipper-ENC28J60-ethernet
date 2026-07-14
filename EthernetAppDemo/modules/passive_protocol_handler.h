@@ -21,6 +21,12 @@ typedef struct {
     // Protocol-specific teardown and hardware restore
     void (*cleanup)(App* app);
 
+    // Number of discovered neighbors for this protocol
+    size_t (*get_neighbor_count)(void);
+
+    // Returns the neighbor at the specified index
+    neighbor_t* (*get_neighbor)(size_t index);
+
     // Page count for the neighbor details view
     uint8_t (*get_details_page_count)(neighbor_t* neighbor);
 

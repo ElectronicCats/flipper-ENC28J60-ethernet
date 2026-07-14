@@ -78,11 +78,11 @@ bool cdp_module_run(scanner_session_t* session, uint32_t timeout_ms) {
 }
 
 size_t cdp_module_count(void) {
-    return neighbor_db_count();
+    return neighbor_db_count_by_source(NEIGHBOR_SOURCE_CDP);
 }
 
 neighbor_t* cdp_module_get(size_t index) {
-    return neighbor_db_get(index);
+    return neighbor_db_get_by_source(NEIGHBOR_SOURCE_CDP, index);
 }
 
 static const char* cdp_get_display_name(void) {
@@ -135,4 +135,6 @@ const PassiveProtocolHandler cdp_protocol_handler = {
     .cleanup = cdp_cleanup,
     .get_details_page_count = cdp_get_details_page_count,
     .build_details_page = cdp_build_details_page,
+    .get_neighbor_count = cdp_module_count,
+    .get_neighbor = cdp_module_get,
 };

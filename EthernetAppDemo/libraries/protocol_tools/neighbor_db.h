@@ -79,4 +79,8 @@ neighbor_t* neighbor_db_get(size_t index);
 
 size_t neighbor_db_count(void);
 
+size_t neighbor_db_count_by_source(neighbor_source_t source);
+
+neighbor_t* neighbor_db_get_by_source(neighbor_source_t source, size_t index);
+
 #endif

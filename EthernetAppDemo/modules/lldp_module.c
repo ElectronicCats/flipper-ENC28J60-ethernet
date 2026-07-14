@@ -116,11 +116,11 @@ bool lldp_module_run(scanner_session_t* session, uint32_t timeout_ms) {
 }
 
 size_t lldp_module_count(void) {
-    return neighbor_db_count();
+    return neighbor_db_count_by_source(NEIGHBOR_SOURCE_LLDP);
 }
 
 neighbor_t* lldp_module_get(size_t index) {
-    return neighbor_db_get(index);
+    return neighbor_db_get_by_source(NEIGHBOR_SOURCE_LLDP, index);
 }
 
 static const char* lldp_get_display_name(void) {
@@ -236,4 +236,6 @@ const PassiveProtocolHandler lldp_protocol_handler = {
     .cleanup = lldp_cleanup,
     .get_details_page_count = lldp_get_details_page_count,
     .build_details_page = lldp_build_details_page,
+    .get_neighbor_count = lldp_module_count,
+    .get_neighbor = lldp_module_get,
 };

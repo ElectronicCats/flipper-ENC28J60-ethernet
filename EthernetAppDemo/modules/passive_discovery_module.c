@@ -105,8 +105,7 @@ static int32_t passive_discovery_thread(void* context) {
     scanner_session_init(&session, app);
 
     const PassiveProtocolHandler* handler = get_handler(app->passive_discovery.protocol);
-    neighbor_db_clear();
-    neighbor_db_save();
+
     if(handler && handler->init) {
         handler->init(app);
     }
@@ -122,7 +121,28 @@ static int32_t passive_discovery_thread(void* context) {
             furi_delay_ms(100);
         }
 
-        uint16_t count = neighbor_db_count();
+        neighbor_source_t source;
+
+        switch(app->passive_discovery.protocol) {
+        case PassiveProtocolLLDP:
+            source = NEIGHBOR_SOURCE_LLDP;
+            break;
+
+        case PassiveProtocolCDP:
+            source = NEIGHBOR_SOURCE_CDP;
+            break;
+
+        case PassiveProtocolEAPOL:
+            source = NEIGHBOR_SOURCE_EAPOL;
+            break;
+
+        default:
+            source = 0;
+            break;
+        }
+
+        uint16_t count = neighbor_db_count_by_source(source);
+
         if(count != app->passive_neighbor_count) {
             app->passive_neighbor_count = count;
             view_dispatcher_send_custom_event(app->view_dispatcher, 1);
@@ -216,10 +236,10 @@ void passive_discovery_module_build_details_page(
     }
 }
 
-size_t passive_discovery_module_get_neighbor_count(void) {
-    return neighbor_db_count();
-}
-
 neighbor_t* passive_discovery_module_get_neighbor(size_t index) {
     return neighbor_db_get(index);
+}
+
+size_t passive_discovery_module_get_neighbor_count(void) {
+    return neighbor_db_count();
 }

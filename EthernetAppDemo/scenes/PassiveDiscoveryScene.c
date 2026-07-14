@@ -1,6 +1,22 @@
 #include "../app_user.h"
 #include "../modules/passive_discovery_module.h"
 
+static neighbor_source_t passive_scene_get_source(App* app) {
+    switch(app->passive_discovery.protocol) {
+    case PassiveProtocolLLDP:
+        return NEIGHBOR_SOURCE_LLDP;
+
+    case PassiveProtocolCDP:
+        return NEIGHBOR_SOURCE_CDP;
+
+    case PassiveProtocolEAPOL:
+        return NEIGHBOR_SOURCE_EAPOL;
+
+    default:
+        return 0;
+    }
+}
+
 static void
     passive_discovery_button_callback(GuiButtonType type, InputType input_type, void* context);
 
@@ -25,8 +41,10 @@ static void build_neighbor_submenu(App* app) {
 
     FURI_LOG_I("PASSIVE", "DB count = %u", passive_discovery_module_get_neighbor_count());
 
-    for(size_t i = 0; i < NEIGHBOR_DB_MAX_ENTRIES; i++) {
-        neighbor_t* neighbor = passive_discovery_module_get_neighbor(i);
+    size_t count = neighbor_db_count_by_source(passive_scene_get_source(app));
+
+    for(size_t i = 0; i < count; i++) {
+        neighbor_t* neighbor = neighbor_db_get_by_source(passive_scene_get_source(app), i);
 
         FURI_LOG_I("PASSIVE", "slot=%u ptr=%p", i, neighbor);
 
@@ -68,7 +86,8 @@ static void show_neighbor_list(App* app) {
 }
 
 static void show_neighbor_details(App* app) {
-    neighbor_t* neighbor = passive_discovery_module_get_neighbor(app->passive_selected_neighbor);
+    neighbor_t* neighbor =
+        neighbor_db_get_by_source(passive_scene_get_source(app), app->passive_selected_neighbor);
 
     widget_reset(app->widget);
 

@@ -61,6 +61,44 @@ size_t neighbor_db_count(void) {
     return count;
 }
 
+size_t neighbor_db_count_by_source(neighbor_source_t source) {
+    size_t count = 0;
+
+    for(size_t i = 0; i < NEIGHBOR_DB_MAX_ENTRIES; i++) {
+        if(!neighbors[i].occupied) {
+            continue;
+        }
+
+        if(neighbors[i].discovery_sources & source) {
+            count++;
+        }
+    }
+
+    return count;
+}
+
+neighbor_t* neighbor_db_get_by_source(neighbor_source_t source, size_t index) {
+    size_t current = 0;
+
+    for(size_t i = 0; i < NEIGHBOR_DB_MAX_ENTRIES; i++) {
+        if(!neighbors[i].occupied) {
+            continue;
+        }
+
+        if(!(neighbors[i].discovery_sources & source)) {
+            continue;
+        }
+
+        if(current == index) {
+            return &neighbors[i];
+        }
+
+        current++;
+    }
+
+    return NULL;
+}
+
 neighbor_t* neighbor_db_get(size_t index) {
     if(index >= NEIGHBOR_DB_MAX_ENTRIES) {
         return NULL;
