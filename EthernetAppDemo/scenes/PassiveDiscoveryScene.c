@@ -39,20 +39,20 @@ static void build_neighbor_submenu(App* app) {
 
     submenu_set_header(app->submenu, "DISCOVERED DEVICES");
 
-    FURI_LOG_I("PASSIVE", "DB count = %u", passive_discovery_module_get_neighbor_count());
+    //FURI_LOG_I("PASSIVE", "DB count = %u", passive_discovery_module_get_neighbor_count());
 
     size_t count = neighbor_db_count_by_source(passive_scene_get_source(app));
 
     for(size_t i = 0; i < count; i++) {
         neighbor_t* neighbor = neighbor_db_get_by_source(passive_scene_get_source(app), i);
 
-        FURI_LOG_I("PASSIVE", "slot=%u ptr=%p", i, neighbor);
+        //FURI_LOG_I("PASSIVE", "slot=%u ptr=%p", i, neighbor);
 
         if(!neighbor) {
             continue;
         }
 
-        FURI_LOG_I("PASSIVE", "occupied=%u name='%s'", neighbor->occupied, neighbor->name);
+        //FURI_LOG_I("PASSIVE", "occupied=%u name='%s'", neighbor->occupied, neighbor->name);
 
         furi_string_reset(app->text);
 
@@ -70,7 +70,7 @@ static void build_neighbor_submenu(App* app) {
                 neighbor->mac[5]);
         }
 
-        FURI_LOG_I("PASSIVE", "ADDING '%s'", furi_string_get_cstr(app->text));
+        //FURI_LOG_I("PASSIVE", "ADDING '%s'", furi_string_get_cstr(app->text));
 
         submenu_add_item(
             app->submenu, furi_string_get_cstr(app->text), i, passive_neighbor_callback, app);
@@ -352,7 +352,7 @@ static void
         if(app->passive_discovery.state == PassiveDiscoveryStateConfig) {
             app->passive_discovery.state = PassiveDiscoveryStateListening;
 
-            FURI_LOG_I("PASSIVE", "Entering LISTENING");
+            //FURI_LOG_I("PASSIVE", "Entering LISTENING");
 
             passive_discovery_refresh(app);
 

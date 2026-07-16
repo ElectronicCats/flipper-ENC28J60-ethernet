@@ -2,68 +2,16 @@
 #include "passive_protocol_handler.h"
 #include "lldp_module.h"
 #include "cdp_module.h"
+#include "eapol_module.h"
 #include <stdio.h>
 
 // Forward declaration of the thread worker function
 static int32_t passive_discovery_thread(void* context);
 
-// --- Dummy Handlers for Future Protocols (CDP / EAPOL) ---}
-
-static const char* dummy_eapol_get_display_name(void) {
-    return "EAPOL";
-}
-static void dummy_eapol_init(App* app) {
-    UNUSED(app);
-    neighbor_db_clear();
-}
-static bool dummy_eapol_run(scanner_session_t* session, uint32_t timeout_ms) {
-    UNUSED(session);
-    furi_delay_ms(timeout_ms);
-    return false;
-}
-static void dummy_eapol_cleanup(App* app) {
-    UNUSED(app);
-}
-static uint8_t dummy_eapol_get_details_page_count(neighbor_t* neighbor) {
-    UNUSED(neighbor);
-    return 1;
-}
-static void dummy_eapol_build_details_page(
-    neighbor_t* neighbor,
-    uint8_t page,
-    char* line1,
-    size_t line1_size,
-    char* line2,
-    size_t line2_size,
-    char* line3,
-    size_t line3_size,
-    char* line4,
-    size_t line4_size) {
-    UNUSED(neighbor);
-    UNUSED(page);
-    UNUSED(line3_size);
-    UNUSED(line4_size);
-    snprintf(line1, line1_size, "EAPOL Neighbor");
-    snprintf(line2, line2_size, "Not implemented");
-    line3[0] = '\0';
-    line4[0] = '\0';
-}
-
-static const PassiveProtocolHandler eapol_protocol_handler = {
-    .get_display_name = dummy_eapol_get_display_name,
-    .init = dummy_eapol_init,
-    .run = dummy_eapol_run,
-    .cleanup = dummy_eapol_cleanup,
-    .get_details_page_count = dummy_eapol_get_details_page_count,
-    .build_details_page = dummy_eapol_build_details_page,
-};
-
-// --- Protocol Registry Lookup Table ---
-
 static const PassiveProtocolHandler* const protocol_handlers[PassiveProtocolCount] = {
     [PassiveProtocolLLDP] = &lldp_protocol_handler,
-    [PassiveProtocolEAPOL] = &eapol_protocol_handler,
     [PassiveProtocolCDP] = &cdp_protocol_handler,
+    [PassiveProtocolEAPOL] = &eapol_protocol_handler,
 };
 
 static const PassiveProtocolHandler* get_handler(passive_protocol_t protocol) {
@@ -111,11 +59,11 @@ static int32_t passive_discovery_thread(void* context) {
     }
 
     while(!app->passive_discovery_stop) {
-        FURI_LOG_I("PASSIVE", "Protocol=%u", app->passive_discovery.protocol);
+        //FURI_LOG_I("PASSIVE", "Protocol=%u", app->passive_discovery.protocol);
         if(handler && handler->run) {
             bool result = handler->run(&session, 500);
             if(result) {
-                FURI_LOG_I("PASSIVE", "Packet processed by active handler");
+                //FURI_LOG_I("PASSIVE", "Packet processed by active handler");
             }
         } else {
             furi_delay_ms(100);

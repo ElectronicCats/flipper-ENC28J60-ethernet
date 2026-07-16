@@ -13,6 +13,20 @@ void neighbor_db_init(void) {
     neighbor_db_clear();
 }
 
+void neighbor_db_clear_by_source(neighbor_source_t source) {
+    for(size_t i = 0; i < NEIGHBOR_DB_MAX_ENTRIES; i++) {
+        if(!neighbors[i].occupied) {
+            continue;
+        }
+
+        if(neighbors[i].discovery_sources & source) {
+            memset(&neighbors[i], 0, sizeof(neighbor_t));
+        }
+    }
+
+    neighbor_db_save();
+}
+
 void neighbor_db_save(void) {
     Storage* storage = furi_record_open(RECORD_STORAGE);
 

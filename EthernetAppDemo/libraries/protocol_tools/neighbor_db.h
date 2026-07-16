@@ -41,7 +41,17 @@ typedef struct {
 
     uint8_t discovery_sources;
 
+    /* ---------- EAPOL ---------- */
+
+    uint8_t eapol_version;
+    uint8_t eapol_packet_type;
+
+    uint8_t eap_code;
+    uint8_t eap_type;
+
     bool occupied;
+
+    char eap_identity[64];
 } neighbor_t;
 
 void neighbor_db_init(void);
@@ -66,6 +76,7 @@ bool neighbor_db_update(const neighbor_t* neighbor);
  * @brief Saves the current neighbor database to persistent storage.
  */
 void neighbor_db_save(void);
+void neighbor_db_clear_by_source(neighbor_source_t source);
 
 /**
  * @brief Loads the last neighbor database from persistent storage.
