@@ -21,10 +21,10 @@
 #define MAX_FRAMELEN 1518
 
 #define RXSTART_INIT 0x0000
-#define RXSTOP_INIT  0x0BFF
+#define RXSTOP_INIT  0x17FF
 
-#define TXSTART_INIT 0x0C00
-#define TXSTOP_INIT  0x11FF
+#define TXSTART_INIT 0x1800
+#define TXSTOP_INIT  0x1FFF
 
 #define ETHERCARD_SEND_PIPELINING      0
 #define ETHERCARD_RETRY_LATECOLLISIONS 0
@@ -192,6 +192,26 @@ void enable_multicast(enc28j60_t* instance);
  * @param instance Pointer to the `enc28j60_t` instance to configure.
  */
 void disable_multicast(enc28j60_t* instance);
+
+/**
+ * @brief Enable hardware LLDP pattern matching (EtherType 0x88CC).
+ *
+ * Configures the ENC28J60 receive filter to accept only frames matching
+ * the LLDP EtherType pattern, reducing CPU load during passive discovery.
+ *
+ * @param instance Pointer to the ENC28J60 instance.
+ */
+void enc28j60_enable_lldp_filter(enc28j60_t* instance);
+
+/**
+ * @brief Restore the default receive filter configuration.
+ *
+ * Re-enables the normal unicast/broadcast reception mode used by the
+ * rest of the Ethernet application.
+ *
+ * @param instance Pointer to the ENC28J60 instance.
+ */
+void enc28j60_restore_default_filter(enc28j60_t* instance);
 
 /**
  * @brief Enables promiscuous mode on the ENC28J60 Ethernet controller.

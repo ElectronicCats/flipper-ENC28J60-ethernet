@@ -134,53 +134,21 @@ size_t passive_discovery_module_get_protocol_count(void) {
 }
 
 const char* passive_discovery_module_get_protocol_name(passive_protocol_t protocol) {
-    const PassiveProtocolHandler* handler = get_handler(protocol);
-    if(handler && handler->get_display_name) {
-        return handler->get_display_name();
-    }
-    return "Unknown";
-}
+    switch(protocol) {
+    case PassiveProtocolLLDP:
+        return "LLDP";
 
-uint8_t passive_discovery_module_get_details_page_count(
-    passive_protocol_t protocol,
-    neighbor_t* neighbor) {
-    const PassiveProtocolHandler* handler = get_handler(protocol);
-    if(handler && handler->get_details_page_count) {
-        return handler->get_details_page_count(neighbor);
-    }
-    return 1;
-}
+    case PassiveProtocolCDP:
+        return "CDP";
 
-void passive_discovery_module_build_details_page(
-    passive_protocol_t protocol,
-    neighbor_t* neighbor,
-    uint8_t page,
-    char* line1,
-    size_t line1_size,
-    char* line2,
-    size_t line2_size,
-    char* line3,
-    size_t line3_size,
-    char* line4,
-    size_t line4_size) {
-    const PassiveProtocolHandler* handler = get_handler(protocol);
-    if(handler && handler->build_details_page) {
-        handler->build_details_page(
-            neighbor,
-            page,
-            line1,
-            line1_size,
-            line2,
-            line2_size,
-            line3,
-            line3_size,
-            line4,
-            line4_size);
-    } else {
-        snprintf(line1, line1_size, "No handler");
-        line2[0] = '\0';
-        line3[0] = '\0';
-        line4[0] = '\0';
+    case PassiveProtocolEAPOL:
+        return "EAPOL";
+
+    case PassiveProtocolClearAll:
+        return "Clear All";
+
+    default:
+        return "UNKNOWN";
     }
 }
 

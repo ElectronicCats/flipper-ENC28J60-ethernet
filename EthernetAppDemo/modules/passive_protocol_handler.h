@@ -26,20 +26,4 @@ typedef struct {
 
     // Returns the neighbor at the specified index
     neighbor_t* (*get_neighbor)(size_t index);
-
-    // Page count for the neighbor details view
-    uint8_t (*get_details_page_count)(neighbor_t* neighbor);
-
-    // Constructs details strings for a given page index
-    void (*build_details_page)(
-        neighbor_t* neighbor,
-        uint8_t page,
-        char* line1,
-        size_t line1_size,
-        char* line2,
-        size_t line2_size,
-        char* line3,
-        size_t line3_size,
-        char* line4,
-        size_t line4_size);
 } PassiveProtocolHandler;

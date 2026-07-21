@@ -646,6 +646,67 @@ void disable_multicast(enc28j60_t* instance) {
     furi_mutex_release(instance->mutex);
 }
 
+void enc28j60_enable_lldp_filter(enc28j60_t* instance) {
+    if(!instance || !instance->spi) return;
+
+    furi_mutex_acquire(instance->mutex, FuriWaitForever);
+    FuriHalSpiBusHandle* spi = instance->spi;
+
+    /*
+     * LLDP frames use destination MAC 01:80:C2:00:00:0E
+     * and EtherType 0x88CC.
+     *
+     * The ENC28J60 pattern matcher operates on the received frame buffer.
+     * We keep multicast reception enabled and use PMEN to reduce unrelated
+     * traffic delivered to the MCU.
+     */
+
+    /* Enable multicast + CRC + pattern match */
+    write_register_byte(spi, ERXFCON, ERXFCON_MCEN | ERXFCON_CRCEN | ERXFCON_PMEN);
+
+    /*
+     * Pattern mask:
+     * Match destination MAC bytes and EtherType bytes.
+     *
+     * Offsets in Ethernet frame:
+     *   0-5   = Destination MAC
+     *   12-13 = EtherType
+     */
+
+    write_register(spi, EPMM0, 0x3F3F);
+    write_register(spi, EPMM1, 0x3000);
+
+    /*
+     * Precomputed checksum for LLDP pattern:
+     * 01 80 C2 00 00 0E 88 CC
+     *
+     * This value is specific to the ENC28J60 PMEN algorithm.
+     */
+    write_register(spi, EPMCS, 0xF7F9);
+
+    FURI_LOG_I("ENC28J60", "LLDP hardware filter enabled");
+
+    furi_mutex_release(instance->mutex);
+}
+
+void enc28j60_restore_default_filter(enc28j60_t* instance) {
+    if(!instance || !instance->spi) return;
+
+    furi_mutex_acquire(instance->mutex, FuriWaitForever);
+
+    FuriHalSpiBusHandle* spi = instance->spi;
+
+    /* Restore the default application filter */
+    write_register_byte(spi, ERXFCON, ERXFCON_UCEN | ERXFCON_CRCEN | ERXFCON_PMEN | ERXFCON_BCEN);
+
+    write_register(spi, EPMM0, 0x303F);
+    write_register(spi, EPMCS, 0xF7F9);
+
+    FURI_LOG_I("ENC28J60", "Default hardware filter restored");
+
+    furi_mutex_release(instance->mutex);
+}
+
 void enable_promiscuous(enc28j60_t* instance) {
     FuriHalSpiBusHandle* spi = instance->spi;
     furi_mutex_acquire(instance->mutex, FuriWaitForever);

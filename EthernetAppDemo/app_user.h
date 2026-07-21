@@ -72,13 +72,15 @@ typedef enum {
     PassiveDiscoveryStateFinished,
     PassiveDiscoveryStateNeighborList,
     PassiveDiscoveryStateNeighborDetails,
+    PassiveDiscoveryStateClearConfirm,
 } passive_discovery_state_t;
 
 // For Passive Discovery scene protocols
 typedef enum {
     PassiveProtocolLLDP = 0,
-    PassiveProtocolEAPOL,
     PassiveProtocolCDP,
+    PassiveProtocolEAPOL,
+    PassiveProtocolClearAll,
     PassiveProtocolCount,
 } passive_protocol_t;
 

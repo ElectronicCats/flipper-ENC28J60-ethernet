@@ -4,7 +4,14 @@
 #include <furi.h>
 #include <furi_hal.h>
 
-#define LLDP_ETHERTYPE 0x88CC
+#define LLDP_ETHERTYPE     0x88CC
+#define LLDP_OUI_IEEE_8021 0x0080C2UL
+#define LLDP_OUI_IEEE_8023 0x00120FUL
+
+#define LLDP_8021_PORT_VLAN_ID 1
+#define LLDP_8021_VLAN_NAME    3
+
+#define LLDP_8023_POWER_VIA_MDI 2
 
 #include "neighbor_db.h"
 
@@ -21,6 +28,7 @@ typedef enum {
     LLDP_TLV_SYSTEM_DESCRIPTION = 6,
     LLDP_TLV_SYSTEM_CAPABILITIES = 7,
     LLDP_TLV_MANAGEMENT_ADDRESS = 8,
+    LLDP_TLV_ORGANIZATIONAL = 127,
 } lldp_tlv_type_t;
 
 /**
@@ -49,6 +57,7 @@ typedef struct {
     char system_name[64];
     char system_description[128];
     char management_address[48];
+    char port_description[64];
 
     uint8_t source_mac[6];
 
@@ -58,7 +67,23 @@ typedef struct {
     uint16_t system_capabilities;
     uint16_t enabled_capabilities;
 
+    /* IEEE 802.1 Organizational TLVs */
+
+    uint16_t vlan_id;
+    bool has_vlan;
+
+    uint16_t poe_power_mw;
+    uint8_t poe_type;
+    uint8_t poe_source;
+    uint8_t poe_priority;
+    bool has_poe;
+
+    uint8_t port_subtype;
     bool valid;
+
+    bool has_chassis_id;
+    bool has_port_id;
+    bool has_ttl;
 } lldp_info_t;
 
 /**
@@ -71,7 +96,7 @@ typedef struct {
  * @return true if the frame is LLDP.
  * @return false otherwise.
  */
-bool is_lldp(uint8_t* buffer);
+bool is_lldp(const uint8_t* buffer);
 
 /**
  * @brief Parses an LLDP frame.

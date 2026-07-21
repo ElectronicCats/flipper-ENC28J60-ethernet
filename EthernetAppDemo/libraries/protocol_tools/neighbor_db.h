@@ -31,17 +31,17 @@ typedef struct {
 
     char chassis_id[64];
     uint8_t chassis_subtype;
+    uint8_t port_subtype;
     char name[64];
     char description[128];
     char port[64];
+    char port_description[64];
     char management_address[48];
 
     uint16_t ttl;
     uint16_t capabilities;
 
-    uint8_t discovery_sources;
-
-    /* ---------- EAPOL ---------- */
+    uint16_t discovery_sources;
 
     uint8_t eapol_version;
     uint8_t eapol_packet_type;
@@ -52,6 +52,17 @@ typedef struct {
     bool occupied;
 
     char eap_identity[64];
+
+    uint16_t vlan_id;
+    bool has_vlan;
+
+    uint16_t poe_power_mw;
+
+    uint8_t poe_type;
+    uint8_t poe_source;
+    uint8_t poe_priority;
+
+    bool has_poe;
 } neighbor_t;
 
 void neighbor_db_init(void);
@@ -77,6 +88,7 @@ bool neighbor_db_update(const neighbor_t* neighbor);
  */
 void neighbor_db_save(void);
 void neighbor_db_clear_by_source(neighbor_source_t source);
+void lldp_format_capabilities(uint16_t capabilities, char* output, size_t size);
 
 /**
  * @brief Loads the last neighbor database from persistent storage.

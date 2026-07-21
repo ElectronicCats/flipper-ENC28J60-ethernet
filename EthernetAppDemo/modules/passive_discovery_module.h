@@ -30,29 +30,6 @@ size_t passive_discovery_module_get_protocol_count(void);
 const char* passive_discovery_module_get_protocol_name(passive_protocol_t protocol);
 
 /**
- * @brief Get the page count for a neighbor's details view.
- */
-uint8_t passive_discovery_module_get_details_page_count(
-    passive_protocol_t protocol,
-    neighbor_t* neighbor);
-
-/**
- * @brief Construct the details text lines for a neighbor based on the active protocol.
- */
-void passive_discovery_module_build_details_page(
-    passive_protocol_t protocol,
-    neighbor_t* neighbor,
-    uint8_t page,
-    char* line1,
-    size_t line1_size,
-    char* line2,
-    size_t line2_size,
-    char* line3,
-    size_t line3_size,
-    char* line4,
-    size_t line4_size);
-
-/**
  * @brief Get the count of active discovered neighbors in the database.
  */
 size_t passive_discovery_module_get_neighbor_count(void);
