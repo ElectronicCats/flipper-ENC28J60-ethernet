@@ -5,33 +5,23 @@ void cdp_module_init(void) {
 }
 
 bool cdp_module_process_frame(uint8_t* frame, uint16_t length) {
-    FURI_LOG_I("CDP", "Frame received (%u bytes)", length);
-
     if(!frame) {
-        FURI_LOG_I("CDP", "NULL frame");
         return false;
     }
 
     if(!is_cdp(frame, length)) {
-        FURI_LOG_I("CDP", "Not a CDP frame");
         return false;
     }
-
-    FURI_LOG_I("CDP", "CDP EtherType detected");
 
     cdp_info_t info;
 
     if(!cdp_parse(frame, length, &info)) {
-        FURI_LOG_I("CDP", "Parse failed");
         return false;
     }
-
-    FURI_LOG_I("CDP", "Parse OK");
 
     neighbor_t neighbor = {0};
 
     if(!cdp_fill_neighbor(&info, &neighbor)) {
-        FURI_LOG_I("CDP", "Neighbor build failed");
         return false;
     }
 
@@ -42,20 +32,10 @@ bool cdp_module_process_frame(uint8_t* frame, uint16_t length) {
     bool ok = false;
 
     if(existing) {
-        FURI_LOG_I("CDP", "Updating neighbor");
         ok = neighbor_db_update(&neighbor);
     } else {
-        FURI_LOG_I("CDP", "Adding neighbor");
         ok = neighbor_db_add(&neighbor);
     }
-
-    FURI_LOG_I("CDP", "Device: %s", info.device_id);
-    FURI_LOG_I("CDP", "Port: %s", info.port_id);
-    FURI_LOG_I("CDP", "Platform: %s", info.platform);
-    FURI_LOG_I("CDP", "Version: %s", info.software_version);
-
-    FURI_LOG_I("CDP", "DB operation result: %d", ok);
-    FURI_LOG_I("CDP", "DB count now: %u", neighbor_db_count());
 
     return ok;
 }
@@ -67,7 +47,6 @@ static bool cdp_packet_predicate(const uint8_t* frame, uint16_t len, void* ctx) 
 }
 
 bool cdp_module_run(scanner_session_t* session, uint32_t timeout_ms) {
-    FURI_LOG_I("CDP", "Waiting for CDP frames...");
     uint16_t length = 0;
 
     return scanner_wait_for_packet(
@@ -104,6 +83,7 @@ const PassiveProtocolHandler cdp_protocol_handler = {
     .get_display_name = cdp_get_display_name,
     .init = cdp_init,
     .run = cdp_run,
+    .process_frame = cdp_module_process_frame,
     .cleanup = cdp_cleanup,
     .get_neighbor_count = cdp_module_count,
     .get_neighbor = cdp_module_get,

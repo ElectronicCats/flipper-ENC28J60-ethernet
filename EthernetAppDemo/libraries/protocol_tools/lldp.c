@@ -268,6 +268,7 @@ bool lldp_fill_neighbor(const lldp_info_t* info, neighbor_t* neighbor) {
     }
 
     neighbor->discovery_sources = NEIGHBOR_SOURCE_LLDP;
+    neighbor->last_seen_source = NEIGHBOR_SOURCE_LLDP;
     neighbor->occupied = true;
 
     return true;

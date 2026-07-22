@@ -40,6 +40,7 @@ typedef struct {
 
     uint16_t ttl;
     uint16_t capabilities;
+    neighbor_source_t last_seen_source;
 
     uint16_t discovery_sources;
 

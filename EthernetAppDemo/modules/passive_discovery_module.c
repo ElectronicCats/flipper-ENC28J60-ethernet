@@ -9,6 +9,7 @@
 static int32_t passive_discovery_thread(void* context);
 
 static const PassiveProtocolHandler* const protocol_handlers[PassiveProtocolCount] = {
+    [PassiveProtocolALL] = NULL, // ALL is virtual
     [PassiveProtocolLLDP] = &lldp_protocol_handler,
     [PassiveProtocolCDP] = &cdp_protocol_handler,
     [PassiveProtocolEAPOL] = &eapol_protocol_handler,
@@ -18,7 +19,38 @@ static const PassiveProtocolHandler* get_handler(passive_protocol_t protocol) {
     if(protocol >= PassiveProtocolCount) {
         return NULL;
     }
+
     return protocol_handlers[protocol];
+}
+
+static bool all_packet_predicate(const uint8_t* frame, uint16_t len, void* ctx) {
+    UNUSED(ctx);
+
+    bool processed = false;
+
+    // Recorre automáticamente todos los protocolos registrados
+    for(size_t i = 0; i < PassiveProtocolCount; i++) {
+        if(i == PassiveProtocolALL || i == PassiveProtocolClearAll) {
+            continue;
+        }
+
+        const PassiveProtocolHandler* handler = protocol_handlers[i];
+
+        if(handler && handler->process_frame) {
+            if(handler->process_frame((uint8_t*)frame, len)) {
+                processed = true;
+            }
+        }
+    }
+
+    return processed;
+}
+
+static bool all_run(scanner_session_t* session, uint32_t timeout_ms) {
+    uint16_t length = 0;
+
+    return scanner_wait_for_packet(
+        session, all_packet_predicate, NULL, NULL, NULL, &length, timeout_ms);
 }
 
 // --- Background Scanning Thread ---
@@ -54,42 +86,50 @@ static int32_t passive_discovery_thread(void* context) {
 
     const PassiveProtocolHandler* handler = get_handler(app->passive_discovery.protocol);
 
-    if(handler && handler->init) {
+    if(app->passive_discovery.protocol == PassiveProtocolALL) {
+        /* Inicializar todos los protocolos registrados */
+        for(size_t i = 0; i < PassiveProtocolCount; i++) {
+            if(i == PassiveProtocolALL || i == PassiveProtocolClearAll) {
+                continue;
+            }
+
+            const PassiveProtocolHandler* h = protocol_handlers[i];
+
+            if(h && h->init) {
+                h->init(app);
+            }
+        }
+    } else if(handler && handler->init) {
         handler->init(app);
     }
 
     while(!app->passive_discovery_stop) {
         //FURI_LOG_I("PASSIVE", "Protocol=%u", app->passive_discovery.protocol);
-        if(handler && handler->run) {
-            bool result = handler->run(&session, 500);
-            if(result) {
-                //FURI_LOG_I("PASSIVE", "Packet processed by active handler");
-            }
+        if(app->passive_discovery.protocol == PassiveProtocolALL) {
+            all_run(&session, 500);
+        } else if(handler && handler->run) {
+            handler->run(&session, 500);
         } else {
             furi_delay_ms(100);
         }
 
-        neighbor_source_t source;
-
-        switch(app->passive_discovery.protocol) {
-        case PassiveProtocolLLDP:
-            source = NEIGHBOR_SOURCE_LLDP;
-            break;
-
-        case PassiveProtocolCDP:
-            source = NEIGHBOR_SOURCE_CDP;
-            break;
-
-        case PassiveProtocolEAPOL:
-            source = NEIGHBOR_SOURCE_EAPOL;
-            break;
-
-        default:
-            source = 0;
-            break;
+        if(app->passive_discovery.protocol == PassiveProtocolALL) {
+            all_run(&session, 500);
+        } else if(handler && handler->run) {
+            handler->run(&session, 500);
+        } else {
+            furi_delay_ms(100);
         }
 
-        uint16_t count = neighbor_db_count_by_source(source);
+        uint16_t count;
+
+        if(app->passive_discovery.protocol == PassiveProtocolALL) {
+            count = neighbor_db_count();
+        } else if(handler && handler->get_neighbor_count) {
+            count = handler->get_neighbor_count();
+        } else {
+            count = 0;
+        }
 
         if(count != app->passive_neighbor_count) {
             app->passive_neighbor_count = count;
@@ -97,7 +137,20 @@ static int32_t passive_discovery_thread(void* context) {
         }
     }
 
-    if(handler && handler->cleanup) {
+    if(app->passive_discovery.protocol == PassiveProtocolALL) {
+        /* Limpiar todos los protocolos registrados */
+        for(size_t i = 0; i < PassiveProtocolCount; i++) {
+            if(i == PassiveProtocolALL || i == PassiveProtocolClearAll) {
+                continue;
+            }
+
+            const PassiveProtocolHandler* h = protocol_handlers[i];
+
+            if(h && h->cleanup) {
+                h->cleanup(app);
+            }
+        }
+    } else if(handler && handler->cleanup) {
         handler->cleanup(app);
     }
 
@@ -135,6 +188,12 @@ size_t passive_discovery_module_get_protocol_count(void) {
 
 const char* passive_discovery_module_get_protocol_name(passive_protocol_t protocol) {
     switch(protocol) {
+    case PassiveProtocolALL:
+        return "Discover All";
+
+    case PassiveProtocolClearAll:
+        return "Clear All";
+
     case PassiveProtocolLLDP:
         return "LLDP";
 
@@ -143,9 +202,6 @@ const char* passive_discovery_module_get_protocol_name(passive_protocol_t protoc
 
     case PassiveProtocolEAPOL:
         return "EAPOL";
-
-    case PassiveProtocolClearAll:
-        return "Clear All";
 
     default:
         return "UNKNOWN";

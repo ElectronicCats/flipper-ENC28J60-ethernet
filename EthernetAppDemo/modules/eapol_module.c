@@ -89,6 +89,7 @@ const PassiveProtocolHandler eapol_protocol_handler = {
     .get_display_name = eapol_get_display_name,
     .init = eapol_init,
     .run = eapol_run,
+    .process_frame = eapol_module_process_frame,
     .cleanup = eapol_cleanup,
     .get_neighbor_count = eapol_module_count,
     .get_neighbor = eapol_module_get,

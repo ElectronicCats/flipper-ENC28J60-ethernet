@@ -143,6 +143,7 @@ const PassiveProtocolHandler lldp_protocol_handler = {
     .get_display_name = lldp_get_display_name,
     .init = lldp_init,
     .run = lldp_run,
+    .process_frame = lldp_module_process_frame,
     .cleanup = lldp_cleanup,
     .get_neighbor_count = lldp_module_count,
     .get_neighbor = lldp_module_get,

@@ -37,6 +37,9 @@ bool eapol_parse(const uint8_t* frame, uint16_t length, eapol_info_t* info) {
     info->packet_type = (eapol_packet_type_t)ptr[1];
     info->packet_length = ((uint16_t)ptr[2] << 8) | ptr[3];
 
+    info->is_start = (info->packet_type == EAPOL_PACKET_START);
+    info->is_logoff = (info->packet_type == EAPOL_PACKET_LOGOFF);
+
     if(info->packet_type != EAPOL_PACKET_EAP) {
         info->valid = true;
         return true;
@@ -127,6 +130,7 @@ bool eapol_fill_neighbor(const eapol_info_t* info, neighbor_t* neighbor) {
 
     neighbor->name[0] = '\0';
     neighbor->discovery_sources = NEIGHBOR_SOURCE_EAPOL;
+    neighbor->last_seen_source = NEIGHBOR_SOURCE_EAPOL;
     neighbor->occupied = true;
 
     return true;

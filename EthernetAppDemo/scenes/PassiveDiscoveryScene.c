@@ -64,8 +64,11 @@ static void passive_build_details_page(
     char* line4,
     size_t line4_size);
 
-static neighbor_source_t passive_scene_get_source(App* app) {
+static uint16_t passive_scene_get_source(App* app) {
     switch(app->passive_discovery.protocol) {
+    case PassiveProtocolALL:
+        return NEIGHBOR_SOURCE_LLDP | NEIGHBOR_SOURCE_CDP | NEIGHBOR_SOURCE_EAPOL;
+
     case PassiveProtocolLLDP:
         return NEIGHBOR_SOURCE_LLDP;
 
@@ -74,6 +77,9 @@ static neighbor_source_t passive_scene_get_source(App* app) {
 
     case PassiveProtocolEAPOL:
         return NEIGHBOR_SOURCE_EAPOL;
+
+    case PassiveProtocolClearAll:
+        return NEIGHBOR_SOURCE_LLDP | NEIGHBOR_SOURCE_CDP | NEIGHBOR_SOURCE_EAPOL;
 
     default:
         return 0;
@@ -120,10 +126,24 @@ static void build_neighbor_submenu(App* app) {
 
     //FURI_LOG_I("PASSIVE", "DB count = %u", passive_discovery_module_get_neighbor_count());
 
-    size_t count = neighbor_db_count_by_source(passive_scene_get_source(app));
+    size_t count;
+
+    if(app->passive_discovery.protocol == PassiveProtocolALL ||
+       app->passive_discovery.protocol == PassiveProtocolClearAll) {
+        count = neighbor_db_count();
+    } else {
+        count = neighbor_db_count_by_source(passive_scene_get_source(app));
+    }
 
     for(size_t i = 0; i < count; i++) {
-        neighbor_t* neighbor = neighbor_db_get_by_source(passive_scene_get_source(app), i);
+        neighbor_t* neighbor;
+
+        if(app->passive_discovery.protocol == PassiveProtocolALL ||
+           app->passive_discovery.protocol == PassiveProtocolClearAll) {
+            neighbor = neighbor_db_get(i);
+        } else {
+            neighbor = neighbor_db_get_by_source(passive_scene_get_source(app), i);
+        }
 
         //FURI_LOG_I("PASSIVE", "slot=%u ptr=%p", i, neighbor);
 
@@ -216,8 +236,8 @@ static void show_neighbor_details(App* app) {
     widget_add_string_element(
         app->widget, 120, 5, AlignCenter, AlignCenter, FontSecondary, page_text);
 
-    //widget_add_button_element(
-    //    app->widget, GuiButtonTypeLeft, "<", passive_discovery_button_callback, app);
+    widget_add_button_element(
+        app->widget, GuiButtonTypeLeft, "<", passive_discovery_button_callback, app);
 
     widget_add_button_element(
         app->widget, GuiButtonTypeRight, ">", passive_discovery_button_callback, app);
@@ -226,8 +246,6 @@ static void show_neighbor_details(App* app) {
 }
 
 static void passive_discovery_draw_config(App* app) {
-    widget_add_string_element(
-        app->widget, 64, 60, AlignCenter, AlignCenter, FontSecondary, "↑ View Neighbors");
     widget_reset(app->widget);
 
     char protocol_text[24];
@@ -254,7 +272,7 @@ static void passive_discovery_draw_config(App* app) {
         app->widget, GuiButtonTypeCenter, "Start", passive_discovery_button_callback, app);
 
     widget_add_button_element(
-        app->widget, GuiButtonTypeRight, "Other", passive_discovery_button_callback, app);
+        app->widget, GuiButtonTypeRight, "Next", passive_discovery_button_callback, app);
 
     view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
 }
@@ -295,8 +313,6 @@ static void passive_discovery_draw_clear_confirm(App* app) {
 
     widget_add_button_element(
         app->widget, GuiButtonTypeCenter, "Erase", passive_discovery_button_callback, app);
-
-    view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
 }
 
 static void passive_discovery_refresh(App* app) {
@@ -331,7 +347,7 @@ void app_scene_passive_discovery_on_enter(void* context) {
     App* app = context;
 
     app->passive_discovery.state = PassiveDiscoveryStateConfig;
-    app->passive_discovery.protocol = PassiveProtocolLLDP;
+    app->passive_discovery.protocol = PassiveProtocolALL;
     app->passive_discovery_stop = false;
     neighbor_db_load();
 
@@ -346,6 +362,10 @@ bool app_scene_passive_discovery_on_event(void* context, SceneManagerEvent event
     App* app = context;
 
     if(event.type == SceneManagerEventTypeBack) {
+        if(app->passive_discovery.state == PassiveDiscoveryStateListening) {
+            return true;
+        }
+
         if(app->passive_discovery.state == PassiveDiscoveryStateNeighborDetails) {
             app->passive_discovery.state = PassiveDiscoveryStateNeighborList;
 
@@ -356,15 +376,22 @@ bool app_scene_passive_discovery_on_event(void* context, SceneManagerEvent event
 
         if(app->passive_discovery.state == PassiveDiscoveryStateNeighborList) {
             app->passive_discovery.state = PassiveDiscoveryStateConfig;
+
             passive_discovery_refresh(app);
+
             return true;
         }
 
-        if(app->passive_discovery.state == PassiveDiscoveryStateListening) {
-            passive_discovery_module_stop(app);
-        }
-
         return scene_manager_previous_scene(app->scene_manager);
+    }
+
+    if(event.event == PassiveDiscoveryStateConfig) {
+        widget_reset(app->widget);
+        submenu_reset(app->submenu);
+
+        passive_discovery_draw_config(app);
+
+        return true;
     }
 
     if(event.type == SceneManagerEventTypeCustom) {
@@ -553,13 +580,10 @@ static void
             } else {
                 widget_reset(app->widget);
 
-                widget_add_string_element(
-                    app->widget, 64, 30, AlignCenter, AlignCenter, FontPrimary, "No neighbors");
-
-                widget_add_button_element(
-                    app->widget, GuiButtonTypeCenter, "OK", passive_discovery_button_callback, app);
-
                 view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
+                app->passive_discovery.state = PassiveDiscoveryStateNeighborList;
+
+                show_neighbor_list(app);
             }
         }
 
@@ -615,10 +639,11 @@ static void
             app->passive_neighbor_count = 0;
 
             app->passive_discovery.state = PassiveDiscoveryStateConfig;
-            app->passive_discovery.protocol = PassiveProtocolLLDP;
+            app->passive_discovery.protocol = PassiveProtocolALL;
 
-            passive_discovery_refresh(app);
+            view_dispatcher_send_custom_event(app->view_dispatcher, PassiveDiscoveryStateConfig);
 
+            return;
         } else if(app->passive_discovery.state == PassiveDiscoveryStateListening) {
             passive_discovery_module_stop(app);
 

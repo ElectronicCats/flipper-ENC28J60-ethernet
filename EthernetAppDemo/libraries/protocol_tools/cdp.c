@@ -94,34 +94,6 @@ bool is_cdp(const uint8_t* buffer, uint16_t length) {
 
     uint8_t cdp_mac[] = {0x01, 0x00, 0x0C, 0xCC, 0xCC, 0xCC};
 
-    FURI_LOG_I(
-        "CDP",
-        "DST %02X:%02X:%02X:%02X:%02X:%02X",
-        buffer[0],
-        buffer[1],
-        buffer[2],
-        buffer[3],
-        buffer[4],
-        buffer[5]);
-
-    FURI_LOG_I(
-        "CDP",
-        "SRC %02X:%02X:%02X:%02X:%02X:%02X",
-        buffer[6],
-        buffer[7],
-        buffer[8],
-        buffer[9],
-        buffer[10],
-        buffer[11]);
-
-    FURI_LOG_I("CDP", "LEN %02X %02X", buffer[12], buffer[13]);
-
-    FURI_LOG_I("CDP", "LLC %02X %02X %02X", buffer[14], buffer[15], buffer[16]);
-
-    FURI_LOG_I("CDP", "OUI %02X %02X %02X", buffer[17], buffer[18], buffer[19]);
-
-    FURI_LOG_I("CDP", "PID %02X %02X", buffer[20], buffer[21]);
-
     if(memcmp(header.mac_destination, cdp_mac, 6) != 0) {
         return false;
     }
@@ -234,12 +206,6 @@ bool cdp_parse(const uint8_t* frame, uint16_t length, cdp_info_t* info) {
         ptr += tlv_length;
     }
 
-    // DEBUG TEMPORAL
-    FURI_LOG_I("CDP", "Device=%s", info->device_id);
-    FURI_LOG_I("CDP", "Platform=%s", info->platform);
-    FURI_LOG_I("CDP", "Software=%s", info->software_version);
-    FURI_LOG_I("CDP", "Port=%s", info->port_id);
-
     info->valid = true;
 
     return true;
@@ -273,7 +239,7 @@ bool cdp_fill_neighbor(const cdp_info_t* info, neighbor_t* neighbor) {
     neighbor->capabilities = info->capabilities;
 
     neighbor->discovery_sources = NEIGHBOR_SOURCE_CDP;
-
+    neighbor->last_seen_source = NEIGHBOR_SOURCE_CDP;
     neighbor->occupied = true;
 
     return true;

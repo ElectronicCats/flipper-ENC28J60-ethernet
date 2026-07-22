@@ -18,6 +18,9 @@ typedef struct {
     // Blocking loop packet acquisition function
     bool (*run)(scanner_session_t* session, uint32_t timeout_ms);
 
+    // Process a single frame (used by ALL mode)
+    bool (*process_frame)(uint8_t* frame, uint16_t length);
+
     // Protocol-specific teardown and hardware restore
     void (*cleanup)(App* app);
 

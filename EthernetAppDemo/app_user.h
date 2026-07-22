@@ -77,10 +77,11 @@ typedef enum {
 
 // For Passive Discovery scene protocols
 typedef enum {
-    PassiveProtocolLLDP = 0,
+    PassiveProtocolALL = 0,
+    PassiveProtocolClearAll,
+    PassiveProtocolLLDP,
     PassiveProtocolCDP,
     PassiveProtocolEAPOL,
-    PassiveProtocolClearAll,
     PassiveProtocolCount,
 } passive_protocol_t;
 
