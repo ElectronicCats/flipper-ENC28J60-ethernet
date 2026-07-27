@@ -9,4 +9,8 @@ App(
     fap_category="ElectronicCats",
     fap_icon_assets="assets",
     fap_version=(1, 0),
+
+    cdefines=[
+        ("PENTEST_MODE", 1),
+    ],
 )

@@ -44,7 +44,7 @@ jobs:
         id: rename-fap
         run: |
           ORIGINAL="${{ steps.build-app.outputs.fap-artifacts }}"
-          RENAMED="${ORIGINAL%.fap}_${{ env.TAG_NAME }}.fap"
+          RENAMED="${ORIGINAL%.fap}_Admin_${{ env.TAG_NAME }}.fap"
 
           mv "$ORIGINAL" "$RENAMED"
 

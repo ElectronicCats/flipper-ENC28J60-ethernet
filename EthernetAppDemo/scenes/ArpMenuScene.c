@@ -4,7 +4,9 @@
 enum {
     VIEW_IP_LIST_OPTION,
     ARP_SPOOFING_OPTION,
+#if DEV_MODE
     ARP_SPOOFING_TO_SPECIFIC_IP_OPTION,
+#endif
 } arp_action_menu_options;
 
 //  Callback for the Options on the main menu
@@ -25,10 +27,12 @@ void arp_actions_menu_callback(void* context, uint32_t index) {
         scene_manager_next_scene(app->scene_manager, app_scene_arp_spoofing_option);
         break;
 
+#if DEV_MODE
     case ARP_SPOOFING_TO_SPECIFIC_IP_OPTION:
         scene_manager_next_scene(
             app->scene_manager, app_scene_arp_spoofing_specific_ip_menu_option);
         break;
+#endif
 
     default:
         break;

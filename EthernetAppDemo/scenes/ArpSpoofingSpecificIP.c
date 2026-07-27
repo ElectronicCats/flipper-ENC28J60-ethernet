@@ -1,5 +1,9 @@
 #include "../app_user.h"
 
+#include "../app_user.h"
+
+#if DEV_MODE
+
 enum {
     VIEW_IP_LIST,
     SET_IP,
@@ -362,3 +366,5 @@ int32_t thread_for_spoofing_specific_ip(void* context) {
 
     return 0;
 }
+
+#endif
