@@ -9,17 +9,58 @@ void lldp_module_reset(void) {
 }
 
 bool lldp_module_process_frame(uint8_t* frame, uint16_t length) {
-    if(!frame) return false;
-
-    if(!is_lldp(frame)) {
+    printf("LLDP FRAME %u\n", length);
+    fflush(stdout);
+    FURI_LOG_I("LLDP", "Frame len=%u", length);
+    if(!frame) {
+        FURI_LOG_I("LLDP", "NULL frame");
         return false;
     }
+
+    if(frame[0] == 0x01 && frame[1] == 0x80 && frame[2] == 0xC2) {
+        FURI_LOG_I(
+            "RX",
+            "802.1 multicast received: %02X:%02X:%02X:%02X:%02X:%02X",
+            frame[0],
+            frame[1],
+            frame[2],
+            frame[3],
+            frame[4],
+            frame[5]);
+    }
+
+    if(!is_lldp(frame)) {
+        FURI_LOG_I(
+            "LLDP",
+            "Ether bytes: %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X",
+            frame[0],
+            frame[1],
+            frame[2],
+            frame[3],
+            frame[4],
+            frame[5],
+            frame[6],
+            frame[7],
+            frame[8],
+            frame[9],
+            frame[10],
+            frame[11],
+            frame[12],
+            frame[13]);
+
+        return false;
+    }
+
+    FURI_LOG_I("LLDP", "EtherType LLDP OK");
 
     lldp_info_t info;
 
     if(!lldp_parse(frame, length, &info)) {
+        FURI_LOG_I("LLDP", "Parse failed");
         return false;
     }
+
+    FURI_LOG_I("LLDP", "Parse OK");
 
     neighbor_t neighbor;
 
@@ -27,7 +68,34 @@ bool lldp_module_process_frame(uint8_t* frame, uint16_t length) {
         return false;
     }
 
-    return neighbor_db_add(&neighbor);
+    FURI_LOG_I(
+        "LLDP",
+        "Neighbor MAC parsed: %02X:%02X:%02X:%02X:%02X:%02X",
+        neighbor.mac[0],
+        neighbor.mac[1],
+        neighbor.mac[2],
+        neighbor.mac[3],
+        neighbor.mac[4],
+        neighbor.mac[5]);
+
+    FURI_LOG_I("LLDP", "DB check starting");
+
+    neighbor_t* existing = neighbor_db_find(neighbor.mac);
+
+    bool ok = false;
+
+    if(existing) {
+        FURI_LOG_I("LLDP", "Updating neighbor");
+        ok = neighbor_db_update(&neighbor);
+    } else {
+        FURI_LOG_I("LLDP", "Adding neighbor");
+        ok = neighbor_db_add(&neighbor);
+    }
+
+    FURI_LOG_I("LLDP", "DB operation result: %d", ok);
+    FURI_LOG_I("LLDP", "DB count now: %u", neighbor_db_count());
+
+    return ok;
 }
 
 bool lldp_packet_predicate(const uint8_t* frame, uint16_t len, void* ctx) {
@@ -37,6 +105,9 @@ bool lldp_packet_predicate(const uint8_t* frame, uint16_t len, void* ctx) {
 }
 
 bool lldp_module_run(scanner_session_t* session, uint32_t timeout_ms) {
+    printf("LLDP RUN\n");
+    fflush(stdout);
+
     uint16_t length = 0;
 
     return scanner_wait_for_packet(

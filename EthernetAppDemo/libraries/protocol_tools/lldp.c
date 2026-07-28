@@ -108,37 +108,26 @@ static void
 }
 
 bool lldp_fill_neighbor(const lldp_info_t* info, neighbor_t* neighbor) {
-    if(!info || !neighbor) {
+    if(!info || !neighbor || !info->valid) {
         return false;
     }
 
-    memset(neighbor, 0, sizeof(*neighbor));
+    memset(neighbor, 0, sizeof(neighbor_t));
 
-    memcpy(neighbor->mac, info->source_mac, sizeof(neighbor->mac));
+    memcpy(neighbor->mac, info->source_mac, 6);
 
-    lldp_copy_string_field(
-        (const uint8_t*)info->system_name,
-        strlen(info->system_name),
-        neighbor->name,
-        sizeof(neighbor->name));
-
-    lldp_copy_string_field(
-        (const uint8_t*)info->port_id,
-        strlen(info->port_id),
-        neighbor->port,
-        sizeof(neighbor->port));
-
-    lldp_copy_string_field(
-        (const uint8_t*)info->management_address,
-        strlen(info->management_address),
+    strncpy(neighbor->name, info->system_name, sizeof(neighbor->name) - 1);
+    strncpy(neighbor->port, info->port_id, sizeof(neighbor->port) - 1);
+    strncpy(
         neighbor->management_address,
-        sizeof(neighbor->management_address));
+        info->management_address,
+        sizeof(neighbor->management_address) - 1);
 
     neighbor->ttl = info->ttl;
-
-    neighbor->capabilities = info->enabled_capabilities;
+    neighbor->capabilities = info->system_capabilities;
 
     neighbor->discovery_sources = NEIGHBOR_SOURCE_LLDP;
+    neighbor->occupied = true;
 
     return true;
 }
@@ -174,14 +163,23 @@ bool lldp_parse(const uint8_t* frame, uint16_t length, lldp_info_t* info) {
 
         uint16_t tlv_length = tlv_header & 0x1FF;
 
+        FURI_LOG_I("LLDP", "TLV type=%u length=%u", tlv_type, tlv_length);
+
         ptr += 2;
 
-        if(ptr + tlv_length > end) return false;
+        if(ptr + tlv_length > end) {
+            FURI_LOG_E("LLDP", "TLV exceeds frame (type=%u len=%u)", tlv_type, tlv_length);
+
+            return false;
+        }
 
         if(tlv_type == LLDP_TLV_END) {
+            FURI_LOG_I("LLDP", "END TLV reached");
             info->valid = true;
             return true;
         }
+
+        FURI_LOG_I("LLDP", "TLV=%u LEN=%u", tlv_type, tlv_length);
 
         switch(tlv_type) {
         case LLDP_TLV_CHASSIS_ID:

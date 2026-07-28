@@ -1,10 +1,6 @@
 #include "../app_user.h"
 #include <stdio.h>
 
-#ifndef PENTEST_MODE
-#define PENTEST_MODE 0
-#endif
-
 /**
  * The main menu is the first scene to see in the Ethernet App
  * here the user selects an option that wants to do.
@@ -23,11 +19,13 @@ const uint32_t time_showing = 250;
 enum {
     GET_IP_OPTION,
     SCAN_HOSTS_OPTION,
+    PASSIVE_DISCOVERY_OPTION,
     PING_OPTION,
     PORTS_SCANNER_OPTION,
     OS_DETECTOR_OPTION,
-    IF_PENTEST(ARP_ACTIONS_OPTION, )
-    IF_PENTEST(SNIFFER_OPTION, ) IF_PENTEST(READ_PCAPS_OPTION, ) SETTINGS_OPTION,
+    IF_PENTEST(ARP_ACTIONS_OPTION, ) SNIFFER_OPTION,
+    READ_PCAPS_OPTION,
+    SETTINGS_OPTION,
     ABOUT_US,
 } main_menu_options;
 
@@ -61,6 +59,14 @@ void main_menu_options_callback(void* context, uint32_t index) {
         scene_manager_next_scene(app->scene_manager, app_scene_arp_scanner_menu_option);
         break;
 
+    case PASSIVE_DISCOVERY_OPTION:
+        scene_manager_next_scene(app->scene_manager, app_scene_passive_discovery_option);
+        break;
+
+    case SNIFFER_OPTION:
+        scene_manager_next_scene(app->scene_manager, app_scene_sniffer_option);
+        break;
+
     case PING_OPTION:
         scene_manager_next_scene(app->scene_manager, app_scene_ping_menu_option);
         break;
@@ -73,19 +79,14 @@ void main_menu_options_callback(void* context, uint32_t index) {
         scene_manager_next_scene(app->scene_manager, app_scene_os_detector_option);
         break;
 
-#if PENTEST_MODE
-    case ARP_ACTIONS_OPTION:
-        scene_manager_next_scene(app->scene_manager, app_scene_arp_action_menu_option);
-        break;
-
-    case SNIFFER_OPTION:
-        scene_manager_next_scene(app->scene_manager, app_scene_sniffer_option);
-        break;
+        IF_PENTEST(
+            case ARP_ACTIONS_OPTION
+            : scene_manager_next_scene(app->scene_manager, app_scene_arp_action_menu_option);
+            break;)
 
     case READ_PCAPS_OPTION:
         scene_manager_next_scene(app->scene_manager, app_scene_browser_pcaps_option);
         break;
-#endif
 
     case SETTINGS_OPTION:
         scene_manager_next_scene(app->scene_manager, app_scene_settings_option);
@@ -117,24 +118,42 @@ void app_scene_main_menu_on_enter(void* context) {
     submenu_reset(app->submenu);
 
     // header for the  submenu
-#if PENTEST_MODE
-    submenu_set_header(app->submenu, "ETHERNET PENTEST");
-#else
+    IF_PENTEST(submenu_set_header(app->submenu, "ETHERNET PENTEST");)
+#if !PENTEST_MODE
     submenu_set_header(app->submenu, "ETHERNET ADMIN");
 #endif
 
+#if !PENTEST_MODE
     submenu_add_item(app->submenu, "Get IP", GET_IP_OPTION, main_menu_options_callback, app);
+#endif
 
+#if !PENTEST_MODE
     submenu_add_item(
         app->submenu, "Scan Hosts", SCAN_HOSTS_OPTION, main_menu_options_callback, app);
+#endif
 
+#if !PENTEST_MODE
+    submenu_add_item(
+        app->submenu,
+        "Passive Discovery",
+        PASSIVE_DISCOVERY_OPTION,
+        main_menu_options_callback,
+        app);
+#endif
+
+#if !PENTEST_MODE
     submenu_add_item(app->submenu, "Ping Host", PING_OPTION, main_menu_options_callback, app);
+#endif
 
+#if !PENTEST_MODE
     submenu_add_item(
         app->submenu, "Scan Ports", PORTS_SCANNER_OPTION, main_menu_options_callback, app);
+#endif
 
+#if !PENTEST_MODE
     submenu_add_item(
         app->submenu, "Detect OS", OS_DETECTOR_OPTION, main_menu_options_callback, app);
+#endif
 
     IF_PENTEST(
         submenu_add_item(

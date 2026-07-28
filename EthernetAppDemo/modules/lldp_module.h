@@ -5,6 +5,12 @@
 #include "../libraries/protocol_tools/neighbor_db.h"
 #include "../libraries/scanner/scanner_session.h"
 
+#include <stdint.h>
+#include <stdbool.h>
+
+#include "../libraries/protocol_tools/lldp.h"
+#include "../libraries/protocol_tools/neighbor_db.h"
+
 /**
  * @brief Initializes the LLDP discovery module.
  *
