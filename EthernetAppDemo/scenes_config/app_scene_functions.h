@@ -1,17 +1,7 @@
 #include <gui/scene_manager.h>
 
-#ifndef PENTEST_MODE
-#define PENTEST_MODE 1
-#endif
-
 #ifndef DEV_MODE
 #define DEV_MODE 0
-#endif
-
-#if PENTEST_MODE
-#define IF_PENTEST(...) __VA_ARGS__
-#else
-#define IF_PENTEST(...)
 #endif
 
 // Create the enumerator for the scenes

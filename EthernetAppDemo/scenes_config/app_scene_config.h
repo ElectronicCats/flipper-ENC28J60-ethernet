@@ -2,8 +2,14 @@
  * Add Scenes to work with the app scene manager
  */
 
-// The main menu
+// Main Category Menu
+ADD_SCENE(app, main_category_menu, main_category_menu_option)
+
+// Admin Menu
 ADD_SCENE(app, main_menu, main_menu_option)
+
+// Pentest Scene
+ADD_SCENE(app, pentest_menu, pentest_menu_option)
 
 // Sniffer Scene
 ADD_SCENE(app, sniffer, sniffer_option)
@@ -12,7 +18,6 @@ ADD_SCENE(app, sniffer, sniffer_option)
 ADD_SCENE(app, browser_pcaps, browser_pcaps_option)
 ADD_SCENE(app, read_pcap, read_pcap_option)
 
-#if PENTEST_MODE
 // ARP Actions menu Scene
 ADD_SCENE(app, arp_actions_menu, arp_action_menu_option)
 // ARPSpoofing Scene
@@ -22,8 +27,6 @@ ADD_SCENE(app, arp_spoofing, arp_spoofing_option)
 // ArpSpoofing specific IP
 ADD_SCENE(app, arp_spoofing_specific_ip_menu, arp_spoofing_specific_ip_menu_option)
 ADD_SCENE(app, arp_spoofing_specific_ip, arp_spoofing_specific_ip_option)
-#endif
-
 #endif
 
 // ARP scanner scene

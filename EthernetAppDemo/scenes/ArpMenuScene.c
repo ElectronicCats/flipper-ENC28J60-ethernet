@@ -23,11 +23,9 @@ void arp_actions_menu_callback(void* context, uint32_t index) {
 
         break;
 
-#if PENTEST_MODE
     case ARP_SPOOFING_OPTION:
         scene_manager_next_scene(app->scene_manager, app_scene_arp_spoofing_option);
         break;
-#endif
 
 #if DEV_MODE
     case ARP_SPOOFING_TO_SPECIFIC_IP_OPTION:
