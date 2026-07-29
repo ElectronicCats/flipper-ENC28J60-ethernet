@@ -121,3 +121,115 @@ size_t lldp_module_count(void) {
 neighbor_t* lldp_module_get(size_t index) {
     return neighbor_db_get(index);
 }
+
+static const char* lldp_get_display_name(void) {
+    return "LLDP";
+}
+
+static void lldp_init(App* app) {
+    enable_multicast(app->ethernet);
+    lldp_module_init();
+}
+
+static bool lldp_run(scanner_session_t* session, uint32_t timeout_ms) {
+    return lldp_module_run(session, timeout_ms);
+}
+
+static void lldp_cleanup(App* app) {
+    disable_multicast(app->ethernet);
+}
+
+static uint8_t lldp_get_details_page_count(neighbor_t* neighbor) {
+    UNUSED(neighbor);
+    return 3;
+}
+
+static void lldp_build_details_page(
+    neighbor_t* neighbor,
+    uint8_t page,
+    char* line1,
+    size_t line1_size,
+    char* line2,
+    size_t line2_size,
+    char* line3,
+    size_t line3_size,
+    char* line4,
+    size_t line4_size) {
+    if(!neighbor) return;
+
+    switch(page) {
+    case 0:
+        snprintf(line1, line1_size, "Name:");
+
+        if(neighbor->name[0]) {
+            snprintf(line2, line2_size, "%s", neighbor->name);
+        } else {
+            snprintf(
+                line2,
+                line2_size,
+                "%02X:%02X:%02X:%02X:%02X:%02X",
+                neighbor->mac[0],
+                neighbor->mac[1],
+                neighbor->mac[2],
+                neighbor->mac[3],
+                neighbor->mac[4],
+                neighbor->mac[5]);
+        }
+
+        snprintf(line3, line3_size, "Source: LLDP");
+
+        snprintf(
+            line4,
+            line4_size,
+            "MAC:%02X:%02X:%02X",
+            neighbor->mac[3],
+            neighbor->mac[4],
+            neighbor->mac[5]);
+
+        break;
+
+    case 1:
+
+        snprintf(line1, line1_size, "Port:");
+
+        snprintf(line2, line2_size, "%s", neighbor->port[0] ? neighbor->port : "N/A");
+
+        snprintf(
+            line3,
+            line3_size,
+            "IP:%s",
+            neighbor->management_address[0] ? neighbor->management_address : "N/A");
+
+        snprintf(line4, line4_size, "TTL:%u", neighbor->ttl);
+
+        break;
+
+    case 2:
+
+        snprintf(line1, line1_size, "Capabilities");
+
+        snprintf(line2, line2_size, "0x%04X", neighbor->capabilities);
+
+        snprintf(line3, line3_size, "Sources:%02X", neighbor->discovery_sources);
+
+        line4[0] = '\0';
+
+        break;
+
+    default:
+        line1[0] = '\0';
+        line2[0] = '\0';
+        line3[0] = '\0';
+        line4[0] = '\0';
+        break;
+    }
+}
+
+const PassiveProtocolHandler lldp_protocol_handler = {
+    .get_display_name = lldp_get_display_name,
+    .init = lldp_init,
+    .run = lldp_run,
+    .cleanup = lldp_cleanup,
+    .get_details_page_count = lldp_get_details_page_count,
+    .build_details_page = lldp_build_details_page,
+};
