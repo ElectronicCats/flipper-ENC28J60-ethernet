@@ -36,6 +36,31 @@ typedef enum {
     LLDP_CHASSIS_LOCAL = 7,
 } lldp_chassis_subtype_t;
 
+typedef struct {
+    char chassis_id[64];
+    char port_id[64];
+    char port_description[64];
+
+    char system_name[64];
+    char system_description[128];
+    char management_address[48];
+
+    uint8_t source_mac[6];
+
+    uint8_t chassis_subtype;
+    uint8_t port_subtype;
+
+    uint16_t ttl;
+    uint16_t system_capabilities;
+    uint16_t enabled_capabilities;
+
+    bool has_chassis_id;
+    bool has_port_id;
+    bool has_ttl;
+
+    bool valid;
+} lldp_info_t;
+
 /**
  * @brief Parsed information extracted from an LLDP Data Unit (LLDPDU).
  *
@@ -43,20 +68,6 @@ typedef enum {
  * neighboring device according to IEEE 802.1AB. Fields that are not
  * present in the received LLDP frame remain empty or set to zero.
  */
-typedef struct {
-    char chassis_id[64];
-    char port_id[64];
-    char system_name[64];
-    char system_description[128];
-    char management_address[48];
-
-    uint8_t source_mac[6];
-    uint16_t ttl;
-    uint16_t system_capabilities;
-    uint16_t enabled_capabilities;
-
-    bool valid;
-} lldp_info_t;
 
 /**
  * @brief Checks whether an Ethernet frame is an LLDP packet.

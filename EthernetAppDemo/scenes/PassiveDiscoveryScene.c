@@ -151,6 +151,8 @@ void app_scene_passive_discovery_on_exit(void* context) {
 
     app->passive_discovery_stop = true;
 
+    passive_discovery_module_stop(app);
+
     widget_reset(app->widget);
 }
 
