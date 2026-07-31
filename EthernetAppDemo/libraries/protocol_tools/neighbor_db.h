@@ -61,6 +61,18 @@ bool neighbor_db_update(const neighbor_t* neighbor);
 
 neighbor_t* neighbor_db_get(size_t index);
 
+neighbor_t* neighbor_db_get_by_position(size_t position);
+
 size_t neighbor_db_count(void);
+
+void neighbor_db_load(void);
+
+void neighbor_db_save(void);
+
+size_t neighbor_db_count_by_source(uint8_t source);
+
+neighbor_t* neighbor_db_get_by_source(uint8_t source, size_t position);
+
+void neighbor_db_clear_by_source(uint8_t source);
 
 #endif

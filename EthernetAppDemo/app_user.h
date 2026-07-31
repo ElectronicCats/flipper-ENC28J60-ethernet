@@ -74,10 +74,13 @@ typedef enum {
 
 // For Passive Discovery scene protocols
 typedef enum {
-    PassiveProtocolLLDP = 0,
+    PassiveProtocolALL,
+    PassiveProtocolLLDP,
     PassiveProtocolEAPOL,
     PassiveProtocolCDP,
-    PassiveProtocolCount,
+    PassiveProtocolClearAll,
+
+    PassiveProtocolCount
 } passive_protocol_t;
 
 // For Passive Discovery scene protocol names
@@ -129,6 +132,7 @@ typedef struct {
     volatile bool passive_discovery_stop;
     uint16_t passive_neighbor_count;
     uint8_t passive_selected_neighbor;
+    uint8_t passive_details_page;
 
     SceneManager* scene_manager;
     ViewDispatcher* view_dispatcher;

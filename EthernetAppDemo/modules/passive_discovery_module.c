@@ -196,11 +196,17 @@ void passive_discovery_module_start(App* app) {
 }
 
 void passive_discovery_module_stop(App* app) {
+    if(!app) {
+        return;
+    }
+
     app->passive_discovery_stop = true;
 
-    if(app->thread_alternative) {
+    if(app->thread_alternative != NULL) {
         furi_thread_join(app->thread_alternative);
+
         furi_thread_free(app->thread_alternative);
+
         app->thread_alternative = NULL;
     }
 }

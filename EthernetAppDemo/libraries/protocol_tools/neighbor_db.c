@@ -10,6 +10,54 @@ void neighbor_db_init(void) {
     neighbor_db_clear();
 }
 
+void neighbor_db_load(void) {
+    // TODO: Storage persistence
+}
+
+void neighbor_db_save(void) {
+    // TODO: Storage persistence
+}
+
+size_t neighbor_db_count_by_source(uint8_t source) {
+    size_t count = 0;
+
+    for(size_t i = 0; i < NEIGHBOR_DB_MAX_ENTRIES; i++) {
+        if(!neighbors[i].occupied) continue;
+
+        if(neighbors[i].discovery_sources & source) count++;
+    }
+
+    return count;
+}
+
+neighbor_t* neighbor_db_get_by_source(uint8_t source, size_t position) {
+    size_t current = 0;
+
+    for(size_t i = 0; i < NEIGHBOR_DB_MAX_ENTRIES; i++) {
+        if(!neighbors[i].occupied) continue;
+
+        if(!(neighbors[i].discovery_sources & source)) continue;
+
+        if(current == position) return &neighbors[i];
+
+        current++;
+    }
+
+    return NULL;
+}
+
+void neighbor_db_clear_by_source(uint8_t source) {
+    for(size_t i = 0; i < NEIGHBOR_DB_MAX_ENTRIES; i++) {
+        if(!neighbors[i].occupied) continue;
+
+        neighbors[i].discovery_sources &= ~source;
+
+        if(neighbors[i].discovery_sources == 0) {
+            memset(&neighbors[i], 0, sizeof(neighbor_t));
+        }
+    }
+}
+
 size_t neighbor_db_count(void) {
     size_t count = 0;
 
@@ -20,6 +68,24 @@ size_t neighbor_db_count(void) {
     }
 
     return count;
+}
+
+neighbor_t* neighbor_db_get_by_position(size_t position) {
+    size_t current = 0;
+
+    for(size_t i = 0; i < NEIGHBOR_DB_MAX_ENTRIES; i++) {
+        if(!neighbors[i].occupied) {
+            continue;
+        }
+
+        if(current == position) {
+            return &neighbors[i];
+        }
+
+        current++;
+    }
+
+    return NULL;
 }
 
 neighbor_t* neighbor_db_get(size_t index) {
