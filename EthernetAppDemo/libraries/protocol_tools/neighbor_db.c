@@ -126,7 +126,10 @@ bool neighbor_db_add(const neighbor_t* neighbor) {
     neighbor_t* existing = neighbor_db_find(neighbor->mac);
 
     if(existing) {
-        return neighbor_db_update(neighbor);
+        *existing = *neighbor;
+        existing->occupied = true;
+
+        return true;
     }
 
     for(size_t i = 0; i < NEIGHBOR_DB_MAX_ENTRIES; i++) {
@@ -152,50 +155,7 @@ bool neighbor_db_update(const neighbor_t* neighbor) {
         return false;
     }
 
-    memcpy(existing->mac, neighbor->mac, sizeof(existing->mac));
-
-    existing->last_seen_source = neighbor->last_seen_source;
-
-    existing->discovery_sources |= neighbor->discovery_sources;
-
-#define MERGE_STRING(field)                                                         \
-    do {                                                                            \
-        if(neighbor->field[0] != '\0') {                                            \
-            strncpy(existing->field, neighbor->field, sizeof(existing->field) - 1); \
-            existing->field[sizeof(existing->field) - 1] = '\0';                    \
-        }                                                                           \
-    } while(0)
-
-    MERGE_STRING(chassis_id);
-    MERGE_STRING(name);
-    MERGE_STRING(description);
-    MERGE_STRING(port);
-    MERGE_STRING(port_description);
-    MERGE_STRING(management_address);
-
-#undef MERGE_STRING
-
-    if(neighbor->chassis_subtype) existing->chassis_subtype = neighbor->chassis_subtype;
-
-    if(neighbor->port_subtype) existing->port_subtype = neighbor->port_subtype;
-
-    if(neighbor->ttl) existing->ttl = neighbor->ttl;
-
-    if(neighbor->capabilities) existing->capabilities = neighbor->capabilities;
-
-    if(neighbor->has_vlan) {
-        existing->has_vlan = true;
-        existing->vlan_id = neighbor->vlan_id;
-    }
-
-    if(neighbor->has_poe) {
-        existing->has_poe = true;
-        existing->poe_power_mw = neighbor->poe_power_mw;
-        existing->poe_type = neighbor->poe_type;
-        existing->poe_source = neighbor->poe_source;
-        existing->poe_priority = neighbor->poe_priority;
-    }
-
+    *existing = *neighbor;
     existing->occupied = true;
 
     return true;

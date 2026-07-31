@@ -30,35 +30,25 @@ typedef struct {
     uint8_t mac[6];
 
     char chassis_id[64];
-    uint8_t chassis_subtype;
 
     char name[64];
 
     char description[128];
 
     char port[64];
-    uint8_t port_subtype;
-
-    char port_description[64];
 
     char management_address[48];
 
     uint16_t ttl;
+
     uint16_t capabilities;
 
-    bool has_vlan;
-    uint16_t vlan_id;
-
-    bool has_poe;
-    uint16_t poe_power_mw;
-    uint8_t poe_type;
-    uint8_t poe_source;
-    uint8_t poe_priority;
+    uint16_t enabled_capabilities;
 
     uint8_t discovery_sources;
-    uint8_t last_seen_source;
 
     bool occupied;
+
 } neighbor_t;
 
 void neighbor_db_init(void);

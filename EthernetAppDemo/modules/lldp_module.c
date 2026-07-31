@@ -11,7 +11,6 @@ void lldp_module_reset(void) {
 bool lldp_module_process_frame(uint8_t* frame, uint16_t length) {
     printf("LLDP FRAME %u\n", length);
     fflush(stdout);
-    FURI_LOG_I("LLDP", "Frame len=%u", length);
     if(!frame) {
         FURI_LOG_I("LLDP", "NULL frame");
         return false;
@@ -51,8 +50,6 @@ bool lldp_module_process_frame(uint8_t* frame, uint16_t length) {
         return false;
     }
 
-    FURI_LOG_I("LLDP", "EtherType LLDP OK");
-
     lldp_info_t info;
 
     if(!lldp_parse(frame, length, &info)) {
@@ -60,25 +57,11 @@ bool lldp_module_process_frame(uint8_t* frame, uint16_t length) {
         return false;
     }
 
-    FURI_LOG_I("LLDP", "Parse OK");
-
     neighbor_t neighbor;
 
     if(!lldp_fill_neighbor(&info, &neighbor)) {
         return false;
     }
-
-    FURI_LOG_I(
-        "LLDP",
-        "Neighbor MAC parsed: %02X:%02X:%02X:%02X:%02X:%02X",
-        neighbor.mac[0],
-        neighbor.mac[1],
-        neighbor.mac[2],
-        neighbor.mac[3],
-        neighbor.mac[4],
-        neighbor.mac[5]);
-
-    FURI_LOG_I("LLDP", "DB check starting");
 
     neighbor_t* existing = neighbor_db_find(neighbor.mac);
 
@@ -91,9 +74,6 @@ bool lldp_module_process_frame(uint8_t* frame, uint16_t length) {
         FURI_LOG_I("LLDP", "Adding neighbor");
         ok = neighbor_db_add(&neighbor);
     }
-
-    FURI_LOG_I("LLDP", "DB operation result: %d", ok);
-    FURI_LOG_I("LLDP", "DB count now: %u", neighbor_db_count());
 
     return ok;
 }
@@ -159,68 +139,52 @@ static void lldp_build_details_page(
 
     switch(page) {
     case 0:
-        snprintf(line1, line1_size, "Name:");
 
-        if(neighbor->name[0]) {
-            snprintf(line2, line2_size, "%s", neighbor->name);
-        } else {
-            snprintf(
-                line2,
-                line2_size,
-                "%02X:%02X:%02X:%02X:%02X:%02X",
-                neighbor->mac[0],
-                neighbor->mac[1],
-                neighbor->mac[2],
-                neighbor->mac[3],
-                neighbor->mac[4],
-                neighbor->mac[5]);
-        }
+        snprintf(line1, line1_size, "NAME");
 
-        snprintf(line3, line3_size, "Source: LLDP");
+        snprintf(line2, line2_size, "%s", neighbor->name[0] ? neighbor->name : "Unnamed");
 
-        snprintf(
-            line4,
-            line4_size,
-            "MAC:%02X:%02X:%02X",
-            neighbor->mac[3],
-            neighbor->mac[4],
-            neighbor->mac[5]);
+        snprintf(line3, line3_size, "SOURCE");
+
+        snprintf(line4, line4_size, "LLDP");
 
         break;
 
     case 1:
 
-        snprintf(line1, line1_size, "Port:");
+        snprintf(line1, line1_size, "PORT");
 
         snprintf(line2, line2_size, "%s", neighbor->port[0] ? neighbor->port : "N/A");
 
-        snprintf(
-            line3,
-            line3_size,
-            "IP:%s",
-            neighbor->management_address[0] ? neighbor->management_address : "N/A");
+        snprintf(line3, line3_size, "IP");
 
-        snprintf(line4, line4_size, "TTL:%u", neighbor->ttl);
+        snprintf(
+            line4,
+            line4_size,
+            "%s",
+            neighbor->management_address[0] ? neighbor->management_address : "N/A");
 
         break;
 
     case 2:
 
-        snprintf(line1, line1_size, "Capabilities");
+        snprintf(line1, line1_size, "CAPABILITIES");
 
         snprintf(line2, line2_size, "0x%04X", neighbor->capabilities);
 
-        snprintf(line3, line3_size, "Sources:%02X", neighbor->discovery_sources);
+        snprintf(line3, line3_size, "TTL");
 
-        line4[0] = '\0';
+        snprintf(line4, line4_size, "%u", neighbor->ttl);
 
         break;
 
     default:
+
         line1[0] = '\0';
         line2[0] = '\0';
         line3[0] = '\0';
         line4[0] = '\0';
+
         break;
     }
 }

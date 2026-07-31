@@ -156,7 +156,6 @@ static int32_t passive_discovery_thread(void* context) {
     }
 
     while(!app->passive_discovery_stop) {
-        FURI_LOG_I("PASSIVE", "Protocol=%u", app->passive_discovery.protocol);
         if(handler && handler->run) {
             bool result = handler->run(&session, 500);
             if(result) {

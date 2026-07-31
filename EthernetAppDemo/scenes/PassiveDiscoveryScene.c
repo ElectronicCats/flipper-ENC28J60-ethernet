@@ -20,12 +20,24 @@ static void passive_discovery_draw_config(App* app) {
 
     uint8_t protocol = app->passive_discovery.protocol;
 
+#if DEV_MODE
+
     if(protocol >= 4) {
         protocol = PassiveProtocolALL;
         app->passive_discovery.protocol = protocol;
     }
 
-    snprintf(protocol_text, sizeof(protocol_text), "< %s >", passive_protocol_names[protocol]);
+#else
+
+    // Release: solamente LLDP visible
+    if(protocol != PassiveProtocolLLDP) {
+        protocol = PassiveProtocolLLDP;
+        app->passive_discovery.protocol = protocol;
+    }
+
+#endif
+
+    snprintf(protocol_text, sizeof(protocol_text), "%s", passive_protocol_names[protocol]);
 
     widget_add_string_element(
         app->widget, 64, 10, AlignCenter, AlignCenter, FontPrimary, "Passive Discovery");
@@ -36,14 +48,22 @@ static void passive_discovery_draw_config(App* app) {
     widget_add_string_element(
         app->widget, 64, 45, AlignCenter, AlignCenter, FontPrimary, protocol_text);
 
-    widget_add_button_element(
-        app->widget, GuiButtonTypeLeft, "<", passive_discovery_button_callback, app);
+    /*widget_add_button_element(
+        app->widget,
+        GuiButtonTypeLeft,
+        "<",
+        passive_discovery_button_callback,
+        app);*/
 
     widget_add_button_element(
         app->widget, GuiButtonTypeCenter, "Start", passive_discovery_button_callback, app);
 
-    widget_add_button_element(
-        app->widget, GuiButtonTypeRight, ">", passive_discovery_button_callback, app);
+    /*widget_add_button_element(
+        app->widget,
+        GuiButtonTypeRight,
+        ">",
+        passive_discovery_button_callback,
+        app);*/
 }
 
 static void passive_discovery_draw_listening(App* app) {
@@ -168,12 +188,20 @@ static void
     case GuiButtonTypeLeft:
 
         if(app->passive_discovery.state == PassiveDiscoveryStateConfig) {
+#if DEV_MODE
+
             if(app->passive_discovery.protocol == PassiveProtocolALL) {
                 app->passive_discovery.protocol = PassiveProtocolCDP;
 
             } else {
                 app->passive_discovery.protocol--;
             }
+
+#else
+
+            app->passive_discovery.protocol = PassiveProtocolLLDP;
+
+#endif
 
             passive_discovery_refresh(app);
         }
@@ -183,11 +211,19 @@ static void
     case GuiButtonTypeRight:
 
         if(app->passive_discovery.state == PassiveDiscoveryStateConfig) {
+#if DEV_MODE
+
             app->passive_discovery.protocol++;
 
             if(app->passive_discovery.protocol >= 4) {
                 app->passive_discovery.protocol = PassiveProtocolALL;
             }
+
+#else
+
+            app->passive_discovery.protocol = PassiveProtocolLLDP;
+
+#endif
 
             passive_discovery_refresh(app);
         }

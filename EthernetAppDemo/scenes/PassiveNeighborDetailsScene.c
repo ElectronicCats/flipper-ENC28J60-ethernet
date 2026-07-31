@@ -1,4 +1,5 @@
 #include "../app_user.h"
+#include "../modules/passive_discovery_module.h"
 #include "../libraries/protocol_tools/neighbor_db.h"
 
 static void passive_details_callback(GuiButtonType type, InputType input_type, void* context);
@@ -59,12 +60,56 @@ static void passive_draw_details(App* app, neighbor_t* neighbor) {
     char mac_str[20];
     char source_str[32];
 
+    if(!neighbor) {
+        return;
+    }
+
+    if(app->passive_details_page > 0) {
+        char line1[64];
+        char line2[64];
+        char line3[64];
+        char line4[64];
+
+        passive_discovery_module_build_details_page(
+            PassiveProtocolLLDP,
+            neighbor,
+            app->passive_details_page - 1,
+            line1,
+            sizeof(line1),
+            line2,
+            sizeof(line2),
+            line3,
+            sizeof(line3),
+            line4,
+            sizeof(line4));
+
+        widget_add_string_element(
+            app->widget, 64, 8, AlignCenter, AlignCenter, FontPrimary, line1);
+
+        widget_add_string_element(
+            app->widget, 64, 23, AlignCenter, AlignCenter, FontSecondary, line2);
+
+        widget_add_string_element(
+            app->widget, 64, 38, AlignCenter, AlignCenter, FontSecondary, line3);
+
+        widget_add_string_element(
+            app->widget, 64, 53, AlignCenter, AlignCenter, FontSecondary, line4);
+
+        widget_add_button_element(
+            app->widget, GuiButtonTypeLeft, "<", passive_details_callback, app);
+
+        widget_add_button_element(
+            app->widget, GuiButtonTypeRight, ">", passive_details_callback, app);
+
+        return;
+    }
+
     mac_to_string(neighbor->mac, mac_str, sizeof(mac_str));
 
     passive_format_sources(neighbor, source_str, sizeof(source_str));
 
     widget_add_string_element(
-        app->widget, 64, 8, AlignCenter, AlignCenter, FontPrimary, "NEIGHBOR DETAILS");
+        app->widget, 64, 8, AlignCenter, AlignCenter, FontPrimary, "NEIGHBOR");
 
     widget_add_string_element(
         app->widget,
@@ -73,7 +118,7 @@ static void passive_draw_details(App* app, neighbor_t* neighbor) {
         AlignCenter,
         AlignCenter,
         FontSecondary,
-        neighbor->name[0] ? neighbor->name : "Unnamed");
+        neighbor->name[0] ? neighbor->name : "Unknown");
 
     widget_add_string_element(
         app->widget, 64, 32, AlignCenter, AlignCenter, FontSecondary, mac_str);
@@ -81,21 +126,23 @@ static void passive_draw_details(App* app, neighbor_t* neighbor) {
     widget_add_string_element(
         app->widget,
         64,
-        42,
+        43,
         AlignCenter,
         AlignCenter,
         FontSecondary,
-        neighbor->port[0] ? neighbor->port : "No Port");
+        neighbor->port[0] ? neighbor->port : "No Port ID");
 
     widget_add_string_element(
-        app->widget, 64, 52, AlignCenter, AlignCenter, FontSecondary, source_str);
+        app->widget, 64, 54, AlignCenter, AlignCenter, FontSecondary, source_str);
 
-    widget_add_button_element(
-        app->widget, GuiButtonTypeRight, "INFO", passive_details_callback, app);
+    widget_add_button_element(app->widget, GuiButtonTypeLeft, "<", passive_details_callback, app);
+
+    widget_add_button_element(app->widget, GuiButtonTypeRight, ">", passive_details_callback, app);
 }
 
 void app_scene_passive_neighbor_details_on_enter(void* context) {
     App* app = context;
+    app->passive_details_page = 0;
 
     neighbor_t* neighbor = neighbor_db_get_by_position(app->passive_selected_neighbor);
 
@@ -122,11 +169,36 @@ static void passive_details_callback(GuiButtonType type, InputType input_type, v
         return;
     }
 
+    neighbor_t* neighbor = neighbor_db_get_by_position(app->passive_selected_neighbor);
+
+    if(!neighbor) {
+        return;
+    }
+
     if(type == GuiButtonTypeRight) {
-        scene_manager_next_scene(app->scene_manager, app_scene_passive_neighbor_list_option);
+        app->passive_details_page++;
+
+        /*
+         * Por ahora dejamos 3 páginas LLDP.
+         * Después lo hacemos dinámico con
+         * passive_discovery_module_get_details_page_count()
+         */
+
+        if(app->passive_details_page >= 4) {
+            app->passive_details_page = 0;
+        }
+
+        passive_draw_details(app, neighbor);
 
     } else if(type == GuiButtonTypeLeft) {
-        scene_manager_previous_scene(app->scene_manager);
+        if(app->passive_details_page > 0) {
+            app->passive_details_page--;
+
+            passive_draw_details(app, neighbor);
+
+        } else {
+            scene_manager_previous_scene(app->scene_manager);
+        }
     }
 }
 
