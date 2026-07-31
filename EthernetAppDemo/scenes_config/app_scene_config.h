@@ -36,6 +36,8 @@ ADD_SCENE(app, arp_ip_show_details, arp_ip_show_details_option)
 
 // Passive Discovery Scene
 ADD_SCENE(app, passive_discovery, passive_discovery_option)
+ADD_SCENE(app, passive_neighbor_list, passive_neighbor_list_option)
+ADD_SCENE(app, passive_neighbor_details, passive_neighbor_details_option)
 
 // About US scene
 ADD_SCENE(app, about_us, about_us_option)

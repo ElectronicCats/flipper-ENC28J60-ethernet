@@ -73,6 +73,10 @@ static void passive_discovery_refresh(App* app) {
         break;
 
     case PassiveDiscoveryStateFinished:
+        app->passive_selected_neighbor = 0;
+
+        scene_manager_next_scene(app->scene_manager, app_scene_passive_neighbor_list_option);
+
         break;
     }
 }
@@ -187,9 +191,13 @@ static void
                 app->thread_alternative = NULL;
             }
 
-            app->passive_discovery.state = PassiveDiscoveryStateConfig;
+            app->passive_discovery.state = PassiveDiscoveryStateFinished;
 
             passive_discovery_refresh(app);
+        } else if(app->passive_discovery.state == PassiveDiscoveryStateFinished) {
+            app->passive_selected_neighbor = 0;
+
+            scene_manager_next_scene(app->scene_manager, app_scene_passive_neighbor_list_option);
         }
         break;
 
