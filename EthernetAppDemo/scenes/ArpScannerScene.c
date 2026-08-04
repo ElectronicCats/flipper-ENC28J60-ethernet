@@ -7,6 +7,10 @@ typedef enum {
     VIEW_RESULTS,
 } ARP_MENU_OPTIONS;
 
+typedef enum {
+    ArpEventScanFinished = 1,
+} ArpCustomEvent;
+
 /**
  * This file contains the functions to display and work with the ARP SCANNER
  * It shows the IP list and saves it in a array
@@ -197,8 +201,27 @@ void build_ip_submenu(App* app, uint32_t selection);
 
 // Function to set the thread and the view
 void draw_the_arp_list(App* app) {
-    // F0.4c — no longer suspends app->thread; rx_dispatch keeps running and
-    // arp_scanner_thread uses scanner_session (rx_dispatch-aware).
+    enc28j60_t* ethernet = app->ethernet;
+
+    bool start = app->enc28j60_connected;
+
+    if(!start) {
+        start = enc28j60_start(ethernet) != 0xff;
+        app->enc28j60_connected = start;
+    }
+
+    if(!start) {
+        draw_device_no_connected(app);
+        view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
+        return;
+    }
+
+    if(!is_link_up(ethernet)) {
+        draw_network_not_connected(app);
+        view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
+        return;
+    }
+
     app->thread_alternative =
         furi_thread_alloc_ex("ARP SCANNER", 10 * 1024, arp_scanner_thread, app);
 
@@ -264,14 +287,19 @@ void app_scene_arp_scanner_on_enter(void* context) {
 bool app_scene_arp_scanner_on_event(void* context, SceneManagerEvent event) {
     App* app = (App*)context;
 
+    if(event.type == SceneManagerEventTypeBack) {
+        scene_manager_previous_scene(app->scene_manager);
+
+        return true;
+    }
+
     if(event.type == SceneManagerEventTypeCustom) {
-        if(event.event == 1) {
+        if(event.event == ArpEventScanFinished) {
             finished_arp_thread(app);
 
             scene_manager_set_scene_state(
                 app->scene_manager, app_scene_arp_scanner_option, ARP_STATE_SHOW_LIST);
 
-            // Redibujar directamente sin apilar escena
             show_current_arp_list(app);
 
             return true;
@@ -452,29 +480,19 @@ void ip_list_select_callback(void* context, uint32_t index) {
 int32_t arp_scanner_thread(void* context) {
     App* app = (App*)context;
 
-    enc28j60_t* ethernet = app->ethernet;
+    scanner_session_t scanner;
+    scanner_session_init(&scanner, app);
 
-    bool start = app->enc28j60_connected;
+    arp_scan_network(
+        &scanner,
+        app->ip_list,
+        app->scan_params.ip_start,
+        &app->ip_counter,
+        app->scan_params.range_ip);
 
-    if(!start) {
-        start = enc28j60_start(ethernet) != 0xff;
-        app->enc28j60_connected = start;
-    }
+    scanner_session_deinit(&scanner);
 
-    if(start && is_the_network_connected(ethernet)) {
-        // F0.3c — arp_scan_network now takes a scanner_session_t.
-        scanner_session_t scanner;
-        scanner_session_init(&scanner, app);
-        arp_scan_network(
-            &scanner,
-            app->ip_list,
-            app->scan_params.ip_start,
-            &app->ip_counter,
-            app->scan_params.range_ip);
-        scanner_session_deinit(&scanner);
-    }
-
-    view_dispatcher_send_custom_event(app->view_dispatcher, 1);
+    view_dispatcher_send_custom_event(app->view_dispatcher, ArpEventScanFinished);
 
     return 0;
 }

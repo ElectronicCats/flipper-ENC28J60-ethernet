@@ -62,6 +62,36 @@ void variable_list_os_detector_callback(void* context, uint32_t index) {
     case START:
         if(app->is_dora) {
             // F0.4c — no thread_suspend; os_scan uses scanner_session.
+            enc28j60_t* ethernet = app->ethernet;
+
+            bool start = app->enc28j60_connected;
+
+            if(!start) {
+                start = enc28j60_start(ethernet) != 0xff;
+                app->enc28j60_connected = start;
+            }
+
+            if(!start) {
+                draw_device_no_connected(app);
+
+                scene_manager_set_scene_state(
+                    app->scene_manager, app_scene_os_detector_option, PORTS_SCANNER_SCENE_WIDGET);
+
+                view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
+
+                break;
+            }
+
+            if(!is_link_up(ethernet)) {
+                draw_network_not_connected(app);
+
+                scene_manager_set_scene_state(
+                    app->scene_manager, app_scene_os_detector_option, PORTS_SCANNER_SCENE_WIDGET);
+
+                view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
+
+                break;
+            }
             app->thread_alternative =
                 furi_thread_alloc_ex("Detect OS", 5 * 1024, os_detector_thread, app);
 

@@ -133,6 +133,7 @@ typedef struct {
     uint16_t passive_neighbor_count;
     uint8_t passive_selected_neighbor;
     uint8_t passive_details_page;
+    volatile bool arpspoofing_stop;
 
     SceneManager* scene_manager;
     ViewDispatcher* view_dispatcher;

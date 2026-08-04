@@ -123,6 +123,40 @@ void variable_list_ports_scanner_callback(void* context, uint32_t index) {
         if(app->is_dora) {
             // F0.4c — no longer suspends app->thread; rx_dispatch keeps
             // running and ports_scanner_thread uses scanner_session.
+            enc28j60_t* ethernet = app->ethernet;
+
+            bool start = app->enc28j60_connected;
+
+            if(!start) {
+                start = enc28j60_start(ethernet) != 0xff;
+                app->enc28j60_connected = start;
+            }
+
+            if(!start) {
+                draw_device_no_connected(app);
+
+                scene_manager_set_scene_state(
+                    app->scene_manager,
+                    app_scene_ports_scanner_option,
+                    PORTS_SCANNER_SCENE_WIDGET);
+
+                view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
+
+                return;
+            }
+
+            if(!is_link_up(ethernet)) {
+                draw_network_not_connected(app);
+
+                scene_manager_set_scene_state(
+                    app->scene_manager,
+                    app_scene_ports_scanner_option,
+                    PORTS_SCANNER_SCENE_WIDGET);
+
+                view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
+
+                return;
+            }
             submenu_reset(app->submenu);
             submenu_set_header(app->submenu, "PORTS OPEN");
 
