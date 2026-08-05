@@ -137,13 +137,13 @@ static int32_t passive_discovery_thread(void* context) {
 
     if(!start) {
         draw_device_no_connected(app);
-        furi_delay_ms(1500);
+        furi_delay_ms(300);
         return 0;
     }
 
     if(!is_link_up(ethernet)) {
         draw_network_not_connected(app);
-        furi_delay_ms(1500);
+        furi_delay_ms(300);
         return 0;
     }
 

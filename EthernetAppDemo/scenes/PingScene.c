@@ -11,6 +11,15 @@ typedef struct {
     bool received;
 } ping_reply_match_ctx_t;
 
+typedef enum {
+    PingEventDeviceNotConnected = 0,
+    PingEventNetworkNotConnected,
+    PingEventDoraFailed,
+    PingEventDoraNeeded,
+    PingEventShowLoading,
+    PingEventUpdateCounter,
+} PingCustomEvent;
+
 static bool ping_reply_match(const uint8_t* frame, uint16_t len, void* ctx) {
     UNUSED(len);
     ping_reply_match_ctx_t* c = (ping_reply_match_ctx_t*)ctx;
@@ -211,8 +220,6 @@ void app_scene_ping_set_ip_scene_on_exit(void* context) {
 void app_scene_ping_scene_on_enter(void* context) {
     App* app = (App*)context;
 
-    view_dispatcher_switch_to_view(app->view_dispatcher, LoadingView);
-
     // F0.4c — no thread_suspend; ping_thread uses scanner_session.
     // Allocate and start the thread
     app->thread_alternative = furi_thread_alloc_ex("PING", 10 * 1024, ping_thread, app);
@@ -321,20 +328,20 @@ int32_t ping_thread(void* context) {
 
     // Change view to disconnected device
     if(!is_connected) {
-        view_dispatcher_send_custom_event(app->view_dispatcher, 0);
+        view_dispatcher_send_custom_event(app->view_dispatcher, PingEventDeviceNotConnected);
         goto finalize;
     }
 
     // Get link up to the LAN
-    while(((furi_get_tick() - last_time_ping) < 1000) && !start_ping && is_connected) {
-        start_ping = is_link_up(ethernet);
-    }
+    start_ping = is_link_up(ethernet);
 
     // Change view to network not connected
     if(!start_ping) {
         view_dispatcher_send_custom_event(app->view_dispatcher, 1);
         goto finalize;
     }
+
+    view_dispatcher_send_custom_event(app->view_dispatcher, PingEventShowLoading);
 
     // Do process Dora to get the IP gateway, and set our IP if we didnt have the IP
     if(!app->is_dora) {
@@ -343,7 +350,7 @@ int32_t ping_thread(void* context) {
 
     // If the process Dora failed, we will not continue
     if(!start_ping) {
-        view_dispatcher_send_custom_event(app->view_dispatcher, 3);
+        view_dispatcher_send_custom_event(app->view_dispatcher, PingEventDoraNeeded);
         goto finalize;
     }
 
@@ -381,7 +388,7 @@ int32_t ping_thread(void* context) {
         if(sequence == 0xffff) sequence = 0;
         sequence++;
         messages_sent++;
-        view_dispatcher_send_custom_event(app->view_dispatcher, 5);
+        view_dispatcher_send_custom_event(app->view_dispatcher, PingEventUpdateCounter);
 
         ping_reply_match_ctx_t pred_ctx = {
             .target_ip = app->scan_params.ip_ping,
@@ -403,7 +410,7 @@ int32_t ping_thread(void* context) {
                1000) &&
            pred_ctx.received) {
             ping_responses++;
-            view_dispatcher_send_custom_event(app->view_dispatcher, 5);
+            view_dispatcher_send_custom_event(app->view_dispatcher, PingEventUpdateCounter);
         }
 
         // Pace at ~1 pps. If a reply came in early, sleep the remaining

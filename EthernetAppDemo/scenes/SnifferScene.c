@@ -123,6 +123,12 @@ bool app_scene_sniffer_on_event(void* context, SceneManagerEvent event) {
     if(event.type == SceneManagerEventTypeBack) {
         app->open_pcap_after_sniff = false;
         app->sniffer_stop = true;
+
+        if(!app->thread_alternative ||
+           furi_thread_get_state(app->thread_alternative) == FuriThreadStateStopped) {
+            scene_manager_previous_scene(app->scene_manager);
+        }
+
         return true;
     }
 
@@ -186,7 +192,7 @@ int32_t sniffer_thread(void* context) {
     }
     if(!start) {
         draw_device_no_connected(app);
-        furi_delay_ms(1500);
+        furi_delay_ms(300);
         return 0;
     }
 
@@ -194,7 +200,7 @@ int32_t sniffer_thread(void* context) {
     // and exit. The user can reconnect the cable and reenter the scene.
     if(!is_link_up(ethernet)) {
         draw_network_not_connected(app);
-        furi_delay_ms(1500);
+        furi_delay_ms(300);
         return 0;
     }
 
