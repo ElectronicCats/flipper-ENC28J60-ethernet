@@ -129,6 +129,7 @@ typedef struct {
     bool open_pcap_after_sniff;
     volatile bool sniffer_stop;
     volatile bool sniffer_finished;
+    bool sniffer_link_error;
     volatile bool passive_discovery_stop;
     uint16_t passive_neighbor_count;
     uint8_t passive_selected_neighbor;
