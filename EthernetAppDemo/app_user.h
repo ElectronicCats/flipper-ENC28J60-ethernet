@@ -34,6 +34,7 @@
 #include "modules/os_detector_module.h"
 
 #define MAX_OS_SCAN_PORTS 16
+#define PATH_LAST_SCAN    PATHAPPEXT "/last_scan.bin"
 
 #include "libraries/functions/functions.h"
 
@@ -83,6 +84,11 @@ typedef enum {
     PassiveProtocolCount
 } passive_protocol_t;
 
+typedef struct {
+    DateTime datetime;
+    uint8_t host_count;
+} arp_scan_header_t;
+
 // For Passive Discovery scene protocol names
 typedef struct {
     passive_discovery_state_t state;
@@ -111,6 +117,7 @@ typedef struct rx_handle rx_handle_t;
 typedef struct {
     arp_list ip_list[255];
     uint8_t ip_counter; // Variable for countrt of ip_list
+    DateTime last_scan_time;
     uint8_t ip_gateway[4]; // Array to save the gateway ip
     uint8_t mac_gateway[6]; // Array to save the mac_gateway
 

@@ -11,6 +11,9 @@ typedef enum {
     ArpEventScanFinished = 1,
 } ArpCustomEvent;
 
+static bool arp_save_last_scan(App* app);
+static bool arp_load_last_scan(App* app);
+
 /**
  * This file contains the functions to display and work with the ARP SCANNER
  * It shows the IP list and saves it in a array
@@ -169,7 +172,19 @@ void app_scene_arp_scanner_menu_on_enter(void* context) {
     submenu_add_item(app->submenu, "Start Scanning", START_SCANNER, arp_menu_callback, app);
 
     // VIEW RESULTS
-    submenu_add_item(app->submenu, "View Scanned Hosts", VIEW_RESULTS, arp_menu_callback, app);
+    furi_string_reset(app->text);
+
+    furi_string_cat_printf(
+        app->text,
+        "Results %02d|%02d|%02d - %02d:%02d",
+        app->last_scan_time.month,
+        app->last_scan_time.day,
+        app->last_scan_time.year % 100,
+        app->last_scan_time.hour,
+        app->last_scan_time.minute);
+
+    submenu_add_item(
+        app->submenu, furi_string_get_cstr(app->text), VIEW_RESULTS, arp_menu_callback, app);
 
     view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);
 }
@@ -187,6 +202,52 @@ bool app_scene_arp_scanner_menu_on_event(void* context, SceneManagerEvent event)
 void app_scene_arp_scanner_menu_on_exit(void* context) {
     App* app = (App*)context;
     UNUSED(app);
+}
+
+static bool arp_save_last_scan(App* app) {
+    if(!storage_file_open(app->file, PATH_LAST_SCAN, FSAM_WRITE, FSOM_CREATE_ALWAYS)) {
+        return false;
+    }
+
+    arp_scan_header_t header;
+
+    furi_hal_rtc_get_datetime(&header.datetime);
+    app->last_scan_time = header.datetime;
+    header.host_count = app->ip_counter;
+
+    storage_file_write(app->file, &header, sizeof(header));
+
+    if(app->ip_counter) {
+        storage_file_write(app->file, app->ip_list, sizeof(arp_list) * app->ip_counter);
+    }
+
+    storage_file_close(app->file);
+
+    return true;
+}
+
+static bool arp_load_last_scan(App* app) {
+    if(!storage_file_open(app->file, PATH_LAST_SCAN, FSAM_READ, FSOM_OPEN_EXISTING)) {
+        return false;
+    }
+
+    arp_scan_header_t header;
+
+    if(storage_file_read(app->file, &header, sizeof(header)) != sizeof(header)) {
+        app->last_scan_time = header.datetime;
+        storage_file_close(app->file);
+        return false;
+    }
+
+    app->ip_counter = header.host_count;
+
+    if(app->ip_counter) {
+        storage_file_read(app->file, app->ip_list, sizeof(arp_list) * app->ip_counter);
+    }
+
+    storage_file_close(app->file);
+
+    return true;
 }
 
 /**
@@ -255,7 +316,10 @@ void set_ip_address(App* app) {
 
 // Function to show the list of IP
 void show_current_arp_list(App* app) {
+    arp_load_last_scan(app);
+
     build_ip_submenu(app, ARP_STATE_START_SCAN);
+
     view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);
 }
 
@@ -380,7 +444,7 @@ void app_scene_arp_ip_show_details_on_enter(void* context) {
 
     // Set the text to show IP address with it MAC address
     furi_string_printf(
-        app->text, "IP: %u.%u.%u.%u ", ip_showed[0], ip_showed[1], ip_showed[2], ip_showed[3]);
+        app->text, "\nIP: %u.%u.%u.%u ", ip_showed[0], ip_showed[1], ip_showed[2], ip_showed[3]);
 
     // add duplicated if the ip is
     if(is_duplicated) {
@@ -397,6 +461,15 @@ void app_scene_arp_ip_show_details_on_enter(void* context) {
         mac_showed[3],
         mac_showed[4],
         mac_showed[5]);
+
+    furi_string_cat_printf(
+        app->text,
+        "\nDATE: %02d|%02d|%02d - %02d:%02d",
+        app->last_scan_time.month,
+        app->last_scan_time.day,
+        app->last_scan_time.year % 100,
+        app->last_scan_time.hour,
+        app->last_scan_time.minute);
 
     // reset Widget
     widget_reset(app->widget);
@@ -437,7 +510,11 @@ void app_scene_arp_ip_show_details_on_exit(void* context) {
 
 void build_ip_submenu(App* app, uint32_t selection) {
     submenu_reset(app->submenu);
-    submenu_set_header(app->submenu, "SCANNED HOSTS");
+    furi_string_reset(app->text);
+
+    furi_string_cat_printf(app->text, "SCANNED HOSTS (%u)", app->ip_counter);
+
+    submenu_set_header(app->submenu, furi_string_get_cstr(app->text));
 
     for(uint8_t i = 0; i < app->ip_counter; i++) {
         furi_string_reset(app->text);
@@ -489,6 +566,8 @@ int32_t arp_scanner_thread(void* context) {
         app->scan_params.ip_start,
         &app->ip_counter,
         app->scan_params.range_ip);
+
+    arp_save_last_scan(app);
 
     scanner_session_deinit(&scanner);
 
