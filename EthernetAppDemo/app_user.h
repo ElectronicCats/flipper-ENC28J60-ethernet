@@ -33,9 +33,6 @@
 #include "modules/ping_module.h"
 #include "modules/os_detector_module.h"
 
-#define MAX_OS_SCAN_PORTS 16
-#define PATH_LAST_SCAN    PATHAPPEXT "/last_scan.bin"
-
 #include "libraries/functions/functions.h"
 
 #define DEV_MODE 0
@@ -51,7 +48,9 @@
 #define PATHAPP    "apps_data/ethernet" // Path
 #define PATHAPPEXT EXT_PATH(PATHAPP) // Add path to the Flipper
 
-#define PATHPCAPS PATHAPPEXT "/files" // Path to save pcaps
+#define PATHPCAPS         PATHAPPEXT "/files" // Path to save pcaps
+#define PATH_LAST_SCAN    PATHAPPEXT "/last_scan.bin"
+#define MAX_OS_SCAN_PORTS 16
 
 // F0.4e — ethernet_app_flags_t / ALL_FLAGS / MASK_FLAGS / IS_NOT_LINK_UP
 // were the worker thread's signaling protocol (flag_dhcp_dora set by
@@ -170,6 +169,8 @@ typedef struct {
     // any heavy lifting.
     FuriThread* thread_alternative; // Per-scene alt thread (one at a time)
 
+    bool arp_target_selection_mode;
+
     port_result_t ports[MAX_OS_SCAN_PORTS];
     uint8_t ports_count;
     bool os_guess;
@@ -183,6 +184,9 @@ typedef struct {
     rx_handle_t* auto_arp_handle;
     rx_handle_t* auto_icmp_handle;
 } App;
+
+bool arp_load_last_scan(App* app);
+bool arp_save_last_scan(App* app);
 
 // F0.2 — settings persistence. Must be included AFTER the App typedef
 // because settings.h declares functions taking `App*`, and App is an

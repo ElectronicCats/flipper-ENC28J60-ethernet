@@ -190,12 +190,29 @@ void variable_list_os_detector_callback(void* context, uint32_t index) {
 void app_scene_os_detector_on_enter(void* context) {
     App* app = context;
 
+    arp_load_last_scan(app);
+
     submenu_reset(app->submenu);
     submenu_set_header(app->submenu, "DETECT OS");
 
     // VIEW IP LIST
+    furi_string_reset(app->text);
+
+    furi_string_cat_printf(
+        app->text,
+        "Hosts [%02d|%02d|%02d-%02d:%02d]",
+        app->last_scan_time.month,
+        app->last_scan_time.day,
+        app->last_scan_time.year % 100,
+        app->last_scan_time.hour,
+        app->last_scan_time.minute);
+
     submenu_add_item(
-        app->submenu, "View Scanned Hosts", VIEW_RESULTS, variable_list_os_detector_callback, app);
+        app->submenu,
+        furi_string_get_cstr(app->text),
+        VIEW_RESULTS,
+        variable_list_os_detector_callback,
+        app);
 
     // TARGET IP
     if(*(uint32_t*)app->scan_params.target_ip == 0)

@@ -60,16 +60,23 @@ void menu_ping_options_callback(void* context, uint32_t index) {
     App* app = (App*)context;
 
     if(index == 0) {
+        app->arp_target_selection_mode = false;
+
         // Switch to the ping scene
         scene_manager_next_scene(app->scene_manager, app_scene_ping_option);
     }
 
     if(index == 1) {
+        app->arp_target_selection_mode = false;
+
         // Switch to the ping set IP scene
         scene_manager_next_scene(app->scene_manager, app_scene_ping_set_ip_option);
     }
 
     if(index == 2) {
+        // We are entering ARP only to select a target IP.
+        app->arp_target_selection_mode = true;
+
         scene_manager_set_scene_state(
             app->scene_manager, app_scene_arp_scanner_option, ARP_STATE_SHOW_LIST);
 
@@ -80,6 +87,8 @@ void menu_ping_options_callback(void* context, uint32_t index) {
 // Function for the testing scene on enter
 void app_scene_ping_menu_scene_on_enter(void* context) {
     App* app = (App*)context;
+
+    arp_load_last_scan(app);
 
     // reset submenu and switch view
     submenu_reset(app->submenu);
@@ -95,7 +104,19 @@ void app_scene_ping_menu_scene_on_enter(void* context) {
 
     furi_string_reset(app->text);
 
-    submenu_add_item(app->submenu, "View Scanned Hosts", 2, menu_ping_options_callback, app);
+    furi_string_cat_printf(
+        app->text,
+        "Hosts [%02d|%02d|%02d-%02d:%02d]",
+        app->last_scan_time.month,
+        app->last_scan_time.day,
+        app->last_scan_time.year % 100,
+        app->last_scan_time.hour,
+        app->last_scan_time.minute);
+
+    submenu_add_item(
+        app->submenu, furi_string_get_cstr(app->text), 2, menu_ping_options_callback, app);
+
+    furi_string_reset(app->text);
 
     furi_string_cat_printf(
         app->text,

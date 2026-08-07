@@ -43,11 +43,29 @@ void arp_actions_menu_callback(void* context, uint32_t index) {
 void app_scene_arp_actions_menu_on_enter(void* context) {
     App* app = (App*)context;
 
+    arp_load_last_scan(app);
+
     submenu_reset(app->submenu);
     submenu_set_header(app->submenu, "ARP ACTIONS");
 
+    // VIEW IP LIST
+    furi_string_reset(app->text);
+
+    furi_string_cat_printf(
+        app->text,
+        "Hosts [%02d|%02d|%02d-%02d:%02d]",
+        app->last_scan_time.month,
+        app->last_scan_time.day,
+        app->last_scan_time.year % 100,
+        app->last_scan_time.hour,
+        app->last_scan_time.minute);
+
     submenu_add_item(
-        app->submenu, "View scanned IPs", VIEW_IP_LIST_OPTION, arp_actions_menu_callback, app);
+        app->submenu,
+        furi_string_get_cstr(app->text),
+        VIEW_IP_LIST_OPTION,
+        arp_actions_menu_callback,
+        app);
 
     submenu_add_item(
         app->submenu, "Spoof All Hosts", ARP_SPOOFING_OPTION, arp_actions_menu_callback, app);

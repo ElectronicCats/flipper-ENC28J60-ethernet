@@ -80,6 +80,52 @@ static void auto_icmp_handler(const uint8_t* frame, uint16_t len, void* ctx) {
     ping_reply_to_request(app->ethernet, (uint8_t*)frame, len);
 }
 
+bool arp_load_last_scan(App* app) {
+    if(!storage_file_open(app->file, PATH_LAST_SCAN, FSAM_READ, FSOM_OPEN_EXISTING)) {
+        return false;
+    }
+
+    arp_scan_header_t header;
+
+    if(storage_file_read(app->file, &header, sizeof(header)) != sizeof(header)) {
+        storage_file_close(app->file);
+        return false;
+    }
+
+    app->last_scan_time = header.datetime;
+    app->ip_counter = header.host_count;
+
+    if(app->ip_counter) {
+        storage_file_read(app->file, app->ip_list, sizeof(arp_list) * app->ip_counter);
+    }
+
+    storage_file_close(app->file);
+
+    return true;
+}
+
+bool arp_save_last_scan(App* app) {
+    if(!storage_file_open(app->file, PATH_LAST_SCAN, FSAM_WRITE, FSOM_CREATE_ALWAYS)) {
+        return false;
+    }
+
+    arp_scan_header_t header;
+
+    furi_hal_rtc_get_datetime(&header.datetime);
+    app->last_scan_time = header.datetime;
+    header.host_count = app->ip_counter;
+
+    storage_file_write(app->file, &header, sizeof(header));
+
+    if(app->ip_counter) {
+        storage_file_write(app->file, app->ip_list, sizeof(arp_list) * app->ip_counter);
+    }
+
+    storage_file_close(app->file);
+
+    return true;
+}
+
 App* app_alloc() {
     // F0.5d-wave2 — calloc instead of malloc so every field starts
     // zero/NULL. Pre-fix `thread_alternative` could be uninitialized

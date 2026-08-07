@@ -9,10 +9,8 @@ typedef enum {
 
 typedef enum {
     ArpEventScanFinished = 1,
+    ArpEventSelectTargetIP,
 } ArpCustomEvent;
-
-static bool arp_save_last_scan(App* app);
-static bool arp_load_last_scan(App* app);
 
 /**
  * This file contains the functions to display and work with the ARP SCANNER
@@ -141,6 +139,7 @@ void arp_menu_callback(void* context, uint32_t index) {
 // function for the arp menu scene on enter
 void app_scene_arp_scanner_menu_on_enter(void* context) {
     App* app = (App*)context;
+    arp_load_last_scan(app);
 
     submenu_reset(app->submenu);
 
@@ -176,7 +175,7 @@ void app_scene_arp_scanner_menu_on_enter(void* context) {
 
     furi_string_cat_printf(
         app->text,
-        "Results %02d|%02d|%02d - %02d:%02d",
+        "Hosts [%02d|%02d|%02d-%02d:%02d]",
         app->last_scan_time.month,
         app->last_scan_time.day,
         app->last_scan_time.year % 100,
@@ -202,52 +201,6 @@ bool app_scene_arp_scanner_menu_on_event(void* context, SceneManagerEvent event)
 void app_scene_arp_scanner_menu_on_exit(void* context) {
     App* app = (App*)context;
     UNUSED(app);
-}
-
-static bool arp_save_last_scan(App* app) {
-    if(!storage_file_open(app->file, PATH_LAST_SCAN, FSAM_WRITE, FSOM_CREATE_ALWAYS)) {
-        return false;
-    }
-
-    arp_scan_header_t header;
-
-    furi_hal_rtc_get_datetime(&header.datetime);
-    app->last_scan_time = header.datetime;
-    header.host_count = app->ip_counter;
-
-    storage_file_write(app->file, &header, sizeof(header));
-
-    if(app->ip_counter) {
-        storage_file_write(app->file, app->ip_list, sizeof(arp_list) * app->ip_counter);
-    }
-
-    storage_file_close(app->file);
-
-    return true;
-}
-
-static bool arp_load_last_scan(App* app) {
-    if(!storage_file_open(app->file, PATH_LAST_SCAN, FSAM_READ, FSOM_OPEN_EXISTING)) {
-        return false;
-    }
-
-    arp_scan_header_t header;
-
-    if(storage_file_read(app->file, &header, sizeof(header)) != sizeof(header)) {
-        app->last_scan_time = header.datetime;
-        storage_file_close(app->file);
-        return false;
-    }
-
-    app->ip_counter = header.host_count;
-
-    if(app->ip_counter) {
-        storage_file_read(app->file, app->ip_list, sizeof(arp_list) * app->ip_counter);
-    }
-
-    storage_file_close(app->file);
-
-    return true;
 }
 
 /**
@@ -395,10 +348,13 @@ void app_scene_arp_scanner_on_exit(void* context) {
 void ip_list_callback(void* context, uint32_t index) {
     App* app = (App*)context;
 
-    // Set the scene to get the index of the ip in the IP array list
+    // IP selection originated from Scan Hosts.
+    app->arp_target_selection_mode = false;
+
+    // Store the selected IP index.
     scene_manager_set_scene_state(app->scene_manager, app_scene_arp_ip_show_details_option, index);
 
-    // Go to show details scene
+    // Open IP details.
     scene_manager_next_scene(app->scene_manager, app_scene_arp_ip_show_details_option);
 }
 
@@ -412,6 +368,16 @@ void ip_list_spoofing_callback(void* context, uint32_t index) {
 
     // Return to the last view that is the spoofing
     scene_manager_previous_scene(app->scene_manager);
+}
+
+static void arp_select_button_callback(GuiButtonType result, InputType type, void* context) {
+    if(type != InputTypeShort) return;
+
+    if(result != GuiButtonTypeCenter) return;
+
+    App* app = context;
+
+    view_dispatcher_send_custom_event(app->view_dispatcher, ArpEventSelectTargetIP);
 }
 
 /**
@@ -444,7 +410,7 @@ void app_scene_arp_ip_show_details_on_enter(void* context) {
 
     // Set the text to show IP address with it MAC address
     furi_string_printf(
-        app->text, "\nIP: %u.%u.%u.%u ", ip_showed[0], ip_showed[1], ip_showed[2], ip_showed[3]);
+        app->text, "IP: %u.%u.%u.%u ", ip_showed[0], ip_showed[1], ip_showed[2], ip_showed[3]);
 
     // add duplicated if the ip is
     if(is_duplicated) {
@@ -464,7 +430,7 @@ void app_scene_arp_ip_show_details_on_enter(void* context) {
 
     furi_string_cat_printf(
         app->text,
-        "\nDATE: %02d|%02d|%02d - %02d:%02d",
+        "\nDATE: %02d|%02d|%02d-%02d:%02d",
         app->last_scan_time.month,
         app->last_scan_time.day,
         app->last_scan_time.year % 100,
@@ -488,17 +454,56 @@ void app_scene_arp_ip_show_details_on_enter(void* context) {
         FontSecondary,
         furi_string_get_cstr(app->text));
 
+    widget_add_button_element(
+        app->widget, GuiButtonTypeCenter, "Select IP", arp_select_button_callback, app);
+
     // Switch to widget view
     view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
 }
 
 // Function to get the ip list
 bool app_scene_arp_ip_show_details_on_event(void* context, SceneManagerEvent event) {
-    bool consumed = false;
     App* app = (App*)context;
-    UNUSED(app);
-    UNUSED(event);
-    return consumed;
+
+    if(event.type == SceneManagerEventTypeCustom && event.event == ArpEventSelectTargetIP) {
+        uint32_t index = scene_manager_get_scene_state(
+            app->scene_manager, app_scene_arp_ip_show_details_option);
+
+        // Save selected IP as target.
+        memcpy(app->scan_params.target_ip, app->ip_list[index].ip, 4);
+
+        // Keep Ping target synchronized.
+        memcpy(app->scan_params.ip_ping, app->ip_list[index].ip, 4);
+
+        /*
+         * Normal Scan Hosts flow:
+         *
+         *   Scan Hosts -> IP Details
+         *
+         * We only need one previous_scene().
+         */
+        if(!app->arp_target_selection_mode) {
+            scene_manager_previous_scene(app->scene_manager);
+        }
+        /*
+         * External target selection:
+         *
+         *   Ping -> ARP list -> IP Details
+         *
+         * We need to leave both ARP scenes and return
+         * to the scene that requested the target IP.
+         */
+        else {
+            scene_manager_previous_scene(app->scene_manager);
+            scene_manager_previous_scene(app->scene_manager);
+        }
+
+        app->arp_target_selection_mode = false;
+
+        return true;
+    }
+
+    return false;
 }
 
 // Function for the ip list

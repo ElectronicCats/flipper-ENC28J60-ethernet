@@ -259,10 +259,23 @@ void app_scene_ports_scanner_on_enter(void* context) {
     submenu_reset(app->submenu);
     submenu_set_header(app->submenu, "SCAN PORTS");
 
+    arp_load_last_scan(app);
+
     // VIEW IP LIST
+    furi_string_reset(app->text);
+
+    furi_string_cat_printf(
+        app->text,
+        "Hosts [%02d|%02d|%02d-%02d:%02d]",
+        app->last_scan_time.month,
+        app->last_scan_time.day,
+        app->last_scan_time.year % 100,
+        app->last_scan_time.hour,
+        app->last_scan_time.minute);
+
     submenu_add_item(
         app->submenu,
-        "View Scanned Hosts",
+        furi_string_get_cstr(app->text),
         VIEW_IP_LIST,
         variable_list_ports_scanner_callback,
         app);
