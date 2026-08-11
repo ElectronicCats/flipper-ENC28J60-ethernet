@@ -71,7 +71,7 @@ static void passive_draw_details(App* app, neighbor_t* neighbor) {
         char line4[64];
 
         passive_discovery_module_build_details_page(
-            PassiveProtocolLLDP,
+            app->passive_discovery.protocol,
             neighbor,
             app->passive_details_page - 1,
             line1,
@@ -84,16 +84,16 @@ static void passive_draw_details(App* app, neighbor_t* neighbor) {
             sizeof(line4));
 
         widget_add_string_element(
-            app->widget, 64, 8, AlignCenter, AlignCenter, FontPrimary, line1);
+            app->widget, 64, 7, AlignCenter, AlignCenter, FontSecondary, line1);
 
         widget_add_string_element(
-            app->widget, 64, 23, AlignCenter, AlignCenter, FontSecondary, line2);
+            app->widget, 64, 19, AlignCenter, AlignCenter, FontSecondary, line2);
 
         widget_add_string_element(
-            app->widget, 64, 38, AlignCenter, AlignCenter, FontSecondary, line3);
+            app->widget, 64, 36, AlignCenter, AlignCenter, FontSecondary, line3);
 
         widget_add_string_element(
-            app->widget, 64, 53, AlignCenter, AlignCenter, FontSecondary, line4);
+            app->widget, 64, 48, AlignCenter, AlignCenter, FontSecondary, line4);
 
         widget_add_button_element(
             app->widget, GuiButtonTypeLeft, "<", passive_details_callback, app);
@@ -109,7 +109,7 @@ static void passive_draw_details(App* app, neighbor_t* neighbor) {
     passive_format_sources(neighbor, source_str, sizeof(source_str));
 
     widget_add_string_element(
-        app->widget, 64, 8, AlignCenter, AlignCenter, FontPrimary, "NEIGHBOR");
+        app->widget, 64, 8, AlignCenter, AlignCenter, FontSecondary, "NEIGHBOR");
 
     widget_add_string_element(
         app->widget,
@@ -175,36 +175,57 @@ static void passive_details_callback(GuiButtonType type, InputType input_type, v
         return;
     }
 
+    uint8_t page_count =
+        passive_discovery_module_get_details_page_count(app->passive_discovery.protocol, neighbor);
+
+    if(page_count == 0) {
+        return;
+    }
+
     if(type == GuiButtonTypeRight) {
+        /*
+         * Advance to the next page.
+         * Wrap around to the first page.
+         */
         app->passive_details_page++;
 
-        /*
-         * Por ahora dejamos 3 páginas LLDP.
-         * Después lo hacemos dinámico con
-         * passive_discovery_module_get_details_page_count()
-         */
-
-        if(app->passive_details_page >= 4) {
+        if(app->passive_details_page >= page_count) {
             app->passive_details_page = 0;
         }
 
         passive_draw_details(app, neighbor);
 
     } else if(type == GuiButtonTypeLeft) {
-        if(app->passive_details_page > 0) {
-            app->passive_details_page--;
-
-            passive_draw_details(app, neighbor);
+        /*
+         * Move to the previous page.
+         * Wrap around from the first page
+         * to the last page.
+         */
+        if(app->passive_details_page == 0) {
+            app->passive_details_page = page_count - 1;
 
         } else {
-            scene_manager_previous_scene(app->scene_manager);
+            app->passive_details_page--;
         }
+
+        passive_draw_details(app, neighbor);
     }
 }
 
 bool app_scene_passive_neighbor_details_on_event(void* context, SceneManagerEvent event) {
-    UNUSED(context);
-    UNUSED(event);
+    App* app = context;
+
+    if(event.type == SceneManagerEventTypeBack) {
+        /*
+         * Physical BACK always returns to the
+         * discovered-neighbors list.
+         */
+        app->passive_details_page = 0;
+
+        scene_manager_previous_scene(app->scene_manager);
+
+        return true;
+    }
 
     return false;
 }

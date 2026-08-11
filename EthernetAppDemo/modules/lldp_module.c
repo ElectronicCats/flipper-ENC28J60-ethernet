@@ -52,12 +52,12 @@ bool lldp_module_process_frame(uint8_t* frame, uint16_t length) {
 
     lldp_info_t info;
 
+    neighbor_t neighbor;
+
     if(!lldp_parse(frame, length, &info)) {
         FURI_LOG_I("LLDP", "Parse failed");
         return false;
     }
-
-    neighbor_t neighbor;
 
     if(!lldp_fill_neighbor(&info, &neighbor)) {
         return false;
@@ -121,7 +121,20 @@ static void lldp_cleanup(App* app) {
 
 static uint8_t lldp_get_details_page_count(neighbor_t* neighbor) {
     UNUSED(neighbor);
-    return 3;
+
+    /*
+ * LLDP detail pages
+ *
+ * Page 1  - Name / MAC
+ * Page 2  - Port / IP
+ * Page 3  - VLAN / VLAN Name
+ * Page 4  - Network Policy / Capabilities
+ * Page 5  - TTL / Chassis ID
+ * Page 6  - Description
+ * Page 7  - PoE / Power Class
+ * Page 8  - Power / Source
+ */
+    return 8;
 }
 
 static void lldp_build_details_page(
@@ -135,21 +148,45 @@ static void lldp_build_details_page(
     size_t line3_size,
     char* line4,
     size_t line4_size) {
-    if(!neighbor) return;
+    if(!neighbor) {
+        return;
+    }
+
+    line1[0] = '\0';
+    line2[0] = '\0';
+    line3[0] = '\0';
+    line4[0] = '\0';
 
     switch(page) {
+    /*
+ * Page 1
+ * NAME / MAC
+ */
     case 0:
 
         snprintf(line1, line1_size, "NAME");
 
-        snprintf(line2, line2_size, "%s", neighbor->name[0] ? neighbor->name : "Unnamed");
+        snprintf(line2, line2_size, "%s", neighbor->name[0] ? neighbor->name : "Unknown");
 
-        snprintf(line3, line3_size, "SOURCE");
+        snprintf(line3, line3_size, "MAC");
 
-        snprintf(line4, line4_size, "LLDP");
+        snprintf(
+            line4,
+            line4_size,
+            "%02X:%02X:%02X:%02X:%02X:%02X",
+            neighbor->mac[0],
+            neighbor->mac[1],
+            neighbor->mac[2],
+            neighbor->mac[3],
+            neighbor->mac[4],
+            neighbor->mac[5]);
 
         break;
 
+    /*
+ * Page 2
+ * PORT / IP
+ */
     case 1:
 
         snprintf(line1, line1_size, "PORT");
@@ -166,25 +203,179 @@ static void lldp_build_details_page(
 
         break;
 
+    /*
+ * Page 3
+ * VLAN / VLAN NAME
+ */
     case 2:
 
-        snprintf(line1, line1_size, "CAPABILITIES");
+        snprintf(line1, line1_size, "VLAN");
 
-        snprintf(line2, line2_size, "0x%04X", neighbor->capabilities);
+        if(neighbor->has_pvid) {
+            snprintf(line2, line2_size, "%u (PVID)", neighbor->pvid);
 
-        snprintf(line3, line3_size, "TTL");
+        } else if(neighbor->vlan_id != 0) {
+            snprintf(line2, line2_size, "%u", neighbor->vlan_id);
 
-        snprintf(line4, line4_size, "%u", neighbor->ttl);
+        } else {
+            snprintf(line2, line2_size, "N/A");
+        }
+
+        snprintf(line3, line3_size, "VLAN NAME");
+
+        snprintf(
+            line4,
+            line4_size,
+            "%s",
+            neighbor->has_vlan_name && neighbor->vlan_name[0] ? neighbor->vlan_name : "N/A");
+
+        break;
+
+    /*
+ * Page 4
+ * NETWORK POLICY / CAPABILITIES
+ */
+    case 3:
+
+        snprintf(line1, line1_size, "NETWORK POLICY");
+
+        if(neighbor->has_network_policy) {
+            snprintf(line2, line2_size, "VLAN %u", neighbor->network_policy_vlan);
+
+        } else {
+            snprintf(line2, line2_size, "N/A");
+        }
+
+        snprintf(line3, line3_size, "CAPABILITIES");
+
+        snprintf(line4, line4_size, "0x%04X", neighbor->capabilities);
+
+        break;
+
+    /*
+ * Page 5
+ * TTL / CHASSIS ID
+ */
+    case 4:
+
+        snprintf(line1, line1_size, "TTL");
+
+        snprintf(line2, line2_size, "%u s", neighbor->ttl);
+
+        snprintf(line3, line3_size, "CHASSIS ID");
+
+        snprintf(line4, line4_size, "%s", neighbor->chassis_id[0] ? neighbor->chassis_id : "N/A");
+
+        break;
+
+    /*
+ * Page 6
+ * DESCRIPTION
+ *
+ * This page intentionally uses all four
+ * available text lines.
+ */
+    case 5: {
+        const char* description = neighbor->description[0] ? neighbor->description : "N/A";
+
+        /*
+     * Split the description into multiple
+     * display lines.
+     *
+     * The widget uses FontSecondary,
+     * therefore keep each line relatively
+     * short to avoid clipping.
+     */
+        size_t length = strlen(description);
+
+        if(length <= 20) {
+            snprintf(line1, line1_size, "DESCRIPTION");
+
+            snprintf(line2, line2_size, "%s", description);
+
+        } else {
+            snprintf(line1, line1_size, "DESCRIPTION");
+
+            size_t split = 20;
+
+            if(split >= length) {
+                split = length;
+            }
+
+            while(split > 0 && description[split] != '\0' && description[split] != ' ') {
+                split--;
+            }
+
+            if(split == 0) {
+                split = 20;
+            }
+
+            if(split >= line2_size) {
+                split = line2_size - 1;
+            }
+
+            memcpy(line2, description, split);
+
+            line2[split] = '\0';
+
+            while(description[split] == ' ') {
+                split++;
+            }
+
+            snprintf(line3, line3_size, "%s", &description[split]);
+        }
+
+        break;
+    }
+
+    /*
+ * Page 7
+ * POE / POWER CLASS
+ */
+    case 6:
+
+        snprintf(line1, line1_size, "POE");
+
+        snprintf(line2, line2_size, "%s", neighbor->has_poe ? "Supported" : "N/A");
+
+        snprintf(line3, line3_size, "POWER CLASS");
+
+        if(neighbor->poe_power_class != 0) {
+            snprintf(line4, line4_size, "%u", neighbor->poe_power_class);
+
+        } else {
+            snprintf(line4, line4_size, "N/A");
+        }
+
+        break;
+
+    /*
+ * Page 8
+ * POWER / SOURCE
+ */
+    case 7:
+
+        snprintf(line1, line1_size, "POWER");
+
+        if(neighbor->has_poe_power_values) {
+            snprintf(line2, line2_size, "%u W", neighbor->poe_power_watts);
+
+        } else {
+            snprintf(line2, line2_size, "N/A");
+        }
+
+        snprintf(line3, line3_size, "POWER SOURCE");
+
+        if(neighbor->has_poe) {
+            snprintf(line4, line4_size, "%u", neighbor->poe_power_source);
+
+        } else {
+            snprintf(line4, line4_size, "N/A");
+        }
 
         break;
 
     default:
-
-        line1[0] = '\0';
-        line2[0] = '\0';
-        line3[0] = '\0';
-        line4[0] = '\0';
-
         break;
     }
 }

@@ -93,6 +93,8 @@ void show_message(uint8_t* buffer, uint16_t len) {
 #define EPMM6 (0x0E | 0x20)
 #define EPMM7 (0x0F | 0x20)
 #define EPMCS (0x10 | 0x20)
+#define EPMOL (0x14 | 0x20)
+#define EPMOH (0x15 | 0x20)
 
 // #define EPMO            (0x14|0x20)
 #define EWOLIE  (0x16 | 0x20)
@@ -465,9 +467,39 @@ uint8_t enc28j60_start(enc28j60_t* instance) {
     write_register(spi, ETXST, TXSTART_INIT);
     write_register(spi, ETXND, TXSTOP_INIT);
 
+    /*
+ * F1.1 — Hardware LLDP filtering.
+ *
+ * EtherType is located at Ethernet bytes 12-13:
+ *   byte 12 = 0x88
+ *   byte 13 = 0xCC
+ *
+ * EPMM1 bit 4 selects byte 12.
+ * EPMM1 bit 5 selects byte 13.
+ *
+ * Therefore:
+ *   EPMM0 = 0x00
+ *   EPMM1 = 0x30
+ *
+ * The ENC28J60 calculates an IP checksum over the selected bytes.
+ * IP checksum of {0x88, 0xCC} = 0x7733.
+ */
+    write_register_byte(spi, EPMOL, 0x00);
+    write_register_byte(spi, EPMOH, 0x00);
+
+    write_register_byte(spi, EPMM0, 0x00);
+    write_register_byte(spi, EPMM1, 0x30);
+
+    write_register_byte(spi, EPMM2, 0x00);
+    write_register_byte(spi, EPMM3, 0x00);
+    write_register_byte(spi, EPMM4, 0x00);
+    write_register_byte(spi, EPMM5, 0x00);
+    write_register_byte(spi, EPMM6, 0x00);
+    write_register_byte(spi, EPMM7, 0x00);
+
+    write_register(spi, EPMCS, 0x7733);
+
     write_register_byte(spi, ERXFCON, ERXFCON_UCEN | ERXFCON_CRCEN | ERXFCON_PMEN | ERXFCON_BCEN);
-    write_register(spi, EPMM0, 0x303f);
-    write_register(spi, EPMCS, 0xf7f9);
 
     write_Phy(spi, PHLCON, 0x476);
 

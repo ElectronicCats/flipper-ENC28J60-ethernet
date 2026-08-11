@@ -118,12 +118,36 @@ neighbor_t* neighbor_db_find(const uint8_t mac[6]) {
     return NULL;
 }
 
+neighbor_t* neighbor_db_find_by_source(const uint8_t mac[6], uint8_t source) {
+    if(!mac) {
+        return NULL;
+    }
+
+    for(size_t i = 0; i < NEIGHBOR_DB_MAX_ENTRIES; i++) {
+        if(!neighbors[i].occupied) {
+            continue;
+        }
+
+        if(memcmp(neighbors[i].mac, mac, 6) != 0) {
+            continue;
+        }
+
+        if(!(neighbors[i].discovery_sources & source)) {
+            continue;
+        }
+
+        return &neighbors[i];
+    }
+
+    return NULL;
+}
+
 bool neighbor_db_add(const neighbor_t* neighbor) {
     if(!neighbor) {
         return false;
     }
 
-    neighbor_t* existing = neighbor_db_find(neighbor->mac);
+    neighbor_t* existing = neighbor_db_find_by_source(neighbor->mac, neighbor->discovery_sources);
 
     if(existing) {
         *existing = *neighbor;
@@ -149,7 +173,7 @@ bool neighbor_db_update(const neighbor_t* neighbor) {
         return false;
     }
 
-    neighbor_t* existing = neighbor_db_find(neighbor->mac);
+    neighbor_t* existing = neighbor_db_find_by_source(neighbor->mac, neighbor->discovery_sources);
 
     if(!existing) {
         return false;

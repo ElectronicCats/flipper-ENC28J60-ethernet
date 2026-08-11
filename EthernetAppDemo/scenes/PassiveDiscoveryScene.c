@@ -77,7 +77,7 @@ static void passive_discovery_draw_listening(App* app) {
         app->widget, 64, 10, AlignCenter, AlignCenter, FontPrimary, "Passive Discovery");
 
     widget_add_string_element(
-        app->widget, 64, 30, AlignCenter, AlignCenter, FontSecondary, "Listening");
+        app->widget, 64, 30, AlignCenter, AlignCenter, FontSecondary, "Listening...");
 
     widget_add_string_element(
         app->widget, 64, 45, AlignCenter, AlignCenter, FontPrimary, neighbors_text);

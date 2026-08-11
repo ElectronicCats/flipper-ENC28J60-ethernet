@@ -27,26 +27,58 @@ typedef enum {
  */
 
 typedef struct {
+    /* Common neighbor identity */
     uint8_t mac[6];
 
     char chassis_id[64];
-
     char name[64];
-
     char description[128];
-
     char port[64];
-
     char management_address[48];
 
+    /* Standard LLDP information */
     uint16_t ttl;
 
     uint16_t capabilities;
-
     uint16_t enabled_capabilities;
 
+    /* Discovery source bitmask */
     uint8_t discovery_sources;
 
+    /* LLDP VLAN information */
+    uint16_t vlan_id;
+    uint16_t pvid;
+    char vlan_name[64];
+
+    uint16_t network_policy_vlan;
+
+    bool has_pvid;
+    bool has_vlan_name;
+    bool has_network_policy;
+
+    /* LLDP PoE information */
+    bool poe_supported;
+
+    uint8_t poe_power_pair;
+    uint8_t poe_power_class;
+
+    uint8_t poe_type_source_priority;
+
+    uint16_t poe_requested_power;
+    uint16_t poe_allocated_power;
+
+    uint16_t poe_power_watts;
+    uint16_t poe_requested_power_watts;
+    uint16_t poe_allocated_power_watts;
+
+    uint8_t poe_power_type;
+    uint8_t poe_power_source;
+    uint8_t poe_power_priority;
+
+    bool has_poe;
+    bool has_poe_power_values;
+
+    /* Database state */
     bool occupied;
 
 } neighbor_t;
@@ -84,5 +116,7 @@ size_t neighbor_db_count_by_source(uint8_t source);
 neighbor_t* neighbor_db_get_by_source(uint8_t source, size_t position);
 
 void neighbor_db_clear_by_source(uint8_t source);
+
+neighbor_t* neighbor_db_find_by_source(const uint8_t mac[6], uint8_t source);
 
 #endif
