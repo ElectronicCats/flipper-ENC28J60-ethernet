@@ -12,6 +12,7 @@ int32_t arpspoofing_thread(void* context);
 // ArpSpoofing on enter
 void app_scene_arp_spoofing_on_enter(void* context) {
     App* app = (App*)context;
+    app->arpspoofing_stop = false;
     // F0.4c — no thread_suspend; arpspoofing_thread is pure TX with
     // scanner_cancel_requested.
     app->thread_alternative =
@@ -22,18 +23,31 @@ void app_scene_arp_spoofing_on_enter(void* context) {
 // ArpSpoofing on event
 bool app_scene_arp_spoofing_on_event(void* context, SceneManagerEvent event) {
     App* app = (App*)context;
-    bool consumed = false;
-    UNUSED(app);
-    UNUSED(event);
-    return consumed;
+
+    if(event.type == SceneManagerEventTypeBack) {
+        app->arpspoofing_stop = true;
+
+        scene_manager_previous_scene(app->scene_manager);
+
+        return true;
+    }
+
+    return false;
 }
 
 // ArpSpoofing on exit
 void app_scene_arp_spoofing_on_exit(void* context) {
     App* app = (App*)context;
-    furi_thread_join(app->thread_alternative);
-    furi_thread_free(app->thread_alternative);
-    // F0.4c — no thread_resume.
+
+    if(app->thread_alternative) {
+        app->arpspoofing_stop = true;
+
+        furi_thread_join(app->thread_alternative);
+
+        furi_thread_free(app->thread_alternative);
+
+        app->thread_alternative = NULL;
+    }
 }
 
 /**
@@ -162,7 +176,7 @@ int32_t arpspoofing_thread(void* context) {
         last_time = furi_get_tick();
     }
 
-    while(!scanner_cancel_requested(&scanner) && program_loop) {
+    while(!scanner_cancel_requested(&scanner) && !app->arpspoofing_stop && program_loop) {
         // Waiting to read the gpio ok to attack or stop to attack
         if(furi_hal_gpio_read(&gpio_button_ok)) {
             attack = !attack;

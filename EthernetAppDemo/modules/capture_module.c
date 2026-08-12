@@ -205,6 +205,7 @@ uint32_t pcap_scan(File* file, const char* filename, uint64_t* positions, uint32
 
         // Add the position
         positions[counter] = position;
+        counter++;
 
         // Read the per-packet header, then skip the body via seek
         // (F0.5e — pre-fix this read into a 1518-byte stack buffer,
@@ -213,16 +214,23 @@ uint32_t pcap_scan(File* file, const char* filename, uint64_t* positions, uint32
         // pcap_get_specific_packet, which clamps to the caller's
         // buffer.
         bytes_read = storage_file_read(file, &packet_header, sizeof(packet_header));
-        if(bytes_read != sizeof(packet_header)) break;
+        if(bytes_read != sizeof(packet_header)) {
+            break;
+        }
+
+        if(packet_header.orig_len == 0) {
+            break;
+        }
+
         uint64_t cursor = storage_file_tell(file);
-        if(!storage_file_seek(file, (uint32_t)(cursor + packet_header.orig_len), true)) break;
+        if(!storage_file_seek(file, (uint32_t)(cursor + packet_header.orig_len), true)) {
+            break;
+        }
         bytes_read += packet_header.orig_len;
 
-        // If the position has the same position as the total lenght of the file break the loop
-        if(position == file_size) break;
-
-        // Change the position on the array to save the positions on the file
-        counter++;
+        if(storage_file_tell(file) >= file_size) {
+            break;
+        }
     }
 
     storage_file_close(file);

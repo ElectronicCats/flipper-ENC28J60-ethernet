@@ -33,7 +33,8 @@ typedef enum {
     PORTS_SCANNER_SCENE_SHOW_PORTS,
 } PORTS_SCANNER_SCENE_STATES;
 
-const char* protocols[] = {"TCP", "UDP"};
+//const char* protocols[] = {"TCP", "UDP"};
+const char* protocols[] = {"TCP"};
 // protocols_index now lives in app->scan_params (F0.1)
 
 void number_input_ports_callback(void* context, int32_t value) {
@@ -122,6 +123,40 @@ void variable_list_ports_scanner_callback(void* context, uint32_t index) {
         if(app->is_dora) {
             // F0.4c — no longer suspends app->thread; rx_dispatch keeps
             // running and ports_scanner_thread uses scanner_session.
+            enc28j60_t* ethernet = app->ethernet;
+
+            bool start = app->enc28j60_connected;
+
+            if(!start) {
+                start = enc28j60_start(ethernet) != 0xff;
+                app->enc28j60_connected = start;
+            }
+
+            if(!start) {
+                draw_device_no_connected(app);
+
+                scene_manager_set_scene_state(
+                    app->scene_manager,
+                    app_scene_ports_scanner_option,
+                    PORTS_SCANNER_SCENE_WIDGET);
+
+                view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
+
+                return;
+            }
+
+            if(!is_link_up(ethernet)) {
+                draw_network_not_connected(app);
+
+                scene_manager_set_scene_state(
+                    app->scene_manager,
+                    app_scene_ports_scanner_option,
+                    PORTS_SCANNER_SCENE_WIDGET);
+
+                view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
+
+                return;
+            }
             submenu_reset(app->submenu);
             submenu_set_header(app->submenu, "PORTS OPEN");
 
@@ -199,15 +234,14 @@ void variable_list_ports_scanner_callback(void* context, uint32_t index) {
     }
 
     case PROTOCOL:
-        // Toggle between TCP and UDP. Pre-F0 the protocol switcher used a
-        // VariableItemList with left/right arrows; commit eae1f70 migrated
-        // the scene to Submenu, which doesn't support in-place value
-        // changes — so the click-to-toggle pattern is the natural fit.
-        app->scan_params.protocols_index =
+        /*app->scan_params.protocols_index =
             (app->scan_params.protocols_index == PORTS_SCANNER_TCP) ? PORTS_SCANNER_UDP :
-                                                                      PORTS_SCANNER_TCP;
-        // Rebuild the submenu so the "Protocol [TCP/UDP]" label updates.
+                                                                      PORTS_SCANNER_TCP;*/
+
         app_scene_ports_scanner_on_enter(app);
+
+        submenu_set_selected_item(app->submenu, PROTOCOL);
+
         break;
     }
 }
@@ -223,11 +257,15 @@ void app_scene_ports_scanner_on_enter(void* context) {
     App* app = (App*)context;
 
     submenu_reset(app->submenu);
-    submenu_set_header(app->submenu, "PORT SCANNER");
+    submenu_set_header(app->submenu, "SCAN PORTS");
 
     // VIEW IP LIST
     submenu_add_item(
-        app->submenu, "View scanned IPs", VIEW_IP_LIST, variable_list_ports_scanner_callback, app);
+        app->submenu,
+        "View Scanned Hosts",
+        VIEW_IP_LIST,
+        variable_list_ports_scanner_callback,
+        app);
 
     // TARGET IP
     if(*(uint32_t*)app->scan_params.target_ip == 0)
@@ -251,7 +289,7 @@ void app_scene_ports_scanner_on_enter(void* context) {
 
     // TARGET PORT
     furi_string_reset(app->text);
-    furi_string_cat_printf(app->text, "Target Port [%u]", app->scan_params.target_port);
+    furi_string_cat_printf(app->text, "Start Port [%u]", app->scan_params.target_port);
 
     submenu_add_item(
         app->submenu,
@@ -285,7 +323,7 @@ void app_scene_ports_scanner_on_enter(void* context) {
 
     // START
     submenu_add_item(
-        app->submenu, "Start Scanner", START, variable_list_ports_scanner_callback, app);
+        app->submenu, "Start Scanning", START, variable_list_ports_scanner_callback, app);
 
     view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);
 }

@@ -1,5 +1,9 @@
 #include <gui/scene_manager.h>
 
+#ifndef DEV_MODE
+#define DEV_MODE 0
+#endif
+
 // Create the enumerator for the scenes
 #define ADD_SCENE(prefix, name, id) app_scene_##id,
 typedef enum {

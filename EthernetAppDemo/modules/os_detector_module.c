@@ -608,11 +608,12 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
     uint16_t dst_port;
 
     uint16_t src_port = 40000 + (furi_hal_random_get() % 20000);
-    uint16_t current_src_port = src_port;
     app->src_port = src_port;
     uint16_t resp_src_port;
 
     uint32_t ack_number = 0;
+
+    uint8_t filtered_count = 0;
 
     // F0.5h — bail out cleanly when the next-hop MAC can't be resolved.
     // Pre-fix the return was discarded and the scan ran with
@@ -747,7 +748,7 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
 
                         bytes_to_uint(&dst_port, tcp_header.dest_port, sizeof(uint16_t));
 
-                        if(dst_port != current_src_port) {
+                        if(dst_port != src_port) {
                             continue;
                         }
 
@@ -760,6 +761,7 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
                         }
 
                         uint32_t ack_recv;
+                        bytes_to_uint(&ack_recv, tcp_header.ack_number, sizeof(uint32_t));
 
                         if(port_idx >= 0) {
                             port_results[port_idx].last_sequence = ack_recv;
@@ -772,14 +774,11 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
                                 port_retries[port_idx] = 0;
                             } else if(is_synack) {
                                 port_results[port_idx].state = PORT_OPEN;
-                                port_responded[port_idx] = true;
                             } else {
                                 port_results[port_idx].state = PORT_FILTERED;
                                 port_filtered[port_idx] = true;
                             }
                         }
-
-                        bytes_to_uint(&ack_recv, tcp_header.ack_number, sizeof(uint32_t));
 
                         if(ack_recv != (seq_per_port[port_idx] + 1)) {
                             continue;
@@ -866,17 +865,6 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
                         ids[attemp] = ipid;
                         windows[attemp] = windows_size;
                         respuestas[attemp] = true;
-
-                        uint8_t count_valid = 0;
-                        for(uint8_t i = 0; i <= attemp; i++) {
-                            if(respuestas[i]) {
-                                count_valid++;
-                            }
-                        }
-
-                        if(count_valid >= 6) {
-                            port_responded[port_idx] = true;
-                        }
 
                         continue; // salir del while de espera para enviar nuevos SYN a puertos restantes
                     }
@@ -973,17 +961,17 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
             }
         }
 
+        attemp++;
+
         if(all_done) {
             break;
         }
-        attemp++;
-
-        uint8_t filtered_count = 0;
 
         for(uint8_t p = 0; p < probe_port_count; p++) {
-            if(!port_responded[p] && port_retries[p] >= MAX_RETRIES) {
+            if(port_retries[p] >= MAX_RETRIES) {
                 port_filtered[p] = true;
                 filtered_count++;
+                continue;
             }
         }
     }
@@ -1010,13 +998,11 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
     uint8_t an_index = 0;
     for(uint8_t i = 0; i < packet_count; i++) {
         sum_true += respuestas[i] ? 1 : 0;
-        if(respuestas[i]) {
+        if(respuestas[i] && an_index < packet_count) {
             ids_an[an_index] = ids[i];
             an_index++;
         }
     }
-
-    uint8_t filtered_count = 0;
 
     for(uint8_t i = 0; i < probe_port_count; i++) {
         if(port_filtered[i]) filtered_count++;
@@ -1118,19 +1104,6 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
         os_score_add(&sb, IOS, 5);
     }
 
-    /* ---------- APPLE STRONG SIGNATURE ---------- */
-
-    bool apple_ports = port_responded[get_port_index(5000, probe_ports, probe_port_count)] &&
-                       port_responded[get_port_index(7000, probe_ports, probe_port_count)];
-
-    if(apple_ports && ttl_guess == 64 && windows[0] == 65535) {
-        os_score_add(&sb, IOS, 10);
-    }
-
-    if(apple_ports) {
-        os_score_add(&sb, LINUX, -5);
-    }
-
     if(sum_true || icmp_valid) {
         /* ---------- TTL SCORING ---------- */
         if(ttl_valid) {
@@ -1161,6 +1134,19 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
 
         else if(ttl_guess == 128) {
             os_score_add(&sb, WINDOWS, ttl_weight);
+        }
+
+        /* ---------- APPLE STRONG SIGNATURE ---------- */
+
+        bool apple_ports = port_responded[get_port_index(5000, probe_ports, probe_port_count)] &&
+                           port_responded[get_port_index(7000, probe_ports, probe_port_count)];
+
+        if(sum_true > 0 && apple_ports && ttl_guess == 64 && windows[0] == 65535) {
+            os_score_add(&sb, IOS, 10);
+        }
+
+        if(apple_ports) {
+            os_score_add(&sb, LINUX, -5);
         }
 
         /* ---------- FILTERED PORTS SCORING ---------- */

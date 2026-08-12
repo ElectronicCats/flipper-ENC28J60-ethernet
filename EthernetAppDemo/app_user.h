@@ -40,8 +40,11 @@
 #define DEV_MODE 0
 
 // Version of the app
-#define APP_NAME    "ETHERNET APP"
-#define APP_VERSION "v1.1.1.2"
+#define APP_NAME "ETHERNET APP"
+#ifndef FAP_APP_VERSION
+#define FAP_APP_VERSION "v1.1.1.2"
+#endif
+#define APP_VERSION FAP_APP_VERSION
 
 // Path for the files
 #define PATHAPP    "apps_data/ethernet" // Path
@@ -61,6 +64,30 @@ typedef enum {
     ip_no_gotten_event,
     ip_gotten_event,
 } get_ip_events;
+
+// For Passive Discovery scene
+typedef enum {
+    PassiveDiscoveryStateConfig,
+    PassiveDiscoveryStateListening,
+    PassiveDiscoveryStateFinished,
+} passive_discovery_state_t;
+
+// For Passive Discovery scene protocols
+typedef enum {
+    PassiveProtocolALL,
+    PassiveProtocolLLDP,
+    PassiveProtocolEAPOL,
+    PassiveProtocolCDP,
+    PassiveProtocolClearAll,
+
+    PassiveProtocolCount
+} passive_protocol_t;
+
+// For Passive Discovery scene protocol names
+typedef struct {
+    passive_discovery_state_t state;
+    passive_protocol_t protocol;
+} passive_discovery_context_t;
 
 // Cross-scene scan parameters (formerly file-static globals scattered
 // across scenes; centralized in F0.1 to remove name collisions and
@@ -97,8 +124,17 @@ typedef struct {
     bool enc28j60_connected; // To know if the enc28j60 is connected
     bool is_dora;
     volatile bool dora_cancel; // F0.5f — flipped by GetIPScene on_exit so the
-        // alt thread's DORA loop can break out before
-        // its 10 s timeout fires.
+    // alt thread's DORA loop can break out before
+    // its 10 s timeout fires.
+    bool open_pcap_after_sniff;
+    volatile bool sniffer_stop;
+    volatile bool sniffer_finished;
+    bool sniffer_link_error;
+    volatile bool passive_discovery_stop;
+    uint16_t passive_neighbor_count;
+    uint8_t passive_selected_neighbor;
+    uint8_t passive_details_page;
+    volatile bool arpspoofing_stop;
 
     SceneManager* scene_manager;
     ViewDispatcher* view_dispatcher;
@@ -134,6 +170,8 @@ typedef struct {
     uint16_t selected_menu_index;
 
     scan_params_t scan_params; // F0.1 — centralized cross-scene targets
+
+    passive_discovery_context_t passive_discovery; // F1.1 — Passive Discovery scene state & protocol
 
     rx_handle_t* auto_arp_handle;
     rx_handle_t* auto_icmp_handle;

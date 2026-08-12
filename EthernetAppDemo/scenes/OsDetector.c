@@ -25,7 +25,7 @@ void settings_start_ip_address_os_detector(void* context) {
     scene_manager_set_scene_state(
         app->scene_manager, app_scene_os_detector_option, PORTS_SCANNER_SCENE_MENU);
 
-    view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);
+    app_scene_os_detector_on_enter(app);
 }
 
 // Function to set the IP address
@@ -62,8 +62,38 @@ void variable_list_os_detector_callback(void* context, uint32_t index) {
     case START:
         if(app->is_dora) {
             // F0.4c — no thread_suspend; os_scan uses scanner_session.
+            enc28j60_t* ethernet = app->ethernet;
+
+            bool start = app->enc28j60_connected;
+
+            if(!start) {
+                start = enc28j60_start(ethernet) != 0xff;
+                app->enc28j60_connected = start;
+            }
+
+            if(!start) {
+                draw_device_no_connected(app);
+
+                scene_manager_set_scene_state(
+                    app->scene_manager, app_scene_os_detector_option, PORTS_SCANNER_SCENE_WIDGET);
+
+                view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
+
+                break;
+            }
+
+            if(!is_link_up(ethernet)) {
+                draw_network_not_connected(app);
+
+                scene_manager_set_scene_state(
+                    app->scene_manager, app_scene_os_detector_option, PORTS_SCANNER_SCENE_WIDGET);
+
+                view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
+
+                break;
+            }
             app->thread_alternative =
-                furi_thread_alloc_ex("OS Detector", 5 * 1024, os_detector_thread, app);
+                furi_thread_alloc_ex("Detect OS", 5 * 1024, os_detector_thread, app);
 
             view_dispatcher_switch_to_view(app->view_dispatcher, LoadingView);
 
@@ -78,31 +108,32 @@ void variable_list_os_detector_callback(void* context, uint32_t index) {
             // shares the chip RX FIFO with rx_dispatch, and has known
             // sample-collision and ACK-validation issues. Results are
             // best-effort. Hardening lives in F1.
-            furi_string_cat_printf(app->text, "[EXPERIMENTAL]\n");
-            furi_string_cat_printf(app->text, "Heuristic, may be wrong.\n\n");
-            furi_string_cat_printf(app->text, "OS DETECTOR RESULT:\n\n");
+            furi_string_cat_printf(app->text, "   OS DETECTION RESULTS\n\n");
 
             furi_string_cat_printf(
                 app->text,
-                "Target: %u.%u.%u.%u\n\n",
+                "   Target IP: %u.%u.%u.%u\n",
                 app->scan_params.target_ip[0],
                 app->scan_params.target_ip[1],
                 app->scan_params.target_ip[2],
                 app->scan_params.target_ip[3]);
 
             if(value == NO_DETECTED) {
-                furi_string_cat_printf(app->text, "*OS NOT DETECTED*\n");
+                furi_string_cat_printf(app->text, "   OS Not Detected\n\n");
 
             } else if(app->os_guess) {
-                furi_string_cat_printf(app->text, "OS Guessed:%s\n", os_texts[value]);
+                furi_string_cat_printf(app->text, "   Guessed OS: %s\n\n", os_texts[value]);
 
             } else {
-                furi_string_cat_printf(app->text, "OS Detected:%s\n", os_texts[value]);
+                furi_string_cat_printf(app->text, "   Detected OS: %s\n\n", os_texts[value]);
             }
 
-            furi_string_cat_printf(app->text, "\nBase Source Port:\n%u\n", app->src_port);
+            furi_string_cat_printf(app->text, "   *Experimental Feature*\n");
+            furi_string_cat_printf(app->text, "   (Heuristic may be wrong)\n");
 
-            furi_string_cat_printf(app->text, "\nPorts Scanned:\n");
+            furi_string_cat_printf(app->text, "\n   Initial Source Port:\n   %u\n", app->src_port);
+
+            furi_string_cat_printf(app->text, "\n   Scanned Ports:\n");
 
             for(uint8_t i = 0; i < app->ports_count && i < 11; i++) {
                 const char* state = "UNKNOWN";
@@ -126,7 +157,7 @@ void variable_list_os_detector_callback(void* context, uint32_t index) {
                     break;
                 }
 
-                furi_string_cat_printf(app->text, "%u : %s\n", app->ports[i].port, state);
+                furi_string_cat_printf(app->text, "   %u : %s\n", app->ports[i].port, state);
             }
 
             widget_reset(app->widget);
@@ -160,11 +191,11 @@ void app_scene_os_detector_on_enter(void* context) {
     App* app = context;
 
     submenu_reset(app->submenu);
-    submenu_set_header(app->submenu, "OS DETECTOR (EXPERIMENTAL)");
+    submenu_set_header(app->submenu, "DETECT OS");
 
     // VIEW IP LIST
     submenu_add_item(
-        app->submenu, "View scanned IPs", VIEW_RESULTS, variable_list_os_detector_callback, app);
+        app->submenu, "View Scanned Hosts", VIEW_RESULTS, variable_list_os_detector_callback, app);
 
     // TARGET IP
     if(*(uint32_t*)app->scan_params.target_ip == 0)
@@ -175,7 +206,7 @@ void app_scene_os_detector_on_enter(void* context) {
 
     furi_string_cat_printf(
         app->text,
-        "Target [%u.%u.%u.%u]",
+        "Target IP [%u.%u.%u.%u]",
         app->scan_params.target_ip[0],
         app->scan_params.target_ip[1],
         app->scan_params.target_ip[2],
@@ -192,6 +223,7 @@ void app_scene_os_detector_on_enter(void* context) {
     submenu_add_item(
         app->submenu, "Start Detection", START, variable_list_os_detector_callback, app);
 
+    submenu_set_selected_item(app->submenu, app->selected_menu_index);
     view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);
 }
 
@@ -217,7 +249,7 @@ bool app_scene_os_detector_on_event(void* context, SceneManagerEvent event) {
             scene_manager_set_scene_state(
                 app->scene_manager, app_scene_os_detector_option, PORTS_SCANNER_SCENE_MENU);
 
-            view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);
+            app_scene_os_detector_on_enter(app);
 
             consumed = true;
             break;
