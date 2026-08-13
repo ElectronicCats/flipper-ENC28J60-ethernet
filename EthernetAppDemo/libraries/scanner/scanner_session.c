@@ -16,6 +16,8 @@ void scanner_session_init(scanner_session_t* s, App* app) {
     s->mac_gateway = app->mac_gateway;
     s->subnet_mask = app->ethernet->subnet_mask;
     s->cache_next = 0;
+    s->cancelled = false;
+
     for(uint8_t i = 0; i < SCANNER_RESOLVE_CACHE_ENTRIES; i++) {
         s->cache[i].valid = false;
     }
@@ -218,6 +220,12 @@ bool scanner_wait_for_packet(
 }
 
 bool scanner_cancel_requested(scanner_session_t* s) {
-    UNUSED(s);
-    return !furi_hal_gpio_read(&gpio_button_back);
+    if(!s) return false;
+
+    if(!furi_hal_gpio_read(&gpio_button_back)) {
+        s->cancelled = true;
+        return true;
+    }
+
+    return s->cancelled;
 }

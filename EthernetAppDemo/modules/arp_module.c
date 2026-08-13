@@ -237,6 +237,8 @@ void arp_scan_network(
             counter++;
         }
 
+        if(scanner->cancelled) break;
+
         // Check if the ip address is the last
         if(start_list[3] == 255) {
             start_list[2]++;

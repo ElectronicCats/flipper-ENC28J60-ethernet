@@ -194,18 +194,10 @@ int32_t sniffer_thread(void* context) {
         draw_device_no_connected(app);
         return 0;
     }
+
     if(!is_link_up(ethernet)) {
         app->sniffer_link_error = true;
-
         draw_network_not_connected(app);
-        return 0;
-    }
-
-    // Single-shot link check (no busy loop). If link is down, show error
-    // and exit. The user can reconnect the cable and reenter the scene.
-    if(!is_link_up(ethernet)) {
-        draw_network_not_connected(app);
-        furi_delay_ms(300);
         return 0;
     }
 

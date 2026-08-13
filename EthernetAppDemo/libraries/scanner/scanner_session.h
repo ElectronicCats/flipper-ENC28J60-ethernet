@@ -26,6 +26,8 @@ typedef struct ScannerSession {
         bool valid;
     } cache[SCANNER_RESOLVE_CACHE_ENTRIES];
     uint8_t cache_next;
+
+    bool cancelled;
 } scanner_session_t;
 
 /**

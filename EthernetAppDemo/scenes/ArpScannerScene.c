@@ -236,6 +236,8 @@ void draw_the_arp_list(App* app) {
         return;
     }
 
+    app->arp_scanner_stop = false;
+
     app->thread_alternative =
         furi_thread_alloc_ex("ARP SCANNER", 10 * 1024, arp_scanner_thread, app);
 
@@ -248,6 +250,7 @@ void draw_the_arp_list(App* app) {
 void finished_arp_thread(App* app) {
     furi_thread_join(app->thread_alternative);
     furi_thread_free(app->thread_alternative);
+    app->thread_alternative = NULL;
 }
 
 //  Callback for the Input
@@ -305,6 +308,10 @@ bool app_scene_arp_scanner_on_event(void* context, SceneManagerEvent event) {
     App* app = (App*)context;
 
     if(event.type == SceneManagerEventTypeBack) {
+        if(app->thread_alternative != NULL) {
+            return true;
+        }
+
         scene_manager_previous_scene(app->scene_manager);
 
         return true;
@@ -330,13 +337,14 @@ bool app_scene_arp_scanner_on_event(void* context, SceneManagerEvent event) {
 void app_scene_arp_scanner_on_exit(void* context) {
     App* app = (App*)context;
 
-    // If scene is in state 0 it finished the
-    switch(scene_manager_get_scene_state(app->scene_manager, app_scene_arp_scanner_option)) {
-    case ARP_STATE_START_SCAN:
-    case ARP_STATE_SPOOF:
+    uint32_t state =
+        scene_manager_get_scene_state(app->scene_manager, app_scene_arp_scanner_option);
 
-    default:
-        break;
+    if((state == ARP_STATE_START_SCAN || state == ARP_STATE_SPOOF) &&
+       app->thread_alternative != NULL) {
+        furi_thread_join(app->thread_alternative);
+        furi_thread_free(app->thread_alternative);
+        app->thread_alternative = NULL;
     }
 }
 
@@ -572,11 +580,13 @@ int32_t arp_scanner_thread(void* context) {
         &app->ip_counter,
         app->scan_params.range_ip);
 
-    arp_save_last_scan(app);
+    if(!scanner.cancelled) {
+        arp_save_last_scan(app);
+
+        view_dispatcher_send_custom_event(app->view_dispatcher, ArpEventScanFinished);
+    }
 
     scanner_session_deinit(&scanner);
-
-    view_dispatcher_send_custom_event(app->view_dispatcher, ArpEventScanFinished);
 
     return 0;
 }

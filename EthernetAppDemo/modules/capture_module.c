@@ -156,8 +156,11 @@ size_t pcap_get_specific_packet(
     // header is untrusted input (file may be corrupt or hand-crafted),
     // so a record claiming e.g. orig_len=0xFFFFFFFF would otherwise
     // silently overflow the caller's frame buffer.
-    uint32_t to_read = packet_header.orig_len;
-    if(to_read > packet_capacity) to_read = packet_capacity;
+    uint32_t to_read = packet_header.incl_len;
+
+    if(to_read > packet_capacity) {
+        to_read = packet_capacity;
+    }
 
     // Read the packet data
     if(storage_file_read(file, packet, to_read) != to_read) return 0;
