@@ -42,6 +42,11 @@ typedef struct {
     uint8_t subnet_mask[4];
     uint8_t tx_buffer[MAX_FRAMELEN]; // Transmit buffer
     uint8_t rx_buffer[MAX_FRAMELEN]; // Receive buffer
+
+    // Driver state
+    uint8_t bank;
+    uint16_t rx_next_packet;
+    bool rx_packet_unreleased;
 } enc28j60_t;
 
 /**
