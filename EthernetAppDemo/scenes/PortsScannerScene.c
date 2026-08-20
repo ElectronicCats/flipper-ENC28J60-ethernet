@@ -82,8 +82,6 @@ void set_ip_address_ports_scanner(App* app) {
 int32_t ports_scanner_thread(void* context) {
     App* app = context;
 
-    uint8_t value = PORT_CLOSED;
-
     switch(app->scan_params.protocols_index) {
     case PORTS_SCANNER_TCP:
         tcp_syn_scan(
@@ -102,7 +100,7 @@ int32_t ports_scanner_thread(void* context) {
         break;
     }
 
-    return value;
+    return 0;
 }
 
 void variable_list_ports_scanner_callback(void* context, uint32_t index) {
@@ -341,6 +339,8 @@ void app_scene_ports_scanner_on_enter(void* context) {
     view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);
 }
 
+static void ports_scanner_stop_thread(App* app);
+
 bool app_scene_ports_scanner_on_event(void* context, SceneManagerEvent event) {
     App* app = (App*)context;
 
@@ -349,8 +349,7 @@ bool app_scene_ports_scanner_on_event(void* context, SceneManagerEvent event) {
     if(event.type == SceneManagerEventTypeBack) {
         switch(scene_manager_get_scene_state(app->scene_manager, app_scene_ports_scanner_option)) {
         case PORTS_SCANNER_SCENE_SHOW_PORTS:
-            furi_thread_join(app->thread_alternative);
-            furi_thread_free(app->thread_alternative);
+            ports_scanner_stop_thread(app);
             // F0.4c — no thread_resume; rx_dispatch + scanner_session
             // make app->thread no longer the chip owner.
             /* fall through */
@@ -371,8 +370,17 @@ bool app_scene_ports_scanner_on_event(void* context, SceneManagerEvent event) {
     return consumed;
 }
 
+static void ports_scanner_stop_thread(App* app) {
+    if(app->thread_alternative) {
+        furi_thread_join(app->thread_alternative);
+        furi_thread_free(app->thread_alternative);
+        app->thread_alternative = NULL;
+    }
+}
+
 void app_scene_ports_scanner_on_exit(void* context) {
     App* app = (App*)context;
 
+    ports_scanner_stop_thread(app);
     variable_item_list_reset(app->varList);
 }
