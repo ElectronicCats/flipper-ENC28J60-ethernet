@@ -26,9 +26,10 @@ void app_scene_read_pcap_on_enter(void* context) {
         app->file, furi_string_get_cstr(app->path), packet_positions, PACKET_POSITIONS_MAX);
 
     // Allocate and start the thread
-    app->thread_alternative =
-        furi_thread_alloc_ex("PCAP reader", 10 * 1024, thread_read_pcaps, app);
-    furi_thread_start(app->thread_alternative);
+    FuriThread* thread = furi_thread_alloc_ex("PCAP reader", 10 * 1024, thread_read_pcaps, app);
+    if(app_thread_claim(app, AppThreadOwnerReadPcaps, thread)) {
+        furi_thread_start(thread);
+    }
 
     // Reset the widget and switch view
     text_box_reset(app->text_box);
@@ -67,9 +68,7 @@ void app_scene_read_pcap_on_exit(void* context) {
     App* app = (App*)context;
     UNUSED(app);
 
-    // Join and free the thread
-    furi_thread_join(app->thread_alternative);
-    furi_thread_free(app->thread_alternative);
+    app_thread_join_and_free(app, AppThreadOwnerReadPcaps);
 }
 
 /**

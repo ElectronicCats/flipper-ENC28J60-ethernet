@@ -158,14 +158,15 @@ void variable_list_ports_scanner_callback(void* context, uint32_t index) {
             submenu_reset(app->submenu);
             submenu_set_header(app->submenu, "PORTS OPEN");
 
-            app->thread_alternative =
+            FuriThread* thread =
                 furi_thread_alloc_ex("Ports Sacanner", 5 * 1024, ports_scanner_thread, app);
+            if(!app_thread_claim(app, AppThreadOwnerPortsScanner, thread)) return;
 
             view_dispatcher_switch_to_view(app->view_dispatcher, LoadingView);
 
             //furi_thread_set_priority(app->thread_alternative, FuriThreadPriorityNormal);
 
-            furi_thread_start(app->thread_alternative);
+            furi_thread_start(thread);
 
             //furi_thread_join(app->thread_alternative);
 
@@ -371,11 +372,7 @@ bool app_scene_ports_scanner_on_event(void* context, SceneManagerEvent event) {
 }
 
 static void ports_scanner_stop_thread(App* app) {
-    if(app->thread_alternative) {
-        furi_thread_join(app->thread_alternative);
-        furi_thread_free(app->thread_alternative);
-        app->thread_alternative = NULL;
-    }
+    app_thread_join_and_free(app, AppThreadOwnerPortsScanner);
 }
 
 void app_scene_ports_scanner_on_exit(void* context) {

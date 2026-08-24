@@ -112,9 +112,10 @@ void app_scene_sniffer_on_enter(void* context) {
 
     // Allocate and start the UI thread (does no chip I/O — only counter
     // display + back-button poll).
-    app->thread_alternative =
-        furi_thread_alloc_ex("Sniffer Therad", 4 * 1024, sniffer_thread, app);
-    furi_thread_start(app->thread_alternative);
+    FuriThread* thread = furi_thread_alloc_ex("Sniffer Therad", 4 * 1024, sniffer_thread, app);
+    if(app_thread_claim(app, AppThreadOwnerSniffer, thread)) {
+        furi_thread_start(thread);
+    }
 }
 
 // Function for the testing scene on event
@@ -154,11 +155,7 @@ bool app_scene_sniffer_on_event(void* context, SceneManagerEvent event) {
 void app_scene_sniffer_on_exit(void* context) {
     App* app = (App*)context;
 
-    if(app->thread_alternative) {
-        furi_thread_join(app->thread_alternative);
-        furi_thread_free(app->thread_alternative);
-        app->thread_alternative = NULL;
-    }
+    app_thread_join_and_free(app, AppThreadOwnerSniffer);
 }
 
 /**

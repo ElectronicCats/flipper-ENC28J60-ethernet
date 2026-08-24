@@ -15,9 +15,10 @@ void app_scene_arp_spoofing_on_enter(void* context) {
     app->arpspoofing_stop = false;
     // F0.4c — no thread_suspend; arpspoofing_thread is pure TX with
     // scanner_cancel_requested.
-    app->thread_alternative =
-        furi_thread_alloc_ex("ArpSpoofing", 10 * 1024, arpspoofing_thread, app);
-    furi_thread_start(app->thread_alternative);
+    FuriThread* thread = furi_thread_alloc_ex("ArpSpoofing", 10 * 1024, arpspoofing_thread, app);
+    if(app_thread_claim(app, AppThreadOwnerArpSpoofing, thread)) {
+        furi_thread_start(thread);
+    }
 }
 
 // ArpSpoofing on event
@@ -39,14 +40,10 @@ bool app_scene_arp_spoofing_on_event(void* context, SceneManagerEvent event) {
 void app_scene_arp_spoofing_on_exit(void* context) {
     App* app = (App*)context;
 
-    if(app->thread_alternative) {
+    if(app_thread_is_owned(app, AppThreadOwnerArpSpoofing)) {
         app->arpspoofing_stop = true;
 
-        furi_thread_join(app->thread_alternative);
-
-        furi_thread_free(app->thread_alternative);
-
-        app->thread_alternative = NULL;
+        app_thread_join_and_free(app, AppThreadOwnerArpSpoofing);
     }
 }
 

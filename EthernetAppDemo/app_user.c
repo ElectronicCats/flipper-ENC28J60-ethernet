@@ -126,6 +126,39 @@ bool arp_save_last_scan(App* app) {
     return true;
 }
 
+bool app_thread_claim(App* app, AppThreadOwner owner, FuriThread* thread) {
+    furi_assert(app);
+
+    if(!thread || owner == AppThreadOwnerNone) return false;
+
+    if(app->thread_alternative || app->thread_alternative_owner != AppThreadOwnerNone) {
+        furi_thread_free(thread);
+        return false;
+    }
+
+    app->thread_alternative = thread;
+    app->thread_alternative_owner = owner;
+    return true;
+}
+
+bool app_thread_is_owned(const App* app, AppThreadOwner owner) {
+    return app && app->thread_alternative && app->thread_alternative_owner == owner;
+}
+
+uint32_t app_thread_join_and_free(App* app, AppThreadOwner owner) {
+    if(!app_thread_is_owned(app, owner)) return 0;
+
+    FuriThread* thread = app->thread_alternative;
+    furi_thread_join(thread);
+    uint32_t return_code = furi_thread_get_return_code(thread);
+
+    app->thread_alternative = NULL;
+    app->thread_alternative_owner = AppThreadOwnerNone;
+    furi_thread_free(thread);
+
+    return return_code;
+}
+
 App* app_alloc() {
     // F0.5d-wave2 — calloc instead of malloc so every field starts
     // zero/NULL. Pre-fix `thread_alternative` could be uninitialized

@@ -57,9 +57,11 @@ void app_scene_get_ip_scene_on_enter(void* context) {
         // F0.5f — clear the cancel flag before starting; on_exit may
         // have left it set from a prior cancelled run.
         app->dora_cancel = false;
-        app->thread_alternative =
+        FuriThread* thread =
             furi_thread_alloc_ex("Get IP DORA", 4 * 1024, get_ip_dora_thread, app);
-        furi_thread_start(app->thread_alternative);
+        if(app_thread_claim(app, AppThreadOwnerGetIp, thread)) {
+            furi_thread_start(thread);
+        }
     } else {
         draw_device_no_connected(app);
     }
@@ -96,13 +98,11 @@ bool app_scene_get_ip_scene_on_event(void* context, SceneManagerEvent event) {
 // Function for the testing scene on exit
 void app_scene_get_ip_scene_on_exit(void* context) {
     App* app = (App*)context;
-    if(app->thread_alternative) {
+    if(app_thread_is_owned(app, AppThreadOwnerGetIp)) {
         // F0.5f — request cancel before join. The DORA loop polls this
         // flag every iteration and breaks out early, so join completes
         // within ~ms instead of the 10 s DHCP timeout.
         app->dora_cancel = true;
-        furi_thread_join(app->thread_alternative);
-        furi_thread_free(app->thread_alternative);
-        app->thread_alternative = NULL;
+        app_thread_join_and_free(app, AppThreadOwnerGetIp);
     }
 }

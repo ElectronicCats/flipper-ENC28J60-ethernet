@@ -28,6 +28,7 @@ typedef struct ScannerSession {
     uint8_t cache_next;
 
     bool cancelled;
+    volatile const bool* external_cancel;
 } scanner_session_t;
 
 /**
@@ -43,6 +44,8 @@ void scanner_session_init(scanner_session_t* s, App* app);
  * unregistration here).
  */
 void scanner_session_deinit(scanner_session_t* s);
+
+void scanner_session_set_cancel_flag(scanner_session_t* s, volatile const bool* cancel_flag);
 
 /**
  * Given a target IPv4, return via mac_out the MAC of the next hop:

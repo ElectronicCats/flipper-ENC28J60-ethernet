@@ -184,14 +184,16 @@ static int32_t passive_discovery_thread(void* context) {
 // --- Public APIs implementation ---
 
 void passive_discovery_module_start(App* app) {
-    if(app->thread_alternative) {
+    if(app_thread_is_owned(app, AppThreadOwnerPassiveDiscovery)) {
         return;
     }
 
     app->passive_discovery_stop = false;
-    app->thread_alternative =
+    FuriThread* thread =
         furi_thread_alloc_ex("Passive Discovery", 4096, passive_discovery_thread, app);
-    furi_thread_start(app->thread_alternative);
+    if(app_thread_claim(app, AppThreadOwnerPassiveDiscovery, thread)) {
+        furi_thread_start(thread);
+    }
 }
 
 void passive_discovery_module_stop(App* app) {
@@ -201,13 +203,7 @@ void passive_discovery_module_stop(App* app) {
 
     app->passive_discovery_stop = true;
 
-    if(app->thread_alternative != NULL) {
-        furi_thread_join(app->thread_alternative);
-
-        furi_thread_free(app->thread_alternative);
-
-        app->thread_alternative = NULL;
-    }
+    app_thread_join_and_free(app, AppThreadOwnerPassiveDiscovery);
 }
 
 size_t passive_discovery_module_get_protocol_count(void) {

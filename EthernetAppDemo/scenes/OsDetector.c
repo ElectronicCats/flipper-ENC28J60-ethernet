@@ -92,15 +92,14 @@ void variable_list_os_detector_callback(void* context, uint32_t index) {
 
                 break;
             }
-            app->thread_alternative =
+            FuriThread* thread =
                 furi_thread_alloc_ex("Detect OS", 5 * 1024, os_detector_thread, app);
+            if(!app_thread_claim(app, AppThreadOwnerOsDetector, thread)) break;
 
             view_dispatcher_switch_to_view(app->view_dispatcher, LoadingView);
 
-            furi_thread_start(app->thread_alternative);
-            furi_thread_join(app->thread_alternative);
-
-            uint32_t value = furi_thread_get_return_code(app->thread_alternative);
+            furi_thread_start(thread);
+            uint32_t value = app_thread_join_and_free(app, AppThreadOwnerOsDetector);
 
             furi_string_reset(app->text);
 
@@ -167,7 +166,6 @@ void variable_list_os_detector_callback(void* context, uint32_t index) {
 
             view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
 
-            furi_thread_free(app->thread_alternative);
             // F0.4c — no thread_resume.
         } else {
             draw_dora_needed(app);

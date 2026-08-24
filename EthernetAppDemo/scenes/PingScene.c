@@ -243,8 +243,10 @@ void app_scene_ping_scene_on_enter(void* context) {
 
     // F0.4c — no thread_suspend; ping_thread uses scanner_session.
     // Allocate and start the thread
-    app->thread_alternative = furi_thread_alloc_ex("PING", 10 * 1024, ping_thread, app);
-    furi_thread_start(app->thread_alternative);
+    FuriThread* thread = furi_thread_alloc_ex("PING", 10 * 1024, ping_thread, app);
+    if(app_thread_claim(app, AppThreadOwnerPing, thread)) {
+        furi_thread_start(thread);
+    }
 
     // Reset the widget and switch view
     widget_reset(app->widget);
@@ -293,9 +295,7 @@ bool app_scene_ping_scene_on_event(void* context, SceneManagerEvent event) {
 void app_scene_ping_scene_on_exit(void* context) {
     App* app = (App*)context;
 
-    // Join and free the thread
-    furi_thread_join(app->thread_alternative);
-    furi_thread_free(app->thread_alternative);
+    app_thread_join_and_free(app, AppThreadOwnerPing);
     // F0.4c — no thread_resume.
 }
 

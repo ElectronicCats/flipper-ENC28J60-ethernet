@@ -125,7 +125,6 @@ void app_scene_passive_discovery_on_enter(void* context) {
     app->passive_discovery.protocol = PassiveProtocolALL;
 
     app->passive_discovery_stop = false;
-    app->thread_alternative = NULL;
 
     app->passive_neighbor_count = neighbor_db_count();
 

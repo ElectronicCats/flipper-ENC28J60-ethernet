@@ -17,6 +17,7 @@ void scanner_session_init(scanner_session_t* s, App* app) {
     s->subnet_mask = app->ethernet->subnet_mask;
     s->cache_next = 0;
     s->cancelled = false;
+    s->external_cancel = NULL;
 
     for(uint8_t i = 0; i < SCANNER_RESOLVE_CACHE_ENTRIES; i++) {
         s->cache[i].valid = false;
@@ -26,6 +27,11 @@ void scanner_session_init(scanner_session_t* s, App* app) {
 void scanner_session_deinit(scanner_session_t* s) {
     UNUSED(s);
     // No-op for now. F0.4 will add RX handler unsubscription here.
+}
+
+void scanner_session_set_cancel_flag(scanner_session_t* s, volatile const bool* cancel_flag) {
+    furi_assert(s);
+    s->external_cancel = cancel_flag;
 }
 
 void scanner_send_packet_trigger(void* ctx) {
@@ -221,6 +227,11 @@ bool scanner_wait_for_packet(
 
 bool scanner_cancel_requested(scanner_session_t* s) {
     if(!s) return false;
+
+    if(s->external_cancel && *s->external_cancel) {
+        s->cancelled = true;
+        return true;
+    }
 
     if(!furi_hal_gpio_read(&gpio_button_back)) {
         s->cancelled = true;

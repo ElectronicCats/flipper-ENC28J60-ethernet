@@ -10,6 +10,7 @@ typedef enum {
 typedef enum {
     ArpEventScanFinished = 1,
     ArpEventSelectTargetIP,
+    ArpEventScanCancelled,
 } ArpCustomEvent;
 
 /**
@@ -238,19 +239,17 @@ void draw_the_arp_list(App* app) {
 
     app->arp_scanner_stop = false;
 
-    app->thread_alternative =
-        furi_thread_alloc_ex("ARP SCANNER", 10 * 1024, arp_scanner_thread, app);
+    FuriThread* thread = furi_thread_alloc_ex("ARP SCANNER", 10 * 1024, arp_scanner_thread, app);
+    if(!app_thread_claim(app, AppThreadOwnerArpScanner, thread)) return;
 
-    furi_thread_start(app->thread_alternative);
+    furi_thread_start(thread);
 
     view_dispatcher_switch_to_view(app->view_dispatcher, LoadingView);
 }
 
 // Function to draw to finished the thread
 void finished_arp_thread(App* app) {
-    furi_thread_join(app->thread_alternative);
-    furi_thread_free(app->thread_alternative);
-    app->thread_alternative = NULL;
+    app_thread_join_and_free(app, AppThreadOwnerArpScanner);
 }
 
 //  Callback for the Input
@@ -308,7 +307,8 @@ bool app_scene_arp_scanner_on_event(void* context, SceneManagerEvent event) {
     App* app = (App*)context;
 
     if(event.type == SceneManagerEventTypeBack) {
-        if(app->thread_alternative != NULL) {
+        if(app_thread_is_owned(app, AppThreadOwnerArpScanner)) {
+            app->arp_scanner_stop = true;
             return true;
         }
 
@@ -318,13 +318,18 @@ bool app_scene_arp_scanner_on_event(void* context, SceneManagerEvent event) {
     }
 
     if(event.type == SceneManagerEventTypeCustom) {
-        if(event.event == ArpEventScanFinished) {
+        if(event.event == ArpEventScanFinished || event.event == ArpEventScanCancelled) {
+            bool cancelled = event.event == ArpEventScanCancelled || app->arp_scanner_stop;
             finished_arp_thread(app);
 
-            scene_manager_set_scene_state(
-                app->scene_manager, app_scene_arp_scanner_option, ARP_STATE_SHOW_LIST);
+            if(cancelled) {
+                scene_manager_previous_scene(app->scene_manager);
+            } else {
+                scene_manager_set_scene_state(
+                    app->scene_manager, app_scene_arp_scanner_option, ARP_STATE_SHOW_LIST);
 
-            show_current_arp_list(app);
+                show_current_arp_list(app);
+            }
 
             return true;
         }
@@ -337,14 +342,9 @@ bool app_scene_arp_scanner_on_event(void* context, SceneManagerEvent event) {
 void app_scene_arp_scanner_on_exit(void* context) {
     App* app = (App*)context;
 
-    uint32_t state =
-        scene_manager_get_scene_state(app->scene_manager, app_scene_arp_scanner_option);
-
-    if((state == ARP_STATE_START_SCAN || state == ARP_STATE_SPOOF) &&
-       app->thread_alternative != NULL) {
-        furi_thread_join(app->thread_alternative);
-        furi_thread_free(app->thread_alternative);
-        app->thread_alternative = NULL;
+    if(app_thread_is_owned(app, AppThreadOwnerArpScanner)) {
+        app->arp_scanner_stop = true;
+        app_thread_join_and_free(app, AppThreadOwnerArpScanner);
     }
 }
 
@@ -572,6 +572,7 @@ int32_t arp_scanner_thread(void* context) {
 
     scanner_session_t scanner;
     scanner_session_init(&scanner, app);
+    scanner_session_set_cancel_flag(&scanner, &app->arp_scanner_stop);
 
     arp_scan_network(
         &scanner,
@@ -580,13 +581,16 @@ int32_t arp_scanner_thread(void* context) {
         &app->ip_counter,
         app->scan_params.range_ip);
 
-    if(!scanner.cancelled) {
-        arp_save_last_scan(app);
+    bool cancelled = scanner.cancelled || app->arp_scanner_stop;
 
-        view_dispatcher_send_custom_event(app->view_dispatcher, ArpEventScanFinished);
+    if(!cancelled) {
+        arp_save_last_scan(app);
     }
 
     scanner_session_deinit(&scanner);
+
+    view_dispatcher_send_custom_event(
+        app->view_dispatcher, cancelled ? ArpEventScanCancelled : ArpEventScanFinished);
 
     return 0;
 }

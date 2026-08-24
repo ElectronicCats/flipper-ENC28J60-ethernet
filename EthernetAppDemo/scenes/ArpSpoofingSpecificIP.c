@@ -138,9 +138,11 @@ void spoofing_specific_ip(App* app) {
     // scanner_session for the target ARP resolve and pure TX after.
 
     // Start the other thread
-    app->thread_alternative = furi_thread_alloc_ex(
+    FuriThread* thread = furi_thread_alloc_ex(
         "ARP SPOOF SPECIFIC IP", 10 * 1024, thread_for_spoofing_specific_ip, app);
-    furi_thread_start(app->thread_alternative);
+    if(app_thread_claim(app, AppThreadOwnerArpSpoofingSpecific, thread)) {
+        furi_thread_start(thread);
+    }
 
     // Switch the view of the flipper
     widget_reset(app->widget);
@@ -151,8 +153,7 @@ void spoofing_specific_ip(App* app) {
 
 // When the thread is exit, resume the other thread
 void finish_spoofing_specific_ip_thread(App* app) {
-    furi_thread_join(app->thread_alternative);
-    furi_thread_free(app->thread_alternative);
+    app_thread_join_and_free(app, AppThreadOwnerArpSpoofingSpecific);
     // F0.4c — no thread_resume.
 }
 

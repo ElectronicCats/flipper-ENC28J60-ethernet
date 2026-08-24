@@ -112,6 +112,21 @@ typedef struct {
 // included below the App typedef (it depends on App* in its API).
 typedef struct rx_handle rx_handle_t;
 
+typedef enum {
+    AppThreadOwnerNone = 0,
+    AppThreadOwnerAbout,
+    AppThreadOwnerArpScanner,
+    AppThreadOwnerArpSpoofing,
+    AppThreadOwnerArpSpoofingSpecific,
+    AppThreadOwnerGetIp,
+    AppThreadOwnerOsDetector,
+    AppThreadOwnerPassiveDiscovery,
+    AppThreadOwnerPing,
+    AppThreadOwnerPortsScanner,
+    AppThreadOwnerReadPcaps,
+    AppThreadOwnerSniffer,
+} AppThreadOwner;
+
 // Struct for the App
 typedef struct {
     arp_list ip_list[255];
@@ -169,6 +184,7 @@ typedef struct {
     // is gone; rx_dispatch owns the chip and per-scene alt threads do
     // any heavy lifting.
     FuriThread* thread_alternative; // Per-scene alt thread (one at a time)
+    AppThreadOwner thread_alternative_owner;
 
     bool arp_target_selection_mode;
 
@@ -188,6 +204,9 @@ typedef struct {
 
 bool arp_load_last_scan(App* app);
 bool arp_save_last_scan(App* app);
+bool app_thread_claim(App* app, AppThreadOwner owner, FuriThread* thread);
+bool app_thread_is_owned(const App* app, AppThreadOwner owner);
+uint32_t app_thread_join_and_free(App* app, AppThreadOwner owner);
 
 // F0.2 — settings persistence. Must be included AFTER the App typedef
 // because settings.h declares functions taking `App*`, and App is an
