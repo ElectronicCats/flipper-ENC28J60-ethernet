@@ -682,6 +682,13 @@ void enable_broadcast(enc28j60_t* instance) {
     furi_mutex_release(instance->mutex);
 }
 
+bool is_broadcast_enabled(enc28j60_t* instance) {
+    furi_mutex_acquire(instance->mutex, FuriWaitForever);
+    bool enabled = (read_register_byte(instance, ERXFCON) & ERXFCON_BCEN) != 0;
+    furi_mutex_release(instance->mutex);
+    return enabled;
+}
+
 void disable_broadcast(enc28j60_t* instance) {
     furi_mutex_acquire(instance->mutex, FuriWaitForever);
     write_register_byte(instance, ERXFCON, read_register_byte(instance, ERXFCON) & ~ERXFCON_BCEN);

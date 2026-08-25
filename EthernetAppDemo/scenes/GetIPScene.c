@@ -22,7 +22,7 @@ static int32_t get_ip_dora_thread(void* context) {
         ethernet,
         ethernet->ip_address,
         app->ip_gateway,
-        ethernet->subnet_mask,
+        app->mac_gateway,
         "Flippa 0",
         &app->dora_cancel);
     rx_dispatch_resume();

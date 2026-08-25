@@ -206,6 +206,7 @@ bool flipper_process_dora_with_host_name(
 
     state_dora_t state = DHCP_STATE_INIT;
 
+    bool broadcast_was_enabled = is_broadcast_enabled(ethernet);
     enable_broadcast(ethernet);
 
     while(!ret && is_link_up(ethernet)) {
@@ -288,7 +289,12 @@ bool flipper_process_dora_with_host_name(
         furi_delay_us(1);
     }
 
-    disable_broadcast(ethernet);
+    if(broadcast_was_enabled) {
+        enable_broadcast(ethernet);
+    } else {
+        disable_broadcast(ethernet);
+        disable_broadcast(ethernet);
+    }
 
     if(ret) {
         memcpy(static_ip, myip, 4);

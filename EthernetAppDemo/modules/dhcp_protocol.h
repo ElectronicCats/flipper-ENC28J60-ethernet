@@ -15,6 +15,7 @@
  * @param ethernet A pointer to the ENC28J60 driver instance.
  * @param static_ip A pointer to a 4-byte buffer where the assigned IP address will be stored.
  * @param ip_router A pointer to a 4-byte buffer where the router's IP address will be stored.
+* @param mac_router A pointer to a 6-byte buffer where the router's MAC address will be stored.
  * @param host A string containing the host name to be included in the DHCP messages.
  * @param cancel Optional. Pointer to a flag the caller can flip true to
  *               abort the DORA loop early. NULL disables cancellation.

@@ -169,6 +169,14 @@ void send_packet(enc28j60_t* instance, uint8_t* buffer, uint16_t len);
 void enable_broadcast(enc28j60_t* instance);
 
 /**
+ * @brief Checks whether broadcast Ethernet frame reception is enabled.
+ *
+ * @param instance Pointer to the `enc28j60_t` instance to inspect.
+ * @return `true` when the broadcast receive-filter bit is enabled, otherwise `false`.
+ */
+bool is_broadcast_enabled(enc28j60_t* instance);
+
+/**
  * @brief Disables reception of broadcast Ethernet frames on the ENC28J60.
  *
  * This function configures the ENC28J60 to ignore broadcast packets,

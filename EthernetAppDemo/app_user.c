@@ -82,6 +82,7 @@ static void auto_icmp_handler(const uint8_t* frame, uint16_t len, void* ctx) {
 
 bool arp_load_last_scan(App* app) {
     if(!storage_file_open(app->file, PATH_LAST_SCAN, FSAM_READ, FSOM_OPEN_EXISTING)) {
+        storage_file_close(app->file);
         return false;
     }
 
@@ -305,11 +306,13 @@ void app_free(App* app) {
     // Free memory of GUI modules
     widget_free(app->widget);
     submenu_free(app->submenu);
+    variable_item_list_free(app->varList);
     text_box_free(app->text_box);
     byte_input_free(app->input_byte_value);
     file_browser_free(app->file_browser);
     ip_assigner_free(app->ip_assigner);
     loading_free(app->loading);
+    number_input_free(app->number_input);
 
     // Free memory of ENC
     free_enc28j60(app->ethernet);
