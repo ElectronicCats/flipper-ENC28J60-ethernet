@@ -27,11 +27,13 @@ static int32_t get_ip_dora_thread(void* context) {
         &app->dora_cancel);
     rx_dispatch_resume();
 
+    if(app->dora_cancel) return 0;
+
     if(got_ip) {
         app->is_dora = true;
         send_arp_gratuitous(ethernet, ethernet->mac_address, ethernet->ip_address);
-        view_dispatcher_send_custom_event(app->view_dispatcher, ip_gotten_event);
         app->is_static_ip = true;
+        view_dispatcher_send_custom_event(app->view_dispatcher, ip_gotten_event);
     } else {
         view_dispatcher_send_custom_event(app->view_dispatcher, ip_no_gotten_event);
     }
@@ -81,10 +83,12 @@ bool app_scene_get_ip_scene_on_event(void* context, SceneManagerEvent event) {
             break;
 
         case ip_no_gotten_event:
+            app_thread_join_and_free(app, AppThreadOwnerGetIp);
             draw_ip_not_got_it(app);
             break;
 
         case ip_gotten_event:
+            app_thread_join_and_free(app, AppThreadOwnerGetIp);
             draw_your_ip_is(app);
             break;
 

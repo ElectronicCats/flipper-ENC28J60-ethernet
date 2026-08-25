@@ -108,7 +108,7 @@ bool tcp_send_fin(
     uint32_t ack_number) {
     if(ethernet == NULL || target_ip == NULL || ip_gateway == NULL) return false;
 
-    uint8_t* buffer = calloc(1, ETHERNET_HEADER_LEN + IP_HEADER_LEN + sizeof(tcp_header_t));
+    uint8_t buffer[ETHERNET_HEADER_LEN + IP_HEADER_LEN + sizeof(tcp_header_t)] = {0};
 
     uint8_t target_mac[6] = {0};
 
@@ -164,8 +164,6 @@ bool tcp_send_fin(
 
 #endif
 
-    free(buffer);
-
     return true;
 }
 
@@ -181,7 +179,7 @@ bool tcp_send_ack(
     uint32_t ack_number) {
     if(ethernet == NULL || target_ip == NULL) return false;
 
-    uint8_t* buffer = calloc(1, ETHERNET_HEADER_LEN + IP_HEADER_LEN + sizeof(tcp_header_t));
+    uint8_t buffer[ETHERNET_HEADER_LEN + IP_HEADER_LEN + sizeof(tcp_header_t)] = {0};
 
     uint16_t tcp_len;
     if(!set_tcp_header_ack(
@@ -216,8 +214,6 @@ bool tcp_send_ack(
     }
 
 #endif
-
-    free(buffer);
 
     return true;
 }

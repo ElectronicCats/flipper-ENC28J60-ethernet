@@ -173,6 +173,7 @@ void app_thread_shutdown(App* app) {
     app->passive_discovery_stop = true;
     app->arpspoofing_stop = true;
     app->arp_scanner_stop = true;
+    app->os_detector_stop = true;
     app_thread_join_and_free(app, owner);
 }
 

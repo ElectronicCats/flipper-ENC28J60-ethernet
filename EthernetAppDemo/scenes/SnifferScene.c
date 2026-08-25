@@ -137,12 +137,14 @@ bool app_scene_sniffer_on_event(void* context, SceneManagerEvent event) {
 
     if(event.type == SceneManagerEventTypeCustom) {
         if(event.event == SnifferEventStop) {
+            app_thread_join_and_free(app, AppThreadOwnerSniffer);
             scene_manager_previous_scene(app->scene_manager);
             app->sniffer_stop = true;
             return true;
         }
 
         if(event.event == SnifferEventOpenPcap) {
+            app_thread_join_and_free(app, AppThreadOwnerSniffer);
             scene_manager_next_scene(app->scene_manager, app_scene_read_pcap_option);
             return true;
         }

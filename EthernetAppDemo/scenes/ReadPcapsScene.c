@@ -26,7 +26,7 @@ void app_scene_read_pcap_on_enter(void* context) {
         app->file, furi_string_get_cstr(app->path), packet_positions, PACKET_POSITIONS_MAX);
 
     // Allocate and start the thread
-    FuriThread* thread = furi_thread_alloc_ex("PCAP reader", 10 * 1024, thread_read_pcaps, app);
+    FuriThread* thread = furi_thread_alloc_ex("PCAP reader", 4 * 1024, thread_read_pcaps, app);
     if(app_thread_claim(app, AppThreadOwnerReadPcaps, thread)) {
         furi_thread_start(thread);
     }

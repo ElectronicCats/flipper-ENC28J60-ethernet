@@ -46,7 +46,7 @@ void calculate_checksum_tcp(
     tcp_header_t* tcp_header) {
     uint16_t tcp_header_len = options_size + TCP_HEADER_LEN;
 
-    uint8_t* buffer_checksum = calloc(1, IP_PSEUDO_HEADER_LEN + tcp_header_len);
+    uint8_t buffer_checksum[IP_PSEUDO_HEADER_LEN + sizeof(tcp_header_t)] = {0};
 
     uint_to_bytes(&tcp_header_len, pseudo_header->tcp_lenght, sizeof(uint16_t));
 
@@ -57,8 +57,6 @@ void calculate_checksum_tcp(
         (uint16_t*)buffer_checksum, (IP_PSEUDO_HEADER_LEN + tcp_header_len) / 2);
 
     uint_to_bytes(&checksum, tcp_header->checksum, sizeof(uint16_t));
-
-    free(buffer_checksum);
 }
 
 bool set_tcp_header_syn(
@@ -165,15 +163,15 @@ bool set_tcp_header_fin(
     uint16_t* len) {
     if(buffer == NULL) return false;
 
-    pseudo_header_ip_t* pseudo_header = calloc(1, sizeof(pseudo_header_ip_t));
-    memcpy(pseudo_header->source_ip, source_ip, 4);
-    memcpy(pseudo_header->target_ip, target_ip, 4);
-    pseudo_header->protocol = 0x06;
+    pseudo_header_ip_t pseudo_header = {0};
+    memcpy(pseudo_header.source_ip, source_ip, 4);
+    memcpy(pseudo_header.target_ip, target_ip, 4);
+    pseudo_header.protocol = 0x06;
 
-    tcp_header_t* tcp_header = calloc(1, sizeof(tcp_header_t));
+    tcp_header_t tcp_header = {0};
 
     if(!create_tcp_header(
-           tcp_header,
+           &tcp_header,
            source_port,
            dest_port,
            sequence,
@@ -183,11 +181,9 @@ bool set_tcp_header_fin(
            urgent_pointer))
         return false;
 
-    calculate_checksum_tcp(0, pseudo_header, tcp_header);
+    calculate_checksum_tcp(0, &pseudo_header, &tcp_header);
 
-    memcpy(buffer, tcp_header, TCP_HEADER_LEN);
-
-    free(tcp_header);
+    memcpy(buffer, &tcp_header, TCP_HEADER_LEN);
 
     *len = TCP_HEADER_LEN;
 
@@ -207,15 +203,15 @@ bool set_tcp_header_ack(
     uint16_t* len) {
     if(buffer == NULL) return false;
 
-    pseudo_header_ip_t* pseudo_header = calloc(1, sizeof(pseudo_header_ip_t));
-    memcpy(pseudo_header->source_ip, source_ip, 4);
-    memcpy(pseudo_header->target_ip, target_ip, 4);
-    pseudo_header->protocol = 0x06;
+    pseudo_header_ip_t pseudo_header = {0};
+    memcpy(pseudo_header.source_ip, source_ip, 4);
+    memcpy(pseudo_header.target_ip, target_ip, 4);
+    pseudo_header.protocol = 0x06;
 
-    tcp_header_t* tcp_header = calloc(1, sizeof(tcp_header_t));
+    tcp_header_t tcp_header = {0};
 
     if(!create_tcp_header(
-           tcp_header,
+           &tcp_header,
            source_port,
            dest_port,
            sequence,
@@ -225,11 +221,9 @@ bool set_tcp_header_ack(
            urgent_pointer))
         return false;
 
-    calculate_checksum_tcp(0, pseudo_header, tcp_header);
+    calculate_checksum_tcp(0, &pseudo_header, &tcp_header);
 
-    memcpy(buffer, tcp_header, TCP_HEADER_LEN);
-
-    free(tcp_header);
+    memcpy(buffer, &tcp_header, TCP_HEADER_LEN);
 
     *len = TCP_HEADER_LEN;
 
@@ -249,7 +243,7 @@ bool set_tcp_header_tseq(
     uint16_t* options_size,
     uint8_t* options_vector,
     uint16_t* len) {
-    pseudo_header_ip_t pseudo_header;
+    pseudo_header_ip_t pseudo_header = {0};
     memcpy(pseudo_header.source_ip, source_ip, 4);
     memcpy(pseudo_header.target_ip, target_ip, 4);
     pseudo_header.protocol = 0x06;

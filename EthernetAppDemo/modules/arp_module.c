@@ -322,14 +322,12 @@ bool arp_reply_requested(enc28j60_t* ethernet, uint8_t* buffer, uint8_t* dst_ip)
 }
 
 void send_arp_gratuitous(enc28j60_t* ethernet, uint8_t* source_mac, uint8_t* source_ip) {
-    uint8_t* buffer = calloc(42, sizeof(uint8_t));
+    uint8_t buffer[ETHERNET_HEADER_LEN + ARP_LEN] = {0};
 
     set_ethernet_header(buffer, source_mac, MAC_BROADCAST, 0x0806);
     arp_set_header(buffer + 14, source_mac, MAC_ZEROS, source_ip, source_ip, 1);
 
     send_packet(ethernet, buffer, 42);
-
-    free(buffer);
 }
 
 uint8_t is_duplicated_ip(uint8_t* ip, arp_list* list, uint8_t total_list) {

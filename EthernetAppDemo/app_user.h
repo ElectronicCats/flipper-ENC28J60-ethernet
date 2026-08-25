@@ -157,6 +157,7 @@ typedef struct {
     uint8_t passive_details_page;
     volatile bool arpspoofing_stop;
     volatile bool arp_scanner_stop;
+    volatile bool os_detector_stop;
     volatile bool thread_shutdown_requested;
 
     SceneManager* scene_manager;
