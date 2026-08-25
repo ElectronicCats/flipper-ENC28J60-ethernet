@@ -139,6 +139,7 @@ bool app_thread_claim(App* app, AppThreadOwner owner, FuriThread* thread) {
 
     app->thread_alternative = thread;
     app->thread_alternative_owner = owner;
+    app->thread_shutdown_requested = false;
     return true;
 }
 
@@ -158,6 +159,21 @@ uint32_t app_thread_join_and_free(App* app, AppThreadOwner owner) {
     furi_thread_free(thread);
 
     return return_code;
+}
+
+void app_thread_shutdown(App* app) {
+    if(!app || !app->thread_alternative || app->thread_alternative_owner == AppThreadOwnerNone) {
+        return;
+    }
+
+    AppThreadOwner owner = app->thread_alternative_owner;
+    app->thread_shutdown_requested = true;
+    app->dora_cancel = true;
+    app->sniffer_stop = true;
+    app->passive_discovery_stop = true;
+    app->arpspoofing_stop = true;
+    app->arp_scanner_stop = true;
+    app_thread_join_and_free(app, owner);
 }
 
 App* app_alloc() {
@@ -275,6 +291,10 @@ App* app_alloc() {
 }
 
 void app_free(App* app) {
+    // Stop and join the currently owned scene worker while App, dispatcher,
+    // storage, and ENC28J60 resources are all still valid.
+    app_thread_shutdown(app);
+
     // F0.2 — persist current settings before tearing down storage and the
     // ethernet instance. Errors are silent; a failed save must not block
     // app exit.

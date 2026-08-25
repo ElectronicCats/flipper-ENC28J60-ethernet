@@ -53,7 +53,7 @@ void get_gateway_ip(uint8_t* ip_gateway);
 
 void get_subnet_mask(uint8_t* mask);
 
-void set_dhcp_discover_message_with_host_name(uint8_t* buffer, uint16_t* length, const char* host);
+bool set_dhcp_discover_message_with_host_name(uint8_t* buffer, uint16_t* length, const char* host);
 
 void set_mac_address(uint8_t* mac_address);
 

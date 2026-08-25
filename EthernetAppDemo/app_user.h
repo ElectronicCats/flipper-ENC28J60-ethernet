@@ -157,6 +157,7 @@ typedef struct {
     uint8_t passive_details_page;
     volatile bool arpspoofing_stop;
     volatile bool arp_scanner_stop;
+    volatile bool thread_shutdown_requested;
 
     SceneManager* scene_manager;
     ViewDispatcher* view_dispatcher;
@@ -207,6 +208,7 @@ bool arp_save_last_scan(App* app);
 bool app_thread_claim(App* app, AppThreadOwner owner, FuriThread* thread);
 bool app_thread_is_owned(const App* app, AppThreadOwner owner);
 uint32_t app_thread_join_and_free(App* app, AppThreadOwner owner);
+void app_thread_shutdown(App* app);
 
 // F0.2 — settings persistence. Must be included AFTER the App typedef
 // because settings.h declares functions taking `App*`, and App is an

@@ -126,9 +126,9 @@ int32_t about_us_thread(void* context) {
 
     bool write_once = true;
 
-    while(furi_hal_gpio_read(&gpio_button_back)) {
+    while(!app->thread_shutdown_requested && furi_hal_gpio_read(&gpio_button_back)) {
         if(!furi_hal_gpio_read(&gpio_button_left)) {
-            while(!furi_hal_gpio_read(&gpio_button_left))
+            while(!app->thread_shutdown_requested && !furi_hal_gpio_read(&gpio_button_left))
                 furi_delay_ms(1);
 
             if(counter == 0)
@@ -140,7 +140,7 @@ int32_t about_us_thread(void* context) {
         }
 
         if(!furi_hal_gpio_read(&gpio_button_right)) {
-            while(!furi_hal_gpio_read(&gpio_button_right))
+            while(!app->thread_shutdown_requested && !furi_hal_gpio_read(&gpio_button_right))
                 furi_delay_ms(1);
 
             counter++;

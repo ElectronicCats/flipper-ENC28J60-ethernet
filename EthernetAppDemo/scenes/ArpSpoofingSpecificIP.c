@@ -337,7 +337,8 @@ int32_t thread_for_spoofing_specific_ip(void* context) {
             &size_one);
     }
 
-    while(furi_hal_gpio_read(&gpio_button_back) && program_loop) {
+    while(!app->thread_shutdown_requested && furi_hal_gpio_read(&gpio_button_back) &&
+          program_loop) {
         // Waiting to read the gpio ok to attack or stop to attack
         if(furi_hal_gpio_read(&gpio_button_ok)) {
             attack = !attack;

@@ -370,26 +370,34 @@ static void read_buffer(FuriHalSpiBusHandle* spi, uint16_t len, uint8_t* data) {
     furi_hal_spi_release(spi);
 }
 
+#define PHY_BUSY_TIMEOUT_MS 100U
+
+static bool wait_phy_ready(enc28j60_t* instance) {
+    uint32_t started = furi_get_tick();
+    while(read_register_byte(instance, MISTAT) & MISTAT_BUSY) {
+        if((furi_get_tick() - started) >= PHY_BUSY_TIMEOUT_MS) return false;
+        furi_delay_us(1);
+    }
+    return true;
+}
+
 // To write the registers PHY
-static void write_Phy(enc28j60_t* instance, const uint8_t address, const uint16_t data) {
+static bool write_Phy(enc28j60_t* instance, const uint8_t address, const uint16_t data) {
     write_register_byte(instance, MIREGADR, address);
     write_register(instance, MIWR, data);
-
-    while(read_register_byte(instance, MISTAT) & MISTAT_BUSY)
-        furi_delay_us(1);
+    return wait_phy_ready(instance);
 }
 
 // To read the register Phy
-static uint16_t read_Phy_byte(enc28j60_t* instance, const uint8_t address) {
+static bool read_Phy_byte(enc28j60_t* instance, const uint8_t address, uint8_t* data) {
+    if(!data) return false;
     write_register_byte(instance, MIREGADR, address);
     write_register_byte(instance, MICMD, MICMD_MIIRD);
-
-    while(read_register_byte(instance, MISTAT) & MISTAT_BUSY)
-        ;
-
+    bool ready = wait_phy_ready(instance);
     write_register_byte(instance, MICMD, 0x00);
-
-    return read_register_byte(instance, MIRD + 1);
+    if(!ready) return false;
+    *data = read_register_byte(instance, MIRD + 1);
+    return true;
 }
 
 // Alloc memory for the enc28j60 struct
@@ -399,6 +407,8 @@ enc28j60_t* enc28j60_alloc(uint8_t* mac_address, uint8_t* ip_address) {
     if(!ethernet_enc) {
         return NULL;
     }
+
+    memset(ethernet_enc, 0, sizeof(*ethernet_enc));
 
     ethernet_enc->spi = spi_alloc();
 
@@ -410,6 +420,11 @@ enc28j60_t* enc28j60_alloc(uint8_t* mac_address, uint8_t* ip_address) {
     // Each public function below acquires this around set_bank + SPI op
     // sequences. Closes B-6 (unprotected file-static `bank`).
     ethernet_enc->mutex = furi_mutex_alloc(FuriMutexTypeNormal);
+    if(!ethernet_enc->mutex) {
+        spi_free(ethernet_enc->spi);
+        free(ethernet_enc);
+        return NULL;
+    }
     ethernet_enc->bank = 0;
     ethernet_enc->rx_next_packet = RXSTART_INIT;
     ethernet_enc->rx_packet_unreleased = false;
@@ -519,7 +534,10 @@ uint8_t enc28j60_start(enc28j60_t* instance) {
     write_register_byte(
         instance, ERXFCON, ERXFCON_UCEN | ERXFCON_CRCEN | ERXFCON_PMEN | ERXFCON_BCEN);
 
-    write_Phy(instance, PHLCON, 0x476);
+    if(!write_Phy(instance, PHLCON, 0x476)) {
+        furi_mutex_release(instance->mutex);
+        return 0xff;
+    }
 
     write_register_byte(instance, MACON1, MACON1_MARXEN);
 
@@ -536,7 +554,10 @@ uint8_t enc28j60_start(enc28j60_t* instance) {
     write_register_byte(instance, MAADR1, instance->mac_address[4]);
     write_register_byte(instance, MAADR0, instance->mac_address[5]);
 
-    write_Phy(instance, PHCON2, PHCON2_HDLDIS);
+    if(!write_Phy(instance, PHCON2, PHCON2_HDLDIS)) {
+        furi_mutex_release(instance->mutex);
+        return 0xff;
+    }
     set_bank_with_mask(instance, ECON1);
     write_operation(spi, ENC28J60_BIT_FIELD_SET, EIE, EIE_INTIE | EIE_PKTIE);
     write_operation(spi, ENC28J60_BIT_FIELD_SET, ECON1, ECON1_RXEN);
@@ -554,7 +575,8 @@ uint8_t enc28j60_start(enc28j60_t* instance) {
 bool is_link_up(enc28j60_t* instance) {
     furi_mutex_acquire(instance->mutex, FuriWaitForever);
 
-    bool result = (read_Phy_byte(instance, PHSTAT2) >> 2) & 1;
+    uint8_t phy_status = 0;
+    bool result = read_Phy_byte(instance, PHSTAT2, &phy_status) && ((phy_status >> 2) & 1);
 
     furi_mutex_release(instance->mutex);
 

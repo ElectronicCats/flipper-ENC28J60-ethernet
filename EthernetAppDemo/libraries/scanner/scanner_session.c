@@ -18,6 +18,7 @@ void scanner_session_init(scanner_session_t* s, App* app) {
     s->cache_next = 0;
     s->cancelled = false;
     s->external_cancel = NULL;
+    s->app_shutdown = &app->thread_shutdown_requested;
 
     for(uint8_t i = 0; i < SCANNER_RESOLVE_CACHE_ENTRIES; i++) {
         s->cache[i].valid = false;
@@ -227,6 +228,11 @@ bool scanner_wait_for_packet(
 
 bool scanner_cancel_requested(scanner_session_t* s) {
     if(!s) return false;
+
+    if(s->app_shutdown && *s->app_shutdown) {
+        s->cancelled = true;
+        return true;
+    }
 
     if(s->external_cancel && *s->external_cancel) {
         s->cancelled = true;

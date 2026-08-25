@@ -29,6 +29,7 @@ typedef struct ScannerSession {
 
     bool cancelled;
     volatile const bool* external_cancel;
+    volatile const bool* app_shutdown;
 } scanner_session_t;
 
 /**

@@ -53,30 +53,30 @@ typedef enum {
 // builder used in production.
 
 // Function to get the dhcp message offer
-bool deconstruct_dhcp_offer(uint8_t* buffer) {
-    if(buffer == NULL) return false;
+bool deconstruct_dhcp_offer(const uint8_t* buffer, uint16_t frame_length) {
+    dhcp_message_view_t dhcp_message;
+    if(!dhcp_parse_message(buffer, frame_length, &dhcp_message) || !dhcp_is_offer(&dhcp_message)) {
+        return false;
+    }
 
-    if(!is_dhcp(buffer)) return false;
-
-    dhcp_message_t dhcp_message = dhcp_deconstruct_dhcp_message(buffer);
-
-    if(!dhcp_is_offer(dhcp_message)) return false;
-
-    uint32_t is_the_xid = dhcp_message.xid[0] << 24 | dhcp_message.xid[1] << 16 |
-                          dhcp_message.xid[2] << 8 | dhcp_message.xid[3];
+    uint32_t is_the_xid = (uint32_t)dhcp_message.data[4] << 24 |
+                          (uint32_t)dhcp_message.data[5] << 16 |
+                          (uint32_t)dhcp_message.data[6] << 8 | dhcp_message.data[7];
 
     if(is_the_xid != xid) return false;
 
     // Get the MAC Adress from the dhcp server
-    ethernet_header_t ethernet_header = ethernet_get_header(buffer);
-    memcpy(MAC_DESTINATION, ethernet_header.mac_source, 6);
+    const uint8_t* server_identifier;
+    uint8_t option_length;
+    if(!dhcp_get_option(
+           &dhcp_message, DHCP_OP_SERVER_IDENTIFIER, &server_identifier, &option_length) ||
+       option_length != 4) {
+        return false;
+    }
 
-    // dhcp message yiaddr
-    memcpy(ip_client, dhcp_message.yiaddr, 4);
-
-    // dhcp message ip server
-    uint8_t length = 0;
-    dhcp_get_option_data(dhcp_message, DHCP_OP_SERVER_IDENTIFIER, ip_server, &length);
+    memcpy(MAC_DESTINATION, buffer + 6, 6);
+    memcpy(ip_client, dhcp_message.data + 16, 4);
+    memcpy(ip_server, server_identifier, 4);
 
     return true;
 }
@@ -85,31 +85,54 @@ bool deconstruct_dhcp_offer(uint8_t* buffer) {
 // hostname-aware set_dhcp_request_message_with_host_name is used.
 
 // Function to deconstruct the acknowledge message
-bool deconstruct_dhcp_ack(uint8_t* buffer) {
-    if(buffer == NULL) return false;
+bool deconstruct_dhcp_ack(const uint8_t* buffer, uint16_t frame_length) {
+    dhcp_message_view_t dhcp_message;
+    if(!dhcp_parse_message(buffer, frame_length, &dhcp_message) ||
+       !dhcp_is_acknoledge(&dhcp_message)) {
+        return false;
+    }
 
-    if(!is_dhcp(buffer)) return false;
-
-    dhcp_message_t dhcp_message = dhcp_deconstruct_dhcp_message(buffer);
-
-    if(!dhcp_is_acknoledge(dhcp_message)) return false;
-
-    uint32_t is_the_xid = dhcp_message.xid[0] << 24 | dhcp_message.xid[1] << 16 |
-                          dhcp_message.xid[2] << 8 | dhcp_message.xid[3];
+    uint32_t is_the_xid = (uint32_t)dhcp_message.data[4] << 24 |
+                          (uint32_t)dhcp_message.data[5] << 16 |
+                          (uint32_t)dhcp_message.data[6] << 8 | dhcp_message.data[7];
 
     if(is_the_xid != xid) return false;
 
-    memcpy(myip, dhcp_message.yiaddr, 4);
+    const uint8_t* option_data;
+    uint8_t option_length;
+    uint8_t parsed_subnet[4];
+    uint8_t parsed_gateway[4];
+    uint8_t parsed_server[4];
+    uint8_t parsed_dns[4] = {0};
 
-    uint8_t length = 0;
+    if(!dhcp_get_option(&dhcp_message, DHCP_OP_SUBNET_MASK, &option_data, &option_length) ||
+       option_length != 4) {
+        return false;
+    }
+    memcpy(parsed_subnet, option_data, 4);
 
-    dhcp_get_option_data(dhcp_message, DHCP_OP_SUBNET_MASK, subnet_mask, &length);
+    if(!dhcp_get_option(&dhcp_message, DHCP_OP_ROUTER, &option_data, &option_length) ||
+       option_length < 4 || (option_length % 4) != 0) {
+        return false;
+    }
+    memcpy(parsed_gateway, option_data, 4);
 
-    dhcp_get_option_data(dhcp_message, DHCP_OP_ROUTER, gateway, &length);
+    if(dhcp_get_option(&dhcp_message, DHCP_OP_DOMAIN_NAME_SERVER, &option_data, &option_length)) {
+        if(option_length < 4 || (option_length % 4) != 0) return false;
+        memcpy(parsed_dns, option_data, 4);
+    }
 
-    dhcp_get_option_data(dhcp_message, DHCP_OP_NAME_SERVER, dns_server, &length);
+    if(!dhcp_get_option(&dhcp_message, DHCP_OP_SERVER_IDENTIFIER, &option_data, &option_length) ||
+       option_length != 4) {
+        return false;
+    }
+    memcpy(parsed_server, option_data, 4);
 
-    dhcp_get_option_data(dhcp_message, DHCP_OP_SERVER_IDENTIFIER, dhcp_server_ip, &length);
+    memcpy(myip, dhcp_message.data + 16, 4);
+    memcpy(subnet_mask, parsed_subnet, 4);
+    memcpy(gateway, parsed_gateway, 4);
+    memcpy(dns_server, parsed_dns, 4);
+    memcpy(dhcp_server_ip, parsed_server, 4);
 
     return true;
 }
@@ -128,13 +151,17 @@ void get_gateway_ip(uint8_t* ip_gateway) {
 }
 
 // Function to set a Discover Message
-void set_dhcp_discover_message_with_host_name(uint8_t* buffer, uint16_t* length, const char* host) {
-    if(buffer == NULL || length == NULL) return;
+bool set_dhcp_discover_message_with_host_name(uint8_t* buffer, uint16_t* length, const char* host) {
+    if(buffer == NULL || length == NULL || host == NULL) return false;
 
     uint16_t dhcp_len = 0;
 
-    dhcp_message_t dhcp_message =
-        dhcp_message_discover(MAC_ADDRESS, xid, (uint8_t*)host, &dhcp_len);
+    dhcp_message_t* dhcp_message =
+        (dhcp_message_t*)(buffer + ETHERNET_HEADER_LEN + IP_HEADER_LEN + UDP_HEADER_LEN);
+    if(!dhcp_message_discover(MAC_ADDRESS, xid, (const uint8_t*)host, dhcp_message, &dhcp_len)) {
+        *length = 0;
+        return false;
+    }
 
     set_ethernet_header(buffer, MAC_ADDRESS, MAC_BROADCAST, 0x800);
 
@@ -151,19 +178,23 @@ void set_dhcp_discover_message_with_host_name(uint8_t* buffer, uint16_t* length,
     set_udp_header(
         buffer + ETHERNET_HEADER_LEN + IP_HEADER_LEN, 0x44, 0x43, dhcp_len + UDP_HEADER_LEN);
 
-    memcpy(buffer + ETHERNET_HEADER_LEN + IP_HEADER_LEN + UDP_HEADER_LEN, &dhcp_message, dhcp_len);
-
     *length = dhcp_len + ETHERNET_HEADER_LEN + IP_HEADER_LEN + UDP_HEADER_LEN;
+    return true;
 }
 
 // Function to set the dhcp message request
-void set_dhcp_request_message_with_host_name(uint8_t* buffer, uint16_t* length, const char* host) {
-    if(buffer == NULL || length == NULL) return;
+bool set_dhcp_request_message_with_host_name(uint8_t* buffer, uint16_t* length, const char* host) {
+    if(buffer == NULL || length == NULL || host == NULL) return false;
 
     uint16_t dhcp_len = 0;
 
-    dhcp_message_t dhcp_message =
-        dhcp_message_request(MAC_ADDRESS, xid, ip_client, ip_server, (uint8_t*)host, &dhcp_len);
+    dhcp_message_t* dhcp_message =
+        (dhcp_message_t*)(buffer + ETHERNET_HEADER_LEN + IP_HEADER_LEN + UDP_HEADER_LEN);
+    if(!dhcp_message_request(
+           MAC_ADDRESS, xid, ip_client, ip_server, (const uint8_t*)host, dhcp_message, &dhcp_len)) {
+        *length = 0;
+        return false;
+    }
 
     set_ethernet_header(buffer, MAC_ADDRESS, MAC_BROADCAST, 0x800);
 
@@ -180,9 +211,8 @@ void set_dhcp_request_message_with_host_name(uint8_t* buffer, uint16_t* length, 
     set_udp_header(
         buffer + ETHERNET_HEADER_LEN + IP_HEADER_LEN, 0x44, 0x43, dhcp_len + UDP_HEADER_LEN);
 
-    memcpy(buffer + ETHERNET_HEADER_LEN + IP_HEADER_LEN + UDP_HEADER_LEN, &dhcp_message, dhcp_len);
-
     *length = dhcp_len + ETHERNET_HEADER_LEN + IP_HEADER_LEN + UDP_HEADER_LEN;
+    return true;
 }
 
 bool flipper_process_dora_with_host_name(
@@ -209,7 +239,8 @@ bool flipper_process_dora_with_host_name(
     bool broadcast_was_enabled = is_broadcast_enabled(ethernet);
     enable_broadcast(ethernet);
 
-    while(!ret && is_link_up(ethernet)) {
+    bool failed = false;
+    while(!ret && !failed && is_link_up(ethernet)) {
         // F0.5f — early-out on caller-requested cancel (e.g. user
         // pressed Back in GetIPScene). Without this, on_exit's
         // furi_thread_join would block up to the 10 s timeout below.
@@ -229,7 +260,10 @@ bool flipper_process_dora_with_host_name(
         switch(state) {
         // This state is to send the discover message
         case DHCP_STATE_INIT:
-            set_dhcp_discover_message_with_host_name(tx_buffer, &length, host);
+            if(!set_dhcp_discover_message_with_host_name(tx_buffer, &length, host)) {
+                failed = true;
+                break;
+            }
             send_packet(ethernet, tx_buffer, length);
             memset(tx_buffer, 0, MAX_FRAMELEN);
             current_time = furi_get_tick();
@@ -238,7 +272,10 @@ bool flipper_process_dora_with_host_name(
 
         // This state is to send the request message
         case DHCP_STATE_REQUEST:
-            set_dhcp_request_message_with_host_name(tx_buffer, &length, host);
+            if(!set_dhcp_request_message_with_host_name(tx_buffer, &length, host)) {
+                failed = true;
+                break;
+            }
             send_packet(ethernet, tx_buffer, length);
             memset(tx_buffer, 0, MAX_FRAMELEN);
             current_time = furi_get_tick();
@@ -249,16 +286,11 @@ bool flipper_process_dora_with_host_name(
         case DHCP_STATE_WAITING:
             length = receive_packet(ethernet, rx_buffer, MAX_FRAMELEN);
 
-            // This part helps to know if it is dhcp offer
-            if(is_dhcp(rx_buffer)) {
-                if(deconstruct_dhcp_offer(rx_buffer)) {
+            if(length > 0) {
+                if(deconstruct_dhcp_offer(rx_buffer, length)) {
                     state = DHCP_STATE_REQUEST; // set the state in request
-                    memset(rx_buffer, 0, MAX_FRAMELEN);
                     current_time = furi_get_tick();
-                }
-
-                // This part helps to know if it is dhcp acknowledge
-                if(deconstruct_dhcp_ack(rx_buffer)) {
+                } else if(deconstruct_dhcp_ack(rx_buffer, length)) {
                     // F0.7 — was `get_subnet_mask(mac_router)` which wrote
                     // the 4-byte subnet mask into the caller's 6-byte MAC
                     // buffer (so mac_router got 4 bytes of subnet + 2
@@ -292,7 +324,6 @@ bool flipper_process_dora_with_host_name(
     if(broadcast_was_enabled) {
         enable_broadcast(ethernet);
     } else {
-        disable_broadcast(ethernet);
         disable_broadcast(ethernet);
     }
 

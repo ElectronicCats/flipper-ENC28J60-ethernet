@@ -100,9 +100,9 @@ int32_t thread_read_pcaps(void* context) {
     bool start = storage_file_open(
         app->file, furi_string_get_cstr(app->path), FSAM_READ, FSOM_OPEN_EXISTING);
 
-    while(furi_hal_gpio_read(&gpio_button_back) && start) {
+    while(!app->thread_shutdown_requested && furi_hal_gpio_read(&gpio_button_back) && start) {
         if(!furi_hal_gpio_read(&gpio_button_left)) {
-            while(!furi_hal_gpio_read(&gpio_button_left))
+            while(!app->thread_shutdown_requested && !furi_hal_gpio_read(&gpio_button_left))
                 furi_delay_ms(1);
 
             if(counter == 0)
@@ -114,7 +114,7 @@ int32_t thread_read_pcaps(void* context) {
         }
 
         if(!furi_hal_gpio_read(&gpio_button_right)) {
-            while(!furi_hal_gpio_read(&gpio_button_right))
+            while(!app->thread_shutdown_requested && !furi_hal_gpio_read(&gpio_button_right))
                 furi_delay_ms(1);
 
             counter++;
