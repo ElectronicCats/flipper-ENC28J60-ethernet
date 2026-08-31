@@ -296,6 +296,11 @@ void app_free(App* app) {
     // storage, and ENC28J60 resources are all still valid.
     app_thread_shutdown(app);
 
+    // Read PCAP normally releases this after joining its worker in scene exit.
+    // Keep an app-shutdown fallback for exits that bypass the scene callback.
+    free(app->packet_positions);
+    app->packet_positions = NULL;
+
     // F0.2 — persist current settings before tearing down storage and the
     // ethernet instance. Errors are silent; a failed save must not block
     // app exit.

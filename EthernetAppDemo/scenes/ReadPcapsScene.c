@@ -4,7 +4,6 @@
 // F0.7 — capacity exposed as a constant so pcap_scan can bounds-check.
 #define PACKET_POSITIONS_MAX 2000
 uint32_t packet_count = 0;
-uint64_t packet_positions[PACKET_POSITIONS_MAX] = {0};
 
 // Function for the thread
 int32_t thread_read_pcaps(void* context);
@@ -21,9 +20,12 @@ void draw_could_not_be_read(App* app) {
 void app_scene_read_pcap_on_enter(void* context) {
     App* app = (App*)context;
 
+    furi_assert(app->packet_positions == NULL);
+    app->packet_positions = malloc(PACKET_POSITIONS_MAX * sizeof(*app->packet_positions));
+
     // watch if the pcap function works
     packet_count = pcap_scan(
-        app->file, furi_string_get_cstr(app->path), packet_positions, PACKET_POSITIONS_MAX);
+        app->file, furi_string_get_cstr(app->path), app->packet_positions, PACKET_POSITIONS_MAX);
 
     // Allocate and start the thread
     FuriThread* thread = furi_thread_alloc_ex("PCAP reader", 4 * 1024, thread_read_pcaps, app);
@@ -66,9 +68,10 @@ bool app_scene_read_pcap_on_event(void* context, SceneManagerEvent event) {
 // Function for the testing scene on exit
 void app_scene_read_pcap_on_exit(void* context) {
     App* app = (App*)context;
-    UNUSED(app);
 
     app_thread_join_and_free(app, AppThreadOwnerReadPcaps);
+    free(app->packet_positions);
+    app->packet_positions = NULL;
 }
 
 /**
@@ -126,7 +129,7 @@ int32_t thread_read_pcaps(void* context) {
 
         if(write_once) {
             len = pcap_get_specific_packet(
-                app->file, buffer, buffer_capacity, packet_positions[counter]);
+                app->file, buffer, buffer_capacity, app->packet_positions[counter]);
 
             furi_string_reset(app->text);
 

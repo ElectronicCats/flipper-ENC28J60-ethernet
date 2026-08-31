@@ -202,6 +202,8 @@ typedef struct {
 
     rx_handle_t* auto_arp_handle;
     rx_handle_t* auto_icmp_handle;
+
+    uint64_t* packet_positions; // Read PCAP scene-owned packet offset table
 } App;
 
 bool arp_load_last_scan(App* app);
