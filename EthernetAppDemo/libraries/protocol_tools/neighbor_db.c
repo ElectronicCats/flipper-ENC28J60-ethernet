@@ -1,9 +1,31 @@
 #include "neighbor_db.h"
 
-static neighbor_t neighbors[NEIGHBOR_DB_MAX_ENTRIES];
+static neighbor_t* neighbors = NULL;
+
+bool neighbor_db_acquire(void) {
+    if(neighbors) {
+        return true;
+    }
+
+    neighbors = calloc(NEIGHBOR_DB_MAX_ENTRIES, sizeof(neighbor_t));
+    return neighbors != NULL;
+}
+
+void neighbor_db_release(void) {
+    if(!neighbors) {
+        return;
+    }
+
+    free(neighbors);
+    neighbors = NULL;
+}
 
 void neighbor_db_clear(void) {
-    memset(neighbors, 0, sizeof(neighbors));
+    if(!neighbors) {
+        return;
+    }
+
+    memset(neighbors, 0, NEIGHBOR_DB_MAX_ENTRIES * sizeof(neighbor_t));
 }
 
 void neighbor_db_init(void) {
@@ -19,6 +41,10 @@ void neighbor_db_save(void) {
 }
 
 size_t neighbor_db_count_by_source(uint8_t source) {
+    if(!neighbors) {
+        return 0;
+    }
+
     size_t count = 0;
 
     for(size_t i = 0; i < NEIGHBOR_DB_MAX_ENTRIES; i++) {
@@ -31,6 +57,10 @@ size_t neighbor_db_count_by_source(uint8_t source) {
 }
 
 neighbor_t* neighbor_db_get_by_source(uint8_t source, size_t position) {
+    if(!neighbors) {
+        return NULL;
+    }
+
     size_t current = 0;
 
     for(size_t i = 0; i < NEIGHBOR_DB_MAX_ENTRIES; i++) {
@@ -47,6 +77,10 @@ neighbor_t* neighbor_db_get_by_source(uint8_t source, size_t position) {
 }
 
 void neighbor_db_clear_by_source(uint8_t source) {
+    if(!neighbors) {
+        return;
+    }
+
     for(size_t i = 0; i < NEIGHBOR_DB_MAX_ENTRIES; i++) {
         if(!neighbors[i].occupied) continue;
 
@@ -59,6 +93,10 @@ void neighbor_db_clear_by_source(uint8_t source) {
 }
 
 size_t neighbor_db_count(void) {
+    if(!neighbors) {
+        return 0;
+    }
+
     size_t count = 0;
 
     for(size_t i = 0; i < NEIGHBOR_DB_MAX_ENTRIES; i++) {
@@ -71,6 +109,10 @@ size_t neighbor_db_count(void) {
 }
 
 neighbor_t* neighbor_db_get_by_position(size_t position) {
+    if(!neighbors) {
+        return NULL;
+    }
+
     size_t current = 0;
 
     for(size_t i = 0; i < NEIGHBOR_DB_MAX_ENTRIES; i++) {
@@ -89,7 +131,7 @@ neighbor_t* neighbor_db_get_by_position(size_t position) {
 }
 
 neighbor_t* neighbor_db_get(size_t index) {
-    if(index >= NEIGHBOR_DB_MAX_ENTRIES) {
+    if(!neighbors || index >= NEIGHBOR_DB_MAX_ENTRIES) {
         return NULL;
     }
 
@@ -101,7 +143,7 @@ neighbor_t* neighbor_db_get(size_t index) {
 }
 
 neighbor_t* neighbor_db_find(const uint8_t mac[6]) {
-    if(!mac) {
+    if(!neighbors || !mac) {
         return NULL;
     }
 
@@ -119,7 +161,7 @@ neighbor_t* neighbor_db_find(const uint8_t mac[6]) {
 }
 
 neighbor_t* neighbor_db_find_by_source(const uint8_t mac[6], uint8_t source) {
-    if(!mac) {
+    if(!neighbors || !mac) {
         return NULL;
     }
 
@@ -143,7 +185,7 @@ neighbor_t* neighbor_db_find_by_source(const uint8_t mac[6], uint8_t source) {
 }
 
 bool neighbor_db_add(const neighbor_t* neighbor) {
-    if(!neighbor) {
+    if(!neighbors || !neighbor) {
         return false;
     }
 
@@ -169,7 +211,7 @@ bool neighbor_db_add(const neighbor_t* neighbor) {
 }
 
 bool neighbor_db_update(const neighbor_t* neighbor) {
-    if(!neighbor) {
+    if(!neighbors || !neighbor) {
         return false;
     }
 

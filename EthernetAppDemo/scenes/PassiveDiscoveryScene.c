@@ -118,6 +118,10 @@ void app_scene_passive_discovery_on_enter(void* context) {
         return;
     }
 
+    if(!neighbor_db_acquire()) {
+        return;
+    }
+
     neighbor_db_load();
 
     app->passive_discovery.state = PassiveDiscoveryStateConfig;
@@ -146,6 +150,9 @@ bool app_scene_passive_discovery_on_event(void* context, SceneManagerEvent event
 
             return true;
         }
+
+        passive_discovery_module_stop(app);
+        neighbor_db_release();
 
         return scene_manager_previous_scene(app->scene_manager);
     }

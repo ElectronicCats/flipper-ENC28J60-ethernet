@@ -83,6 +83,10 @@ typedef struct {
 
 } neighbor_t;
 
+bool neighbor_db_acquire(void);
+
+void neighbor_db_release(void);
+
 void neighbor_db_init(void);
 
 void neighbor_db_clear(void);

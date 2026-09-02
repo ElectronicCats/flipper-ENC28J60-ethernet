@@ -1,6 +1,7 @@
 #include "app_user.h"
 #include "libraries/protocol_tools/arp.h"
 #include "libraries/protocol_tools/icmp.h"
+#include "libraries/protocol_tools/neighbor_db.h"
 
 // Just to set as initial MAC the user must to modify to have other MAC address
 uint8_t MAC_INITIAL[6] = {0xba, 0x3f, 0x91, 0xc2, 0x7e, 0x5d};
@@ -295,6 +296,10 @@ void app_free(App* app) {
     // Stop and join the currently owned scene worker while App, dispatcher,
     // storage, and ENC28J60 resources are all still valid.
     app_thread_shutdown(app);
+
+    // Passive Discovery normally releases its database on final family exit.
+    // Keep a post-worker shutdown fallback for app exits from any passive scene.
+    neighbor_db_release();
 
     // Read PCAP normally releases this after joining its worker in scene exit.
     // Keep an app-shutdown fallback for exits that bypass the scene callback.
