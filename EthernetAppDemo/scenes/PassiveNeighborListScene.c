@@ -55,7 +55,7 @@ static void build_neighbor_submenu(App* app) {
             neighbor_t* neighbor;
 
             if(app->passive_discovery.protocol == PassiveProtocolALL) {
-                neighbor = neighbor_db_get(i);
+                neighbor = neighbor_db_get_by_position(i);
 
             } else {
                 neighbor = neighbor_db_get_by_source(source, i);

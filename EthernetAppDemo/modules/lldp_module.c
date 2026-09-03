@@ -63,7 +63,7 @@ bool lldp_module_process_frame(uint8_t* frame, uint16_t length) {
         return false;
     }
 
-    neighbor_t* existing = neighbor_db_find(neighbor.mac);
+    neighbor_t* existing = neighbor_db_find_by_source(neighbor.mac, NEIGHBOR_SOURCE_LLDP);
 
     bool ok = false;
 

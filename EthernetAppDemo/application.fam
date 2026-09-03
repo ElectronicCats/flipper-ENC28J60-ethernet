@@ -4,7 +4,7 @@ App(
     apptype=FlipperAppType.EXTERNAL,
     entry_point="app_main",
     requires=["gui"],
-    stack_size=30 * 1024,
+    stack_size=24 * 1024,
     fap_icon="assets/logo_icon.png",
     fap_category="Electronic Cats",
     fap_icon_assets="assets",

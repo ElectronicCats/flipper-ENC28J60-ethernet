@@ -4,6 +4,31 @@
 
 static void passive_details_callback(GuiButtonType type, InputType input_type, void* context);
 
+static uint8_t passive_details_get_source(const App* app) {
+    switch(app->passive_discovery.protocol) {
+    case PassiveProtocolLLDP:
+        return NEIGHBOR_SOURCE_LLDP;
+
+    case PassiveProtocolCDP:
+        return NEIGHBOR_SOURCE_CDP;
+
+    case PassiveProtocolEAPOL:
+        return NEIGHBOR_SOURCE_EAPOL;
+
+    default:
+        return 0;
+    }
+}
+
+static neighbor_t* passive_details_get_selected_neighbor(App* app) {
+    if(app->passive_discovery.protocol == PassiveProtocolALL) {
+        return neighbor_db_get_by_position(app->passive_selected_neighbor);
+    }
+
+    return neighbor_db_get_by_source(
+        passive_details_get_source(app), app->passive_selected_neighbor);
+}
+
 static void mac_to_string(uint8_t* mac, char* buffer, size_t size) {
     snprintf(
         buffer,
@@ -144,7 +169,7 @@ void app_scene_passive_neighbor_details_on_enter(void* context) {
     App* app = context;
     app->passive_details_page = 0;
 
-    neighbor_t* neighbor = neighbor_db_get_by_position(app->passive_selected_neighbor);
+    neighbor_t* neighbor = passive_details_get_selected_neighbor(app);
 
     if(!neighbor) {
         widget_reset(app->widget);
@@ -169,7 +194,7 @@ static void passive_details_callback(GuiButtonType type, InputType input_type, v
         return;
     }
 
-    neighbor_t* neighbor = neighbor_db_get_by_position(app->passive_selected_neighbor);
+    neighbor_t* neighbor = passive_details_get_selected_neighbor(app);
 
     if(!neighbor) {
         return;
