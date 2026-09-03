@@ -12,13 +12,16 @@ typedef struct {
     // Protocol display name
     const char* (*get_display_name)(void);
 
-    // Protocol-specific hardware/database setup
+    // Protocol-specific setup
     void (*init)(App* app);
 
     // Blocking loop packet acquisition function
     bool (*run)(scanner_session_t* session, uint32_t timeout_ms);
 
-    // Protocol-specific teardown and hardware restore
+    // Inspect one received Ethernet frame without taking ownership of it
+    bool (*process_frame)(uint8_t* frame, uint16_t length);
+
+    // Protocol-specific teardown
     void (*cleanup)(App* app);
 
     // Page count for the neighbor details view

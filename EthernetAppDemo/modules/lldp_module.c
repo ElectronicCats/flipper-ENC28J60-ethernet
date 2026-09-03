@@ -107,7 +107,7 @@ static const char* lldp_get_display_name(void) {
 }
 
 static void lldp_init(App* app) {
-    enable_multicast(app->ethernet);
+    UNUSED(app);
     lldp_module_init();
 }
 
@@ -116,7 +116,7 @@ static bool lldp_run(scanner_session_t* session, uint32_t timeout_ms) {
 }
 
 static void lldp_cleanup(App* app) {
-    disable_multicast(app->ethernet);
+    UNUSED(app);
 }
 
 static uint8_t lldp_get_details_page_count(neighbor_t* neighbor) {
@@ -384,6 +384,7 @@ const PassiveProtocolHandler lldp_protocol_handler = {
     .get_display_name = lldp_get_display_name,
     .init = lldp_init,
     .run = lldp_run,
+    .process_frame = lldp_module_process_frame,
     .cleanup = lldp_cleanup,
     .get_details_page_count = lldp_get_details_page_count,
     .build_details_page = lldp_build_details_page,

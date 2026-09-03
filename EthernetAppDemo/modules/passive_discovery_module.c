@@ -52,6 +52,7 @@ static const PassiveProtocolHandler cdp_protocol_handler = {
     .get_display_name = dummy_cdp_get_display_name,
     .init = dummy_cdp_init,
     .run = dummy_cdp_run,
+    .process_frame = NULL,
     .cleanup = dummy_cdp_cleanup,
     .get_details_page_count = dummy_cdp_get_details_page_count,
     .build_details_page = dummy_cdp_build_details_page,
@@ -101,6 +102,7 @@ static const PassiveProtocolHandler eapol_protocol_handler = {
     .get_display_name = dummy_eapol_get_display_name,
     .init = dummy_eapol_init,
     .run = dummy_eapol_run,
+    .process_frame = NULL,
     .cleanup = dummy_eapol_cleanup,
     .get_details_page_count = dummy_eapol_get_details_page_count,
     .build_details_page = dummy_eapol_build_details_page,
@@ -119,6 +121,53 @@ static const PassiveProtocolHandler* get_handler(passive_protocol_t protocol) {
         return NULL;
     }
     return protocol_handlers[protocol];
+}
+
+static bool passive_discovery_handler_is_selected(
+    passive_protocol_t selected_protocol,
+    passive_protocol_t handler_protocol) {
+    return selected_protocol == PassiveProtocolALL || selected_protocol == handler_protocol;
+}
+
+static void passive_discovery_handlers_init(App* app, passive_protocol_t selected_protocol) {
+    for(passive_protocol_t protocol = PassiveProtocolLLDP; protocol < PassiveProtocolCount;
+        protocol++) {
+        const PassiveProtocolHandler* handler = get_handler(protocol);
+        if(handler && handler->process_frame && handler->init &&
+           passive_discovery_handler_is_selected(selected_protocol, protocol)) {
+            handler->init(app);
+        }
+    }
+}
+
+static void passive_discovery_handlers_cleanup(App* app, passive_protocol_t selected_protocol) {
+    for(passive_protocol_t protocol = PassiveProtocolLLDP; protocol < PassiveProtocolCount;
+        protocol++) {
+        const PassiveProtocolHandler* handler = get_handler(protocol);
+        if(handler && handler->process_frame && handler->cleanup &&
+           passive_discovery_handler_is_selected(selected_protocol, protocol)) {
+            handler->cleanup(app);
+        }
+    }
+}
+
+static bool
+    passive_discovery_dispatch_frame(const uint8_t* frame, uint16_t length, void* context) {
+    passive_protocol_t selected_protocol = *(passive_protocol_t*)context;
+    bool matched = false;
+
+    for(passive_protocol_t protocol = PassiveProtocolLLDP; protocol < PassiveProtocolCount;
+        protocol++) {
+        const PassiveProtocolHandler* handler = get_handler(protocol);
+        if(handler && handler->process_frame &&
+           passive_discovery_handler_is_selected(selected_protocol, protocol)) {
+            if(handler->process_frame((uint8_t*)frame, length)) {
+                matched = true;
+            }
+        }
+    }
+
+    return matched;
 }
 
 // --- Background Scanning Thread ---
@@ -149,20 +198,25 @@ static int32_t passive_discovery_thread(void* context) {
 
     scanner_session_t session;
     scanner_session_init(&session, app);
+    scanner_session_set_cancel_flag(&session, &app->passive_discovery_stop);
 
-    const PassiveProtocolHandler* handler = get_handler(app->passive_discovery.protocol);
-    if(handler && handler->init) {
-        handler->init(app);
-    }
+    passive_protocol_t selected_protocol = app->passive_discovery.protocol;
 
-    while(!app->passive_discovery_stop) {
-        if(handler && handler->run) {
-            bool result = handler->run(&session, 500);
-            if(result) {
-                FURI_LOG_I("PASSIVE", "Packet processed by active handler");
-            }
-        } else {
-            furi_delay_ms(100);
+    enable_multicast(ethernet);
+    passive_discovery_handlers_init(app, selected_protocol);
+
+    while(!app->passive_discovery_stop && !scanner_cancel_requested(&session)) {
+        uint16_t length = 0;
+        bool result = scanner_wait_for_packet(
+            &session,
+            passive_discovery_dispatch_frame,
+            &selected_protocol,
+            NULL,
+            NULL,
+            &length,
+            500);
+        if(result) {
+            FURI_LOG_I("PASSIVE", "Packet processed by selected handler");
         }
 
         uint16_t count = neighbor_db_count();
@@ -172,10 +226,8 @@ static int32_t passive_discovery_thread(void* context) {
         }
     }
 
-    if(handler && handler->cleanup) {
-        handler->cleanup(app);
-    }
-
+    passive_discovery_handlers_cleanup(app, selected_protocol);
+    disable_multicast(ethernet);
     scanner_session_deinit(&session);
 
     return 0;
