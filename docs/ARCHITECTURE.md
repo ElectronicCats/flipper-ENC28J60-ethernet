@@ -38,7 +38,7 @@ is via GitHub Releases or the upcoming F0.8 CI workflow.
 
 Three thread types coexist:
 
-- **Main app thread.** Stack 30 KB (`application.fam:7`). Runs the
+- **Main app thread.** Stack 24 KB (`application.fam:7`). Runs the
   Furi event loop, scene callbacks, and ViewDispatcher.
 - **`rx_dispatch` thread.** Stack 4 KB (`libraries/chip/rx_dispatch.c`).
   Single long-lived thread woken by the ENC28J60 `/INT` line on
@@ -139,6 +139,61 @@ Scene inventory (14 scenes):
   captures state via `pred_ctx`; the rx_buffer is no longer guaranteed
   to hold the matched frame after wake (F0.5g doc fix). Honors the
   back button as cancel.
+
+## Passive Discovery migration / anti-regression ledger
+
+The current Passive Discovery runtime has two implemented handlers:
+LLDP and CDP. Discover All performs one `scanner_wait_for_packet` call
+per worker iteration and invokes both handlers' `process_frame`
+callbacks sequentially for the same received frame. A single-protocol
+selection invokes only its matching handler. EAPOL remains unimplemented
+and is not selectable or registered as a runtime handler.
+
+Runtime ownership invariants:
+
+- The Passive orchestrator owns the scanner session, cancellation,
+  multicast enable/disable, receive wait, and worker cleanup.
+- Protocol handlers do not create workers, scanner sessions, RX
+  registrations, or modify ENC28J60 filter state.
+- A wait unregisters its RX handler and releases its semaphore/context
+  before handler cleanup, multicast disable, scanner deinit, worker
+  return, and GUI-side join/resource release.
+- Main, Passive worker, and RX Dispatch stacks remain 24 KB, 4 KB, and
+  4 KB respectively. The dynamic neighbor DB remains 32 entries of the
+  unchanged 476-byte `neighbor_t`.
+
+Database and UI invariants:
+
+- LLDP observations use `(source MAC, NEIGHBOR_SOURCE_LLDP)`; CDP uses
+  `(source MAC, NEIGHBOR_SOURCE_CDP)`. The same MAC may therefore have
+  distinct LLDP and CDP records.
+- Starting a single-protocol scan clears only that protocol's records;
+  Discover All clears both implemented sources.
+- Filtered lists and details use the same source-relative ordinal. All
+  mode uses the same global occupied-entry ordinal and labels each row
+  with its source; detail rendering is selected from the record source.
+
+CDP migration record:
+
+- Reused from the historical implementation: Cisco destination MAC,
+  IEEE 802.3 LLC/SNAP envelope, Device ID, Address, Port ID,
+  Capabilities, Software Version, Platform, TTL, and version behavior.
+- Rejected historical behavior: Address-TLV fixed offsets, accepting a
+  packet after malformed/truncated TLVs, parsing past the IEEE 802.3
+  declared payload, omitting checksum validation, MAC-only DB upsert,
+  protocol-owned multicast changes, per-handler waits, and verbose
+  logging while RX Dispatch synchronization is held.
+- Current parser validates the standard one's-complement CDP checksum,
+  CDP versions 1/2, every TLV header/length/boundary, and every declared
+  Address record. It accepts IPv4 only from an NLPID `0xCC` record and
+  also recognizes the Management Address TLV's identical record format.
+- Known limitations: untagged IEEE 802.3 frames only; standard checksum
+  behavior only; no VLAN-tag envelope; only the first supported IPv4
+  address is retained; text is sanitized/truncated to shared-model
+  capacity; the 32-bit CDP capability word is parsed but only its low
+  16 bits are persisted because that is the existing displayed field.
+  CDP version is validated but not persisted. No EAPOL parser or
+  observation is introduced.
 
 ## Storage
 

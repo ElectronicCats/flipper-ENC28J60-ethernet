@@ -1,11 +1,11 @@
 #include "lldp_module.h"
 
 void lldp_module_init(void) {
-    neighbor_db_clear();
+    neighbor_db_clear_by_source(NEIGHBOR_SOURCE_LLDP);
 }
 
 void lldp_module_reset(void) {
-    neighbor_db_clear();
+    neighbor_db_clear_by_source(NEIGHBOR_SOURCE_LLDP);
 }
 
 bool lldp_module_process_frame(uint8_t* frame, uint16_t length) {

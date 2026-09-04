@@ -4,10 +4,10 @@
 static void passive_neighbor_callback(void* context, uint32_t index);
 static void build_neighbor_submenu(App* app);
 
-static uint16_t passive_scene_get_source(App* app) {
+static uint8_t passive_scene_get_source(App* app) {
     switch(app->passive_discovery.protocol) {
     case PassiveProtocolALL:
-        return NEIGHBOR_SOURCE_LLDP | NEIGHBOR_SOURCE_CDP | NEIGHBOR_SOURCE_EAPOL;
+        return NEIGHBOR_SOURCE_LLDP | NEIGHBOR_SOURCE_CDP;
 
     case PassiveProtocolLLDP:
         return NEIGHBOR_SOURCE_LLDP;
@@ -15,12 +15,23 @@ static uint16_t passive_scene_get_source(App* app) {
     case PassiveProtocolCDP:
         return NEIGHBOR_SOURCE_CDP;
 
-    case PassiveProtocolEAPOL:
-        return NEIGHBOR_SOURCE_EAPOL;
-
     default:
         return 0;
     }
+}
+
+static const char* passive_neighbor_source_label(const neighbor_t* neighbor) {
+    if((neighbor->discovery_sources & (NEIGHBOR_SOURCE_LLDP | NEIGHBOR_SOURCE_CDP)) ==
+       (NEIGHBOR_SOURCE_LLDP | NEIGHBOR_SOURCE_CDP)) {
+        return "MULTI";
+    }
+    if(neighbor->discovery_sources & NEIGHBOR_SOURCE_LLDP) {
+        return "LLDP";
+    }
+    if(neighbor->discovery_sources & NEIGHBOR_SOURCE_CDP) {
+        return "CDP";
+    }
+    return "?";
 }
 
 void app_scene_passive_neighbor_list_on_enter(void* context) {
@@ -36,7 +47,7 @@ static void build_neighbor_submenu(App* app) {
 
     submenu_set_header(app->submenu, "DISCOVERED DEVICES");
 
-    uint16_t source = passive_scene_get_source(app);
+    uint8_t source = passive_scene_get_source(app);
 
     size_t count;
 
@@ -65,15 +76,15 @@ static void build_neighbor_submenu(App* app) {
                 continue;
             }
 
-            char name[32];
+            char identity[32];
 
             if(neighbor->name[0]) {
-                snprintf(name, sizeof(name), "%.31s", neighbor->name);
+                snprintf(identity, sizeof(identity), "%.31s", neighbor->name);
 
             } else {
                 snprintf(
-                    name,
-                    sizeof(name),
+                    identity,
+                    sizeof(identity),
                     "%02X:%02X:%02X:%02X:%02X:%02X",
                     neighbor->mac[0],
                     neighbor->mac[1],
@@ -81,6 +92,18 @@ static void build_neighbor_submenu(App* app) {
                     neighbor->mac[3],
                     neighbor->mac[4],
                     neighbor->mac[5]);
+            }
+
+            char name[32];
+            if(app->passive_discovery.protocol == PassiveProtocolALL) {
+                snprintf(
+                    name,
+                    sizeof(name),
+                    "[%s] %.23s",
+                    passive_neighbor_source_label(neighbor),
+                    identity);
+            } else {
+                snprintf(name, sizeof(name), "%s", identity);
             }
 
             submenu_add_item(app->submenu, name, i, passive_neighbor_callback, app);

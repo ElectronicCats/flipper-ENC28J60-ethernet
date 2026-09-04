@@ -12,9 +12,6 @@ static uint8_t passive_details_get_source(const App* app) {
     case PassiveProtocolCDP:
         return NEIGHBOR_SOURCE_CDP;
 
-    case PassiveProtocolEAPOL:
-        return NEIGHBOR_SOURCE_EAPOL;
-
     default:
         return 0;
     }
@@ -27,6 +24,22 @@ static neighbor_t* passive_details_get_selected_neighbor(App* app) {
 
     return neighbor_db_get_by_source(
         passive_details_get_source(app), app->passive_selected_neighbor);
+}
+
+static passive_protocol_t
+    passive_details_get_protocol(const App* app, const neighbor_t* neighbor) {
+    if(app->passive_discovery.protocol != PassiveProtocolALL) {
+        return app->passive_discovery.protocol;
+    }
+
+    if(neighbor->discovery_sources & NEIGHBOR_SOURCE_LLDP) {
+        return PassiveProtocolLLDP;
+    }
+    if(neighbor->discovery_sources & NEIGHBOR_SOURCE_CDP) {
+        return PassiveProtocolCDP;
+    }
+
+    return PassiveProtocolALL;
 }
 
 static void mac_to_string(uint8_t* mac, char* buffer, size_t size) {
@@ -51,28 +64,14 @@ static void passive_format_sources(const neighbor_t* neighbor, char* output, siz
 
     bool cdp = neighbor->discovery_sources & NEIGHBOR_SOURCE_CDP;
 
-    bool eap = neighbor->discovery_sources & NEIGHBOR_SOURCE_EAPOL;
-
-    if(lldp && cdp && eap) {
-        snprintf(output, size, "LLDP CDP EAP");
-
-    } else if(lldp && cdp) {
+    if(lldp && cdp) {
         snprintf(output, size, "LLDP CDP");
-
-    } else if(lldp && eap) {
-        snprintf(output, size, "LLDP EAP");
-
-    } else if(cdp && eap) {
-        snprintf(output, size, "CDP EAP");
 
     } else if(lldp) {
         snprintf(output, size, "LLDP");
 
     } else if(cdp) {
         snprintf(output, size, "CDP");
-
-    } else if(eap) {
-        snprintf(output, size, "EAPOL");
 
     } else {
         snprintf(output, size, "Unknown");
@@ -96,7 +95,7 @@ static void passive_draw_details(App* app, neighbor_t* neighbor) {
         char line4[64];
 
         passive_discovery_module_build_details_page(
-            app->passive_discovery.protocol,
+            passive_details_get_protocol(app, neighbor),
             neighbor,
             app->passive_details_page - 1,
             line1,
@@ -200,8 +199,8 @@ static void passive_details_callback(GuiButtonType type, InputType input_type, v
         return;
     }
 
-    uint8_t page_count =
-        passive_discovery_module_get_details_page_count(app->passive_discovery.protocol, neighbor);
+    uint8_t page_count = passive_discovery_module_get_details_page_count(
+        passive_details_get_protocol(app, neighbor), neighbor);
 
     if(page_count == 0) {
         return;

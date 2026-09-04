@@ -1,118 +1,16 @@
 #include "passive_discovery_module.h"
 #include "passive_discovery_handler.h"
+#include "cdp_module.h"
 #include "lldp_module.h"
 #include <stdio.h>
 
 // Forward declaration of the thread worker function
 static int32_t passive_discovery_thread(void* context);
 
-// --- Dummy Handlers for Future Protocols (CDP / EAPOL) ---
-
-static const char* dummy_cdp_get_display_name(void) {
-    return "CDP";
-}
-static void dummy_cdp_init(App* app) {
-    UNUSED(app);
-    neighbor_db_clear();
-}
-static bool dummy_cdp_run(scanner_session_t* session, uint32_t timeout_ms) {
-    UNUSED(session);
-    furi_delay_ms(timeout_ms);
-    return false;
-}
-static void dummy_cdp_cleanup(App* app) {
-    UNUSED(app);
-}
-static uint8_t dummy_cdp_get_details_page_count(neighbor_t* neighbor) {
-    UNUSED(neighbor);
-    return 1;
-}
-static void dummy_cdp_build_details_page(
-    neighbor_t* neighbor,
-    uint8_t page,
-    char* line1,
-    size_t line1_size,
-    char* line2,
-    size_t line2_size,
-    char* line3,
-    size_t line3_size,
-    char* line4,
-    size_t line4_size) {
-    UNUSED(neighbor);
-    UNUSED(page);
-    UNUSED(line3_size);
-    UNUSED(line4_size);
-    snprintf(line1, line1_size, "CDP Neighbor");
-    snprintf(line2, line2_size, "Not implemented");
-    line3[0] = '\0';
-    line4[0] = '\0';
-}
-
-static const PassiveProtocolHandler cdp_protocol_handler = {
-    .get_display_name = dummy_cdp_get_display_name,
-    .init = dummy_cdp_init,
-    .run = dummy_cdp_run,
-    .process_frame = NULL,
-    .cleanup = dummy_cdp_cleanup,
-    .get_details_page_count = dummy_cdp_get_details_page_count,
-    .build_details_page = dummy_cdp_build_details_page,
-};
-
-static const char* dummy_eapol_get_display_name(void) {
-    return "EAPOL";
-}
-static void dummy_eapol_init(App* app) {
-    UNUSED(app);
-    neighbor_db_clear();
-}
-static bool dummy_eapol_run(scanner_session_t* session, uint32_t timeout_ms) {
-    UNUSED(session);
-    furi_delay_ms(timeout_ms);
-    return false;
-}
-static void dummy_eapol_cleanup(App* app) {
-    UNUSED(app);
-}
-static uint8_t dummy_eapol_get_details_page_count(neighbor_t* neighbor) {
-    UNUSED(neighbor);
-    return 1;
-}
-static void dummy_eapol_build_details_page(
-    neighbor_t* neighbor,
-    uint8_t page,
-    char* line1,
-    size_t line1_size,
-    char* line2,
-    size_t line2_size,
-    char* line3,
-    size_t line3_size,
-    char* line4,
-    size_t line4_size) {
-    UNUSED(neighbor);
-    UNUSED(page);
-    UNUSED(line3_size);
-    UNUSED(line4_size);
-    snprintf(line1, line1_size, "EAPOL Neighbor");
-    snprintf(line2, line2_size, "Not implemented");
-    line3[0] = '\0';
-    line4[0] = '\0';
-}
-
-static const PassiveProtocolHandler eapol_protocol_handler = {
-    .get_display_name = dummy_eapol_get_display_name,
-    .init = dummy_eapol_init,
-    .run = dummy_eapol_run,
-    .process_frame = NULL,
-    .cleanup = dummy_eapol_cleanup,
-    .get_details_page_count = dummy_eapol_get_details_page_count,
-    .build_details_page = dummy_eapol_build_details_page,
-};
-
 // --- Protocol Registry Lookup Table ---
 
 static const PassiveProtocolHandler* const protocol_handlers[PassiveProtocolCount] = {
     [PassiveProtocolLLDP] = &lldp_protocol_handler,
-    [PassiveProtocolEAPOL] = &eapol_protocol_handler,
     [PassiveProtocolCDP] = &cdp_protocol_handler,
 };
 
@@ -127,6 +25,22 @@ static bool passive_discovery_handler_is_selected(
     passive_protocol_t selected_protocol,
     passive_protocol_t handler_protocol) {
     return selected_protocol == PassiveProtocolALL || selected_protocol == handler_protocol;
+}
+
+static size_t passive_discovery_neighbor_count(passive_protocol_t selected_protocol) {
+    switch(selected_protocol) {
+    case PassiveProtocolLLDP:
+        return neighbor_db_count_by_source(NEIGHBOR_SOURCE_LLDP);
+
+    case PassiveProtocolCDP:
+        return neighbor_db_count_by_source(NEIGHBOR_SOURCE_CDP);
+
+    case PassiveProtocolALL:
+        return neighbor_db_count();
+
+    default:
+        return 0;
+    }
 }
 
 static void passive_discovery_handlers_init(App* app, passive_protocol_t selected_protocol) {
@@ -205,6 +119,9 @@ static int32_t passive_discovery_thread(void* context) {
     enable_multicast(ethernet);
     passive_discovery_handlers_init(app, selected_protocol);
 
+    app->passive_neighbor_count = passive_discovery_neighbor_count(selected_protocol);
+    view_dispatcher_send_custom_event(app->view_dispatcher, 1);
+
     while(!app->passive_discovery_stop && !scanner_cancel_requested(&session)) {
         uint16_t length = 0;
         bool result = scanner_wait_for_packet(
@@ -219,7 +136,7 @@ static int32_t passive_discovery_thread(void* context) {
             FURI_LOG_I("PASSIVE", "Packet processed by selected handler");
         }
 
-        uint16_t count = neighbor_db_count();
+        uint16_t count = passive_discovery_neighbor_count(selected_protocol);
         if(count != app->passive_neighbor_count) {
             app->passive_neighbor_count = count;
             view_dispatcher_send_custom_event(app->view_dispatcher, 1);
@@ -263,6 +180,10 @@ size_t passive_discovery_module_get_protocol_count(void) {
 }
 
 const char* passive_discovery_module_get_protocol_name(passive_protocol_t protocol) {
+    if(protocol == PassiveProtocolALL) {
+        return "Discover All";
+    }
+
     const PassiveProtocolHandler* handler = get_handler(protocol);
     if(handler && handler->get_display_name) {
         return handler->get_display_name();
