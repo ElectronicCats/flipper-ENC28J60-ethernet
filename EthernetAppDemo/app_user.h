@@ -76,8 +76,8 @@ typedef enum {
 typedef enum {
     PassiveProtocolALL,
     PassiveProtocolLLDP,
-    PassiveProtocolEAPOL,
     PassiveProtocolCDP,
+    PassiveProtocolEAPOL,
     PassiveProtocolClearAll,
 
     PassiveProtocolCount

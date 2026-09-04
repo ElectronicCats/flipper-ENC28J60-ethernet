@@ -1,6 +1,7 @@
 #include "passive_discovery_module.h"
 #include "passive_discovery_handler.h"
 #include "cdp_module.h"
+#include "eapol_module.h"
 #include "lldp_module.h"
 #include <stdio.h>
 
@@ -12,6 +13,7 @@ static int32_t passive_discovery_thread(void* context);
 static const PassiveProtocolHandler* const protocol_handlers[PassiveProtocolCount] = {
     [PassiveProtocolLLDP] = &lldp_protocol_handler,
     [PassiveProtocolCDP] = &cdp_protocol_handler,
+    [PassiveProtocolEAPOL] = &eapol_protocol_handler,
 };
 
 static const PassiveProtocolHandler* get_handler(passive_protocol_t protocol) {
@@ -34,6 +36,9 @@ static size_t passive_discovery_neighbor_count(passive_protocol_t selected_proto
 
     case PassiveProtocolCDP:
         return neighbor_db_count_by_source(NEIGHBOR_SOURCE_CDP);
+
+    case PassiveProtocolEAPOL:
+        return neighbor_db_count_by_source(NEIGHBOR_SOURCE_EAPOL);
 
     case PassiveProtocolALL:
         return neighbor_db_count();

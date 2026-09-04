@@ -142,12 +142,12 @@ Scene inventory (14 scenes):
 
 ## Passive Discovery migration / anti-regression ledger
 
-The current Passive Discovery runtime has two implemented handlers:
-LLDP and CDP. Discover All performs one `scanner_wait_for_packet` call
-per worker iteration and invokes both handlers' `process_frame`
-callbacks sequentially for the same received frame. A single-protocol
-selection invokes only its matching handler. EAPOL remains unimplemented
-and is not selectable or registered as a runtime handler.
+The current Passive Discovery runtime has three implemented handlers:
+LLDP, CDP, and EAPOL. Discover All performs one
+`scanner_wait_for_packet` call per worker iteration and invokes all
+three handlers' `process_frame` callbacks sequentially for the same
+received frame. A single-protocol selection invokes only its matching
+handler.
 
 Runtime ownership invariants:
 
@@ -159,16 +159,19 @@ Runtime ownership invariants:
   before handler cleanup, multicast disable, scanner deinit, worker
   return, and GUI-side join/resource release.
 - Main, Passive worker, and RX Dispatch stacks remain 24 KB, 4 KB, and
-  4 KB respectively. The dynamic neighbor DB remains 32 entries of the
-  unchanged 476-byte `neighbor_t`.
+  4 KB respectively. The dynamic neighbor DB remains 32 entries;
+  EAPOL adds four one-byte fields to `neighbor_t` (476 to 480 bytes),
+  increasing its family-lifetime payload from 15,232 to 15,360 bytes.
 
 Database and UI invariants:
 
 - LLDP observations use `(source MAC, NEIGHBOR_SOURCE_LLDP)`; CDP uses
-  `(source MAC, NEIGHBOR_SOURCE_CDP)`. The same MAC may therefore have
-  distinct LLDP and CDP records.
+  `(source MAC, NEIGHBOR_SOURCE_CDP)`; EAPOL uses
+  `(source MAC, NEIGHBOR_SOURCE_EAPOL)`. The same MAC may therefore
+  have three independent protocol observations. EAPOL entries represent
+  observed 802.1X participants/endpoints, not topology neighbors.
 - Starting a single-protocol scan clears only that protocol's records;
-  Discover All clears both implemented sources.
+  Discover All clears all three implemented sources.
 - Filtered lists and details use the same source-relative ordinal. All
   mode uses the same global occupied-entry ordinal and labels each row
   with its source; detail rendering is selected from the record source.
@@ -192,8 +195,37 @@ CDP migration record:
   address is retained; text is sanitized/truncated to shared-model
   capacity; the 32-bit CDP capability word is parsed but only its low
   16 bits are persisted because that is the existing displayed field.
-  CDP version is validated but not persisted. No EAPOL parser or
-  observation is introduced.
+  CDP version is validated but not persisted.
+
+EAPOL migration record:
+
+- EAPOL recognition is for untagged Ethernet-II EtherType `0x888E`.
+  The parser deliberately does not require a destination address: the
+  standard PAE group `01:80:C2:00:00:03` and valid unicast exchanges are
+  both observations. Existing UCEN plus the Passive orchestrator's MCEN
+  enable admits those paths without changing ENC28J60 filter masks.
+- The EAPOL header and declared body must fit the captured frame. Versions
+  1-3 and packet types EAP-Packet, Start, Logoff, and Key are supported.
+  Start/Logoff require a zero-length body. Key requires a descriptor byte,
+  but its body stays opaque: no key material, packet snapshot, credential,
+  or per-frame heap allocation is retained or logged.
+- Embedded EAP length is independently checked (`>= 4` and within the
+  EAPOL body). Request/Response require the Type byte. Success/Failure are
+  valid with their protocol-defined four-byte EAP packet and never read a
+  Type byte. Response/Identity text is copied only from within EAP length,
+  sanitized, bounded, and stored in the existing `name` field.
+- Updating `(MAC, NEIGHBOR_SOURCE_EAPOL)` preserves an already learned
+  non-empty identity whenever a later Start, Logoff, Key, or other EAP
+  packet has no new identity. EAPOL never merges fields into LLDP or CDP.
+- EAPOL has no worker, scanner session, RX registration, filter lifecycle,
+  persistent protocol buffer, or protocol-specific database. The shared
+  Passive worker owns receive/cancel/cleanup and dispatches one frame
+  sequentially to LLDP, CDP, and EAPOL in Discover All.
+- Known limitations: untagged Ethernet-II frames only; EAPOL versions 1-3
+  and packet types 0-3 only; EAPOL-Key is classification/bounds-only; only
+  Response/Identity text is retained, truncated to the shared 63-character
+  name capacity. EAP identifier and raw authentication/key data are not
+  persisted.
 
 ## Storage
 

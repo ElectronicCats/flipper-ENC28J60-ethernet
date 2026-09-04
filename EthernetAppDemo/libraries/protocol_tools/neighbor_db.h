@@ -45,6 +45,12 @@ typedef struct {
     /* Discovery source bitmask */
     uint8_t discovery_sources;
 
+    /* EAPOL observation metadata */
+    uint8_t eapol_version;
+    uint8_t eapol_packet_type;
+    uint8_t eap_code;
+    uint8_t eap_type;
+
     /* LLDP VLAN information */
     uint16_t vlan_id;
     uint16_t pvid;

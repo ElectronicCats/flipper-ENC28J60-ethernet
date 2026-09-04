@@ -12,6 +12,9 @@ static uint8_t passive_details_get_source(const App* app) {
     case PassiveProtocolCDP:
         return NEIGHBOR_SOURCE_CDP;
 
+    case PassiveProtocolEAPOL:
+        return NEIGHBOR_SOURCE_EAPOL;
+
     default:
         return 0;
     }
@@ -37,6 +40,9 @@ static passive_protocol_t
     }
     if(neighbor->discovery_sources & NEIGHBOR_SOURCE_CDP) {
         return PassiveProtocolCDP;
+    }
+    if(neighbor->discovery_sources & NEIGHBOR_SOURCE_EAPOL) {
+        return PassiveProtocolEAPOL;
     }
 
     return PassiveProtocolALL;
@@ -64,14 +70,28 @@ static void passive_format_sources(const neighbor_t* neighbor, char* output, siz
 
     bool cdp = neighbor->discovery_sources & NEIGHBOR_SOURCE_CDP;
 
-    if(lldp && cdp) {
+    bool eapol = neighbor->discovery_sources & NEIGHBOR_SOURCE_EAPOL;
+
+    if(lldp && cdp && eapol) {
+        snprintf(output, size, "LLDP CDP EAPOL");
+
+    } else if(lldp && cdp) {
         snprintf(output, size, "LLDP CDP");
+
+    } else if(lldp && eapol) {
+        snprintf(output, size, "LLDP EAPOL");
+
+    } else if(cdp && eapol) {
+        snprintf(output, size, "CDP EAPOL");
 
     } else if(lldp) {
         snprintf(output, size, "LLDP");
 
     } else if(cdp) {
         snprintf(output, size, "CDP");
+
+    } else if(eapol) {
+        snprintf(output, size, "EAPOL");
 
     } else {
         snprintf(output, size, "Unknown");
@@ -132,8 +152,16 @@ static void passive_draw_details(App* app, neighbor_t* neighbor) {
 
     passive_format_sources(neighbor, source_str, sizeof(source_str));
 
+    bool is_eapol = passive_details_get_protocol(app, neighbor) == PassiveProtocolEAPOL;
+
     widget_add_string_element(
-        app->widget, 64, 8, AlignCenter, AlignCenter, FontSecondary, "NEIGHBOR");
+        app->widget,
+        64,
+        8,
+        AlignCenter,
+        AlignCenter,
+        FontSecondary,
+        is_eapol ? "802.1X PARTICIPANT" : "NEIGHBOR");
 
     widget_add_string_element(
         app->widget,
@@ -142,7 +170,7 @@ static void passive_draw_details(App* app, neighbor_t* neighbor) {
         AlignCenter,
         AlignCenter,
         FontSecondary,
-        neighbor->name[0] ? neighbor->name : "Unknown");
+        neighbor->name[0] ? neighbor->name : (is_eapol ? "Identity: N/A" : "Unknown"));
 
     widget_add_string_element(
         app->widget, 64, 32, AlignCenter, AlignCenter, FontSecondary, mac_str);
@@ -154,7 +182,7 @@ static void passive_draw_details(App* app, neighbor_t* neighbor) {
         AlignCenter,
         AlignCenter,
         FontSecondary,
-        neighbor->port[0] ? neighbor->port : "No Port ID");
+        neighbor->port[0] ? neighbor->port : (is_eapol ? "EAPOL endpoint" : "No Port ID"));
 
     widget_add_string_element(
         app->widget, 64, 54, AlignCenter, AlignCenter, FontSecondary, source_str);

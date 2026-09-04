@@ -8,7 +8,7 @@ static void
 
 static bool passive_protocol_is_selectable(passive_protocol_t protocol) {
     return protocol == PassiveProtocolALL || protocol == PassiveProtocolLLDP ||
-           protocol == PassiveProtocolCDP;
+           protocol == PassiveProtocolCDP || protocol == PassiveProtocolEAPOL;
 }
 
 static const char* passive_protocol_name(passive_protocol_t protocol) {
@@ -22,6 +22,9 @@ static const char* passive_protocol_name(passive_protocol_t protocol) {
     case PassiveProtocolCDP:
         return "CDP";
 
+    case PassiveProtocolEAPOL:
+        return "EAPOL";
+
     default:
         return "Discover All";
     }
@@ -30,13 +33,16 @@ static const char* passive_protocol_name(passive_protocol_t protocol) {
 static passive_protocol_t passive_protocol_previous(passive_protocol_t protocol) {
     switch(protocol) {
     case PassiveProtocolALL:
-        return PassiveProtocolCDP;
+        return PassiveProtocolEAPOL;
 
     case PassiveProtocolLLDP:
         return PassiveProtocolALL;
 
     case PassiveProtocolCDP:
         return PassiveProtocolLLDP;
+
+    case PassiveProtocolEAPOL:
+        return PassiveProtocolCDP;
 
     default:
         return PassiveProtocolALL;
@@ -52,6 +58,9 @@ static passive_protocol_t passive_protocol_next(passive_protocol_t protocol) {
         return PassiveProtocolCDP;
 
     case PassiveProtocolCDP:
+        return PassiveProtocolEAPOL;
+
+    case PassiveProtocolEAPOL:
         return PassiveProtocolALL;
 
     default:

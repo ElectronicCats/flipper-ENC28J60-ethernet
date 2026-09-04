@@ -7,7 +7,7 @@ static void build_neighbor_submenu(App* app);
 static uint8_t passive_scene_get_source(App* app) {
     switch(app->passive_discovery.protocol) {
     case PassiveProtocolALL:
-        return NEIGHBOR_SOURCE_LLDP | NEIGHBOR_SOURCE_CDP;
+        return NEIGHBOR_SOURCE_LLDP | NEIGHBOR_SOURCE_CDP | NEIGHBOR_SOURCE_EAPOL;
 
     case PassiveProtocolLLDP:
         return NEIGHBOR_SOURCE_LLDP;
@@ -15,14 +15,19 @@ static uint8_t passive_scene_get_source(App* app) {
     case PassiveProtocolCDP:
         return NEIGHBOR_SOURCE_CDP;
 
+    case PassiveProtocolEAPOL:
+        return NEIGHBOR_SOURCE_EAPOL;
+
     default:
         return 0;
     }
 }
 
 static const char* passive_neighbor_source_label(const neighbor_t* neighbor) {
-    if((neighbor->discovery_sources & (NEIGHBOR_SOURCE_LLDP | NEIGHBOR_SOURCE_CDP)) ==
-       (NEIGHBOR_SOURCE_LLDP | NEIGHBOR_SOURCE_CDP)) {
+    uint8_t sources = neighbor->discovery_sources &
+                      (NEIGHBOR_SOURCE_LLDP | NEIGHBOR_SOURCE_CDP | NEIGHBOR_SOURCE_EAPOL);
+    if(sources != NEIGHBOR_SOURCE_LLDP && sources != NEIGHBOR_SOURCE_CDP &&
+       sources != NEIGHBOR_SOURCE_EAPOL) {
         return "MULTI";
     }
     if(neighbor->discovery_sources & NEIGHBOR_SOURCE_LLDP) {
@@ -30,6 +35,9 @@ static const char* passive_neighbor_source_label(const neighbor_t* neighbor) {
     }
     if(neighbor->discovery_sources & NEIGHBOR_SOURCE_CDP) {
         return "CDP";
+    }
+    if(neighbor->discovery_sources & NEIGHBOR_SOURCE_EAPOL) {
+        return "EAPOL";
     }
     return "?";
 }
