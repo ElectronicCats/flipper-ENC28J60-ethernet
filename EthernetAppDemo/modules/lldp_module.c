@@ -1,4 +1,5 @@
 #include "lldp_module.h"
+#include "passive_details_text.h"
 
 void lldp_module_init(void) {
     neighbor_db_clear_by_source(NEIGHBOR_SOURCE_LLDP);
@@ -119,22 +120,195 @@ static void lldp_cleanup(App* app) {
     UNUSED(app);
 }
 
-static uint8_t lldp_get_details_page_count(neighbor_t* neighbor) {
-    UNUSED(neighbor);
+static void lldp_format_capability_mask(uint16_t mask, char* output, size_t output_size) {
+    output[0] = '\0';
 
-    /*
- * LLDP detail pages
- *
- * Page 1  - Name / MAC
- * Page 2  - Port / IP
- * Page 3  - VLAN / VLAN Name
- * Page 4  - Network Policy / Capabilities
- * Page 5  - TTL / Chassis ID
- * Page 6  - Description
- * Page 7  - PoE / Power Class
- * Page 8  - Power / Source
- */
-    return 8;
+    if(mask & 0x0001U) passive_details_append_label(output, output_size, "Other");
+    if(mask & 0x0002U) passive_details_append_label(output, output_size, "Repeater");
+    if(mask & 0x0004U) passive_details_append_label(output, output_size, "Bridge");
+    if(mask & 0x0008U) passive_details_append_label(output, output_size, "WLAN AP");
+    if(mask & 0x0010U) passive_details_append_label(output, output_size, "Router");
+    if(mask & 0x0020U) passive_details_append_label(output, output_size, "Telephone");
+    if(mask & 0x0040U) passive_details_append_label(output, output_size, "DOCSIS");
+    if(mask & 0x0080U) passive_details_append_label(output, output_size, "Station");
+    if(mask & 0x0100U) passive_details_append_label(output, output_size, "C-VLAN");
+    if(mask & 0x0200U) passive_details_append_label(output, output_size, "S-VLAN");
+    if(mask & 0x0400U) passive_details_append_label(output, output_size, "TPMR");
+
+    uint16_t unknown = mask & 0xF800U;
+    if(unknown) {
+        char raw[20];
+        snprintf(raw, sizeof(raw), "Unknown 0x%04X", unknown);
+        passive_details_append_label(output, output_size, raw);
+    }
+
+    if(!output[0]) {
+        snprintf(output, output_size, "None");
+    }
+}
+
+static void
+    lldp_format_capabilities(const neighbor_t* neighbor, char* output, size_t output_size) {
+    char available[96];
+    char enabled[96];
+
+    if(neighbor->capabilities == 0 && neighbor->enabled_capabilities == 0) {
+        snprintf(output, output_size, "N/A");
+        return;
+    }
+
+    lldp_format_capability_mask(neighbor->capabilities, available, sizeof(available));
+    lldp_format_capability_mask(neighbor->enabled_capabilities, enabled, sizeof(enabled));
+
+    if(neighbor->capabilities == neighbor->enabled_capabilities) {
+        snprintf(output, output_size, "%s (0x%04X)", enabled, neighbor->enabled_capabilities);
+    } else {
+        snprintf(output, output_size, "Enabled: %s; Available: %s", enabled, available);
+    }
+}
+
+static const char* lldp_chassis_header(uint8_t subtype) {
+    switch(subtype) {
+    case LLDP_CHASSIS_COMPONENT:
+        return "CHASSIS COMPONENT";
+    case LLDP_CHASSIS_INTERFACE_ALIAS:
+        return "CHASSIS IF ALIAS";
+    case LLDP_CHASSIS_PORT_COMPONENT:
+        return "CHASSIS PORT";
+    case LLDP_CHASSIS_MAC_ADDRESS:
+        return "CHASSIS MAC";
+    case LLDP_CHASSIS_NETWORK_ADDRESS:
+        return "CHASSIS NETWORK";
+    case LLDP_CHASSIS_INTERFACE_NAME:
+        return "CHASSIS IF NAME";
+    case LLDP_CHASSIS_LOCAL:
+        return "CHASSIS LOCAL";
+    default:
+        return "CHASSIS ID";
+    }
+}
+
+static const char* lldp_port_header(uint8_t subtype) {
+    switch(subtype) {
+    case LLDP_PORT_INTERFACE_ALIAS:
+        return "PORT IF ALIAS";
+    case LLDP_PORT_COMPONENT:
+        return "PORT COMPONENT";
+    case LLDP_PORT_MAC_ADDRESS:
+        return "PORT MAC";
+    case LLDP_PORT_NETWORK_ADDRESS:
+        return "PORT NETWORK";
+    case LLDP_PORT_INTERFACE_NAME:
+        return "PORT IF NAME";
+    case LLDP_PORT_AGENT_CIRCUIT_ID:
+        return "PORT CIRCUIT ID";
+    case LLDP_PORT_LOCAL:
+        return "PORT LOCAL";
+    default:
+        return "PORT ID";
+    }
+}
+
+static const char* lldp_power_type_name(uint8_t type) {
+    switch(type) {
+    case 0:
+        return "PSE";
+    case 1:
+        return "PD";
+    default:
+        return "Unknown";
+    }
+}
+
+static const char* lldp_power_source_name(uint8_t type, uint8_t source) {
+    if(type == 0) {
+        switch(source) {
+        case 1:
+            return "Primary";
+        case 2:
+            return "Backup";
+        case 3:
+            return "Reserved";
+        default:
+            return "Unknown";
+        }
+    }
+
+    if(type == 1) {
+        switch(source) {
+        case 1:
+            return "PSE";
+        case 2:
+            return "Local";
+        case 3:
+            return "Both";
+        default:
+            return "Unknown";
+        }
+    }
+
+    return "Unknown";
+}
+
+static const char* lldp_power_priority_name(uint8_t priority) {
+    switch(priority) {
+    case 0:
+        return "Unknown";
+    case 1:
+        return "Critical";
+    case 2:
+        return "High";
+    case 3:
+        return "Low";
+    default:
+        return "Reserved";
+    }
+}
+
+static const char* lldp_power_pair_name(uint8_t pair) {
+    switch(pair) {
+    case 1:
+        return "Signal";
+    case 2:
+        return "Spare";
+    default:
+        return "Unknown";
+    }
+}
+
+static uint8_t lldp_get_details_page_count(neighbor_t* neighbor) {
+    if(!neighbor) {
+        return 0;
+    }
+
+    char capabilities[256];
+    lldp_format_capabilities(neighbor, capabilities, sizeof(capabilities));
+
+    return passive_details_text_page_count(neighbor->name) +
+           passive_details_text_page_count(neighbor->port) +
+           passive_details_text_page_count(neighbor->chassis_id) +
+           passive_details_text_page_count(capabilities) +
+           passive_details_text_page_count(neighbor->description) +
+           passive_details_text_page_count(neighbor->vlan_name) + 6U;
+}
+
+static bool lldp_build_long_page(
+    const char* header,
+    const char* value,
+    uint8_t* page,
+    char* line1,
+    size_t line1_size,
+    char* line2,
+    size_t line2_size) {
+    uint8_t page_count = passive_details_text_page_count(value);
+    if(*page >= page_count) {
+        *page -= page_count;
+        return false;
+    }
+
+    snprintf(line1, line1_size, "%s", header);
+    passive_details_text_get_page(value, *page, line2, line2_size);
+    return true;
 }
 
 static void lldp_build_details_page(
@@ -157,226 +331,162 @@ static void lldp_build_details_page(
     line3[0] = '\0';
     line4[0] = '\0';
 
-    switch(page) {
-    /*
- * Page 1
- * NAME / MAC
- */
-    case 0:
+    if(lldp_build_long_page(
+           "SYSTEM NAME", neighbor->name, &page, line1, line1_size, line2, line2_size)) {
+        return;
+    }
 
-        snprintf(line1, line1_size, "NAME");
-
-        snprintf(line2, line2_size, "%s", neighbor->name[0] ? neighbor->name : "Unknown");
-
-        snprintf(line3, line3_size, "MAC");
-
-        snprintf(
-            line4,
-            line4_size,
-            "%02X:%02X:%02X:%02X:%02X:%02X",
-            neighbor->mac[0],
-            neighbor->mac[1],
-            neighbor->mac[2],
-            neighbor->mac[3],
-            neighbor->mac[4],
-            neighbor->mac[5]);
-
-        break;
-
-    /*
- * Page 2
- * PORT / IP
- */
-    case 1:
-
-        snprintf(line1, line1_size, "PORT");
-
-        snprintf(line2, line2_size, "%s", neighbor->port[0] ? neighbor->port : "N/A");
-
-        snprintf(line3, line3_size, "IP");
-
+    if(page == 0) {
+        snprintf(line1, line1_size, "SOURCE MAC");
+        passive_details_format_mac(neighbor->mac, line2, line2_size);
+        snprintf(line3, line3_size, "MANAGEMENT IPV4");
         snprintf(
             line4,
             line4_size,
             "%s",
             neighbor->management_address[0] ? neighbor->management_address : "N/A");
+        return;
+    }
+    page--;
 
-        break;
-
-    /*
- * Page 3
- * VLAN / VLAN NAME
- */
-    case 2:
-
-        snprintf(line1, line1_size, "VLAN");
-
-        if(neighbor->has_pvid) {
-            snprintf(line2, line2_size, "%u (PVID)", neighbor->pvid);
-
-        } else if(neighbor->vlan_id != 0) {
-            snprintf(line2, line2_size, "%u", neighbor->vlan_id);
-
-        } else {
-            snprintf(line2, line2_size, "N/A");
-        }
-
-        snprintf(line3, line3_size, "VLAN NAME");
-
-        snprintf(
-            line4,
-            line4_size,
-            "%s",
-            neighbor->has_vlan_name && neighbor->vlan_name[0] ? neighbor->vlan_name : "N/A");
-
-        break;
-
-    /*
- * Page 4
- * NETWORK POLICY / CAPABILITIES
- */
-    case 3:
-
-        snprintf(line1, line1_size, "NETWORK POLICY");
-
-        if(neighbor->has_network_policy) {
-            snprintf(line2, line2_size, "VLAN %u", neighbor->network_policy_vlan);
-
-        } else {
-            snprintf(line2, line2_size, "N/A");
-        }
-
-        snprintf(line3, line3_size, "CAPABILITIES");
-
-        snprintf(line4, line4_size, "0x%04X", neighbor->capabilities);
-
-        break;
-
-    /*
- * Page 5
- * TTL / CHASSIS ID
- */
-    case 4:
-
-        snprintf(line1, line1_size, "TTL");
-
-        snprintf(line2, line2_size, "%u s", neighbor->ttl);
-
-        snprintf(line3, line3_size, "CHASSIS ID");
-
-        snprintf(line4, line4_size, "%s", neighbor->chassis_id[0] ? neighbor->chassis_id : "N/A");
-
-        break;
-
-    /*
- * Page 6
- * DESCRIPTION
- *
- * This page intentionally uses all four
- * available text lines.
- */
-    case 5: {
-        const char* description = neighbor->description[0] ? neighbor->description : "N/A";
-
-        /*
-     * Split the description into multiple
-     * display lines.
-     *
-     * The widget uses FontSecondary,
-     * therefore keep each line relatively
-     * short to avoid clipping.
-     */
-        size_t length = strlen(description);
-
-        if(length <= 20) {
-            snprintf(line1, line1_size, "DESCRIPTION");
-
-            snprintf(line2, line2_size, "%s", description);
-
-        } else {
-            snprintf(line1, line1_size, "DESCRIPTION");
-
-            size_t split = 20;
-
-            if(split >= length) {
-                split = length;
-            }
-
-            while(split > 0 && description[split] != '\0' && description[split] != ' ') {
-                split--;
-            }
-
-            if(split == 0) {
-                split = 20;
-            }
-
-            if(split >= line2_size) {
-                split = line2_size - 1;
-            }
-
-            memcpy(line2, description, split);
-
-            line2[split] = '\0';
-
-            while(description[split] == ' ') {
-                split++;
-            }
-
-            snprintf(line3, line3_size, "%s", &description[split]);
-        }
-
-        break;
+    if(lldp_build_long_page(
+           lldp_port_header(neighbor->lldp_port_subtype),
+           neighbor->port,
+           &page,
+           line1,
+           line1_size,
+           line2,
+           line2_size)) {
+        return;
     }
 
-    /*
- * Page 7
- * POE / POWER CLASS
- */
-    case 6:
+    if(lldp_build_long_page(
+           lldp_chassis_header(neighbor->lldp_chassis_subtype),
+           neighbor->chassis_id,
+           &page,
+           line1,
+           line1_size,
+           line2,
+           line2_size)) {
+        return;
+    }
 
-        snprintf(line1, line1_size, "POE");
+    if(page == 0) {
+        snprintf(line1, line1_size, "TTL");
+        snprintf(line2, line2_size, "%u s", neighbor->ttl);
+        return;
+    }
+    page--;
 
-        snprintf(line2, line2_size, "%s", neighbor->has_poe ? "Supported" : "N/A");
+    char capabilities[256];
+    lldp_format_capabilities(neighbor, capabilities, sizeof(capabilities));
+    if(lldp_build_long_page(
+           "CAPABILITIES", capabilities, &page, line1, line1_size, line2, line2_size)) {
+        return;
+    }
 
-        snprintf(line3, line3_size, "POWER CLASS");
+    if(lldp_build_long_page(
+           "SYSTEM DESCRIPTION",
+           neighbor->description,
+           &page,
+           line1,
+           line1_size,
+           line2,
+           line2_size)) {
+        return;
+    }
 
-        if(neighbor->poe_power_class != 0) {
-            snprintf(line4, line4_size, "%u", neighbor->poe_power_class);
-
-        } else {
-            snprintf(line4, line4_size, "N/A");
-        }
-
-        break;
-
-    /*
- * Page 8
- * POWER / SOURCE
- */
-    case 7:
-
-        snprintf(line1, line1_size, "POWER");
-
-        if(neighbor->has_poe_power_values) {
-            snprintf(line2, line2_size, "%u W", neighbor->poe_power_watts);
-
+    if(page == 0) {
+        snprintf(line1, line1_size, "PORT VLAN ID");
+        if(neighbor->has_pvid) {
+            snprintf(line2, line2_size, "%u", neighbor->pvid);
         } else {
             snprintf(line2, line2_size, "N/A");
         }
-
-        snprintf(line3, line3_size, "POWER SOURCE");
-
-        if(neighbor->has_poe) {
-            snprintf(line4, line4_size, "%u", neighbor->poe_power_source);
-
+        snprintf(line3, line3_size, "NAMED VLAN ID");
+        if(neighbor->has_vlan_name) {
+            snprintf(line4, line4_size, "%u", neighbor->vlan_id);
         } else {
             snprintf(line4, line4_size, "N/A");
         }
+        return;
+    }
+    page--;
 
-        break;
+    if(lldp_build_long_page(
+           "VLAN NAME",
+           neighbor->has_vlan_name ? neighbor->vlan_name : NULL,
+           &page,
+           line1,
+           line1_size,
+           line2,
+           line2_size)) {
+        return;
+    }
 
-    default:
-        break;
+    if(page == 0) {
+        snprintf(line1, line1_size, "NETWORK POLICY VLAN");
+        if(neighbor->has_network_policy) {
+            snprintf(line2, line2_size, "%u", neighbor->network_policy_vlan);
+        } else {
+            snprintf(line2, line2_size, "N/A");
+        }
+        return;
+    }
+    page--;
+
+    if(page == 0) {
+        snprintf(line1, line1_size, "POE / DEVICE");
+        if(!neighbor->has_poe) {
+            snprintf(line2, line2_size, "N/A");
+        } else if(neighbor->has_poe_mdi && neighbor->poe_supported) {
+            snprintf(
+                line2, line2_size, "Yes / %s", lldp_power_type_name(neighbor->poe_power_type));
+        } else if(neighbor->has_poe_mdi) {
+            snprintf(line2, line2_size, "No / %s", lldp_power_type_name(neighbor->poe_power_type));
+        } else if(neighbor->has_poe_power_values) {
+            snprintf(
+                line2, line2_size, "MED / %s", lldp_power_type_name(neighbor->poe_power_type));
+        } else {
+            snprintf(line2, line2_size, "Advertised");
+        }
+        snprintf(line3, line3_size, "POWER PAIR / CLASS");
+        if(neighbor->has_poe_mdi) {
+            snprintf(
+                line4,
+                line4_size,
+                "%s / Class %u",
+                lldp_power_pair_name(neighbor->poe_power_pair),
+                neighbor->poe_power_class);
+        } else {
+            snprintf(line4, line4_size, "N/A");
+        }
+        return;
+    }
+    page--;
+
+    if(page == 0) {
+        snprintf(line1, line1_size, "MED POWER");
+        if(neighbor->has_poe_power_values) {
+            snprintf(
+                line2,
+                line2_size,
+                "%u.%u W",
+                neighbor->poe_power_watts / 10U,
+                neighbor->poe_power_watts % 10U);
+            snprintf(line3, line3_size, "TYPE/SOURCE/PRIORITY");
+            snprintf(
+                line4,
+                line4_size,
+                "%s/%s/%s",
+                lldp_power_type_name(neighbor->poe_power_type),
+                lldp_power_source_name(neighbor->poe_power_type, neighbor->poe_power_source),
+                lldp_power_priority_name(neighbor->poe_power_priority));
+        } else {
+            snprintf(line2, line2_size, "N/A");
+            snprintf(line3, line3_size, "TYPE/SOURCE/PRIORITY");
+            snprintf(line4, line4_size, "N/A");
+        }
     }
 }
 

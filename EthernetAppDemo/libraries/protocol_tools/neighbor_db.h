@@ -51,6 +51,10 @@ typedef struct {
     uint8_t eap_code;
     uint8_t eap_type;
 
+    /* LLDP identifier semantics */
+    uint8_t lldp_chassis_subtype;
+    uint8_t lldp_port_subtype;
+
     /* LLDP VLAN information */
     uint16_t vlan_id;
     uint16_t pvid;
@@ -81,6 +85,7 @@ typedef struct {
     uint8_t poe_power_source;
     uint8_t poe_power_priority;
 
+    bool has_poe_mdi;
     bool has_poe;
     bool has_poe_power_values;
 

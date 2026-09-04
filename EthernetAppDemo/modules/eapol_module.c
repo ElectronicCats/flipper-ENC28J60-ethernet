@@ -1,4 +1,5 @@
 #include "eapol_module.h"
+#include "passive_details_text.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -48,41 +49,55 @@ static void eapol_cleanup(App* app) {
 }
 
 static uint8_t eapol_get_details_page_count(neighbor_t* neighbor) {
-    UNUSED(neighbor);
-    return 3;
+    if(!neighbor) {
+        return 0;
+    }
+
+    return passive_details_text_page_count(neighbor->name) + 3U;
 }
 
-static const char* eapol_packet_type_name(uint8_t packet_type) {
+static void eapol_packet_type_name(uint8_t packet_type, char* output, size_t output_size) {
     switch(packet_type) {
     case EAPOL_PACKET_EAP:
-        return "EAP-Packet";
+        snprintf(output, output_size, "EAP-Packet");
+        break;
     case EAPOL_PACKET_START:
-        return "Start";
+        snprintf(output, output_size, "Start");
+        break;
     case EAPOL_PACKET_LOGOFF:
-        return "Logoff";
+        snprintf(output, output_size, "Logoff");
+        break;
     case EAPOL_PACKET_KEY:
-        return "Key";
+        snprintf(output, output_size, "Key");
+        break;
     default:
-        return "Unknown";
+        snprintf(output, output_size, "Unknown (%u)", packet_type);
+        break;
     }
 }
 
-static const char* eap_code_name(const neighbor_t* neighbor) {
+static void eap_code_name(const neighbor_t* neighbor, char* output, size_t output_size) {
     if(neighbor->eapol_packet_type != EAPOL_PACKET_EAP) {
-        return "N/A";
+        snprintf(output, output_size, "N/A");
+        return;
     }
 
     switch(neighbor->eap_code) {
     case EAP_CODE_REQUEST:
-        return "Request";
+        snprintf(output, output_size, "Request");
+        break;
     case EAP_CODE_RESPONSE:
-        return "Response";
+        snprintf(output, output_size, "Response");
+        break;
     case EAP_CODE_SUCCESS:
-        return "Success";
+        snprintf(output, output_size, "Success");
+        break;
     case EAP_CODE_FAILURE:
-        return "Failure";
+        snprintf(output, output_size, "Failure");
+        break;
     default:
-        return "Unknown";
+        snprintf(output, output_size, "Unknown (%u)", neighbor->eap_code);
+        break;
     }
 }
 
@@ -128,9 +143,28 @@ static void eap_type_name(const neighbor_t* neighbor, char* output, size_t outpu
         snprintf(output, output_size, "PEAP");
         break;
     default:
-        snprintf(output, output_size, "Type %u", neighbor->eap_type);
+        snprintf(output, output_size, "Unknown (%u)", neighbor->eap_type);
         break;
     }
+}
+
+static bool eapol_build_long_page(
+    const char* header,
+    const char* value,
+    uint8_t* page,
+    char* line1,
+    size_t line1_size,
+    char* line2,
+    size_t line2_size) {
+    uint8_t page_count = passive_details_text_page_count(value);
+    if(*page >= page_count) {
+        *page -= page_count;
+        return false;
+    }
+
+    snprintf(line1, line1_size, "%s", header);
+    passive_details_text_get_page(value, *page, line2, line2_size);
+    return true;
 }
 
 static void eapol_build_details_page(
@@ -153,23 +187,32 @@ static void eapol_build_details_page(
     line3[0] = '\0';
     line4[0] = '\0';
 
-    switch(page) {
-    case 0:
+    if(eapol_build_long_page(
+           "IDENTITY", neighbor->name, &page, line1, line1_size, line2, line2_size)) {
+        return;
+    }
+
+    if(page == 0) {
+        snprintf(line1, line1_size, "SOURCE MAC");
+        passive_details_format_mac(neighbor->mac, line2, line2_size);
+        snprintf(line3, line3_size, "PACKET TYPE");
+        eapol_packet_type_name(neighbor->eapol_packet_type, line4, line4_size);
+        return;
+    }
+    page--;
+
+    if(page == 0) {
         snprintf(line1, line1_size, "EAPOL VERSION");
         snprintf(line2, line2_size, "Version %u", neighbor->eapol_version);
-        snprintf(line3, line3_size, "PACKET TYPE");
-        snprintf(line4, line4_size, "%s", eapol_packet_type_name(neighbor->eapol_packet_type));
-        break;
+        snprintf(line3, line3_size, "EAP CODE");
+        eap_code_name(neighbor, line4, line4_size);
+        return;
+    }
+    page--;
 
-    case 1:
-        snprintf(line1, line1_size, "EAP CODE");
-        snprintf(line2, line2_size, "%s", eap_code_name(neighbor));
-        snprintf(line3, line3_size, "EAP TYPE");
-        eap_type_name(neighbor, line4, line4_size);
-        break;
-
-    default:
-        break;
+    if(page == 0) {
+        snprintf(line1, line1_size, "EAP TYPE");
+        eap_type_name(neighbor, line2, line2_size);
     }
 }
 

@@ -65,6 +65,19 @@ typedef enum {
 } lldp_chassis_subtype_t;
 
 /**
+ * @brief LLDP Port ID subtypes defined by IEEE 802.1AB.
+ */
+typedef enum {
+    LLDP_PORT_INTERFACE_ALIAS = 1,
+    LLDP_PORT_COMPONENT = 2,
+    LLDP_PORT_MAC_ADDRESS = 3,
+    LLDP_PORT_NETWORK_ADDRESS = 4,
+    LLDP_PORT_INTERFACE_NAME = 5,
+    LLDP_PORT_AGENT_CIRCUIT_ID = 6,
+    LLDP_PORT_LOCAL = 7,
+} lldp_port_subtype_t;
+
+/**
  * @brief Parsed information extracted from an LLDP Data Unit (LLDPDU).
  *
  * This structure stores the most relevant information advertised by a
@@ -80,6 +93,9 @@ typedef struct {
     char management_address[48];
 
     uint8_t source_mac[6];
+
+    uint8_t chassis_id_subtype;
+    uint8_t port_id_subtype;
 
     uint16_t ttl;
     uint16_t system_capabilities;
@@ -116,6 +132,7 @@ typedef struct {
     uint8_t poe_power_source;
     uint8_t poe_power_priority;
 
+    bool has_poe_mdi;
     bool has_poe;
     bool has_poe_power_values;
 

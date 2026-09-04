@@ -159,9 +159,11 @@ Runtime ownership invariants:
   before handler cleanup, multicast disable, scanner deinit, worker
   return, and GUI-side join/resource release.
 - Main, Passive worker, and RX Dispatch stacks remain 24 KB, 4 KB, and
-  4 KB respectively. The dynamic neighbor DB remains 32 entries;
-  EAPOL adds four one-byte fields to `neighbor_t` (476 to 480 bytes),
-  increasing its family-lifetime payload from 15,232 to 15,360 bytes.
+  4 KB respectively. The dynamic neighbor DB remains 32 entries.
+  EAPOL added four one-byte fields to `neighbor_t` (476 to 480 bytes).
+  The field-coverage pass retains LLDP Chassis/Port subtypes and an
+  IEEE 802.3 PoE-TLV presence flag; alignment makes `neighbor_t` 484
+  bytes and the family-lifetime payload 15,488 bytes.
 
 Database and UI invariants:
 
@@ -175,6 +177,121 @@ Database and UI invariants:
 - Filtered lists and details use the same source-relative ordinal. All
   mode uses the same global occupied-entry ordinal and labels each row
   with its source; detail rendering is selected from the record source.
+
+### Passive Discovery roadmap field coverage
+
+Occurrence priority is `core`, `common`, or `optional`. Status describes
+the complete wire -> parser -> shared storage -> module -> details path.
+
+#### LLDP
+
+| Field | Wire source | Roadmap | Priority | Status and representation |
+|---|---|---:|---|---|
+| Source MAC | Ethernet header | supporting | core | Parsed, stored, displayed as MAC. |
+| Chassis ID + subtype | TLV 1 | required | core | Parsed, stored, displayed with subtype context. Textual, MAC, and IPv4 network-address forms are represented; other network-address families remain unsupported. |
+| Port ID + subtype | TLV 2 | required | core | Parsed, stored, displayed with subtype context. Textual, MAC, and IPv4 network-address forms are represented. |
+| TTL | TLV 3 | supporting | common | Parsed, stored, displayed in seconds. |
+| Port Description | TLV 4 | no | optional | Defined by the protocol but not parsed or stored. |
+| System Name | TLV 5 | required | core | Parsed, stored, displayed with continuation pages. |
+| System Description | TLV 6 | supporting | common | Parsed, stored, displayed with continuation pages. |
+| System Capabilities | TLV 7 | supporting | common | Supported and enabled masks are parsed/stored; details decode IEEE roles and retain raw hex when the masks are equal. |
+| Management IPv4 | TLV 8, address subtype 1 | required | core | Parsed, stored, displayed. Other address subtypes are not retained. |
+| Port VLAN ID | IEEE 802.1 OUI, subtype 1 | required | optional | Parser length corrected to the six-byte organizational value; PVID is stored independently and displayed as Port VLAN ID. |
+| VLAN Name VID/name | IEEE 802.1 OUI, subtype 3 | required | optional | Parser now consumes VID, name length, then name; VID and name are stored separately and displayed with an unambiguous Named VLAN ID label. |
+| Network Policy VLAN | LLDP-MED OUI, subtype 2 | no | optional | VLAN bit extraction corrected and displayed as Network Policy VLAN. Application type, tagged/unknown flags, priority, and DSCP are not retained. |
+| Basic Power via MDI | IEEE 802.3 OUI, subtype 2 | required | optional | Device type, supported flag, pair and class are parsed/stored; UI distinguishes TLV presence from MDI support. Enabled/pair-control and 802.3at/bt extensions remain unimplemented. |
+| Extended Power via MDI | LLDP-MED OUI, subtype 4 | required | optional | Seven-byte value is accepted; device type, source, priority and 0.1-W power value are stored and displayed textually. |
+| Requested/allocated PoE extensions | IEEE 802.3at/bt extensions | no | optional | Storage members exist but the wire fields are not parsed. |
+
+#### CDP
+
+| Field | Wire source | Roadmap | Priority | Status and representation |
+|---|---|---:|---|---|
+| Cisco destination | Ethernet destination `01:00:0C:CC:CC:CC` | required | core | Validated for every accepted frame; not persisted because it is framing, not neighbor state. |
+| Source MAC | Ethernet header | supporting | core | Parsed, stored, displayed. |
+| Version | CDP header | supporting | common | Parsed and validated (1/2), but not stored or displayed. |
+| TTL | CDP header | supporting | common | Parsed, stored, displayed in seconds. |
+| Device ID | TLV `0x0001` | supporting | core | Required for acceptance, stored in `name`, displayed with continuation pages. |
+| Address / Management Address | TLV `0x0002` / `0x0016` | supporting | core | Bounded address-record parser retains the first NLPID IPv4 address; displayed as Management IPv4. Other protocols/addresses are not retained. |
+| Port ID | TLV `0x0003` | supporting | core | Parsed, stored, displayed with continuation pages. |
+| Capabilities | TLV `0x0004` | supporting | common | Parsed as 32 bits; low 16 bits are stored. Details decode Cisco roles and retain raw hex. High capability bits remain a shared-model limitation. |
+| Software Version | TLV `0x0005` | supporting | common | Parsed, packed into shared description storage, then displayed on continuation pages. It receives a 77-character baseline share and borrows unused Platform capacity; very long combined values remain bounded by the shared field. |
+| Platform | TLV `0x0006` | supporting | common | Parsed, packed into shared description storage, then displayed on continuation pages. It receives a 47-character baseline share and borrows unused Software capacity; very long combined values remain bounded by the shared field. |
+| Native VLAN / Duplex | TLV constants `0x000A` / `0x000B` | no | optional | Defined but not parsed, stored, or displayed. |
+
+#### EAPOL / EAP
+
+| Field | Wire source | Roadmap | Priority | Status and representation |
+|---|---|---:|---|---|
+| Source MAC | Ethernet header | supporting | core | Parsed, stored, displayed. |
+| EAPOL version | EAPOL header | supporting | common | Versions 1-3 are validated, stored, and displayed numerically. |
+| Packet type | EAPOL header | Start required | core | EAP-Packet, Start, Logoff, and Key are parsed/stored and displayed by name; numeric fallback is retained for unknown stored values. |
+| EAP code | EAP header | Identity supporting | common | Request, Response, Success, and Failure are parsed/stored and displayed by name. Success/Failure correctly have no Type byte. |
+| EAP type | EAP Request/Response | Identity required | common | Parsed/stored for Request/Response and displayed by method name; unknown methods display `Unknown (n)`. |
+| Response/Identity text | EAP type 1 data | required | core | Bounded printable-ASCII text is stored in `name`, preserved across later no-identity frames, and displayed with continuation pages. |
+| EAP identifier | EAP header | no | optional | Present on wire but not parsed or persisted. |
+| EAPOL-Key body | EAPOL type 3 | no | optional | Bounds/classification only; key material is intentionally never persisted or displayed. |
+
+### Details UI contract
+
+The former scene inserted an overview at scene page 0, passed `page - 1`
+to the protocol renderer, and nevertheless wrapped using only the handler
+page count. That made the overview a special entry-only page and made the
+last declared handler page unreachable. Details are now strictly zero-based:
+scene page N is handler page N, and forward/reverse navigation both wrap over
+the exact handler-reported count.
+
+Page order (a long value can add same-header continuation pages):
+
+- LLDP: System Name; Source MAC/Management IPv4; Port ID; Chassis ID;
+  TTL; Capabilities; System Description; Port VLAN ID/Named VLAN ID;
+  VLAN Name; Network Policy VLAN; PoE/Power Class; MED Power and role.
+- CDP: Device ID; Source MAC/Management IPv4; Port ID; TTL;
+  Capabilities; Platform; Software Version.
+- EAPOL: Identity; Source MAC/Packet Type; EAPOL Version/EAP Code;
+  EAP Type.
+
+Short pages keep the two header/value groups used elsewhere in the app.
+Long values use a 120-pixel-wide Widget text box with the active proportional
+`FontSecondary` (HaxrCorp 4089, seven-pixel height and eleven-pixel normal
+leading). The helper conservatively paginates at 45 UTF-8-safe glyph
+sequences: three 120-pixel lines divided by the font's eight-pixel maximum
+glyph box. The Widget then performs final pixel-accurate, word-aware wrapping.
+Fields received by LLDP are byte strings, but this font build contains the
+95 printable ASCII glyphs; CDP and EAP Identity already sanitize to printable
+ASCII. Non-ASCII LLDP rendering therefore remains a known limitation.
+
+Human-readable conversions are deliberately display-only:
+
+- LLDP capability bits: Other, Repeater, Bridge, WLAN AP, Router,
+  Telephone, DOCSIS, Station, C-VLAN, S-VLAN, and TPMR.
+- CDP capability bits: Router, Transparent Bridge, Source-Route Bridge,
+  Switch, Host, IGMP, Repeater, Phone, Remote, CVTA, and TPMR.
+- EAPOL packet types, EAP codes, and known EAP methods use names; unknown
+  stored enum values include their number.
+- VLAN IDs, TTL, EAPOL version, MAC/IP addresses, and capability raw masks
+  remain numeric where the number is operationally useful.
+
+### Roadmap receive-filter audit
+
+- LLDP matches the active PMEN pattern: offset zero, mask bytes 12-13,
+  checksum `0x7733` for EtherType `0x88CC`. UCEN, CRCEN, PMEN and BCEN
+  remain enabled by default.
+- CDP is IEEE 802.3 length + LLC/SNAP, so Ethernet bytes 12-13 are a length,
+  not a fixed CDP EtherType. The roadmap's "same pattern-match" wording is
+  technically inaccurate for the current two-byte EtherType pattern. CDP is
+  functionally admitted by the orchestrator's temporary MCEN because its
+  destination is Cisco multicast.
+- EAPOL has EtherType `0x888E`, but PMEN remains programmed only for LLDP.
+  Multicast EAPOL is functionally admitted by temporary MCEN and valid
+  unicast EAPOL by UCEN. The roadmap-specific EAPOL PMEN optimization is not
+  implemented.
+
+No ENC28J60 filter, ERXFCON, PMEN pattern, or centralized multicast behavior
+was changed in the field-coverage pass. Remaining roadmap work is a separate
+filter design capable of admitting both EtherTypes without regressing normal
+unicast/broadcast reception. Field-by-field deterministic frame -> parser ->
+stored value -> physical pixel validation is also intentionally deferred.
 
 CDP migration record:
 

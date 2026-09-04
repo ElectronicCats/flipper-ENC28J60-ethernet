@@ -258,6 +258,46 @@ bool cdp_parse(const uint8_t* frame, uint16_t length, cdp_info_t* info) {
     return true;
 }
 
+static void cdp_store_description(const cdp_info_t* info, char* output, size_t output_size) {
+    if(output && output_size > 0) {
+        output[0] = '\0';
+    }
+    if(output_size < 4 || (!info->platform[0] && !info->software_version[0])) {
+        return;
+    }
+
+    const size_t separator_length = 3;
+    const size_t content_capacity = output_size - separator_length - 1;
+    const size_t platform_length = strlen(info->platform);
+    const size_t software_length = strlen(info->software_version);
+
+    size_t platform_copy = platform_length < 47U ? platform_length : 47U;
+    size_t software_copy = software_length < 77U ? software_length : 77U;
+    size_t used = platform_copy + software_copy;
+
+    if(used < content_capacity && software_copy < software_length) {
+        size_t extra = software_length - software_copy;
+        if(extra > content_capacity - used) {
+            extra = content_capacity - used;
+        }
+        software_copy += extra;
+        used += extra;
+    }
+
+    if(used < content_capacity && platform_copy < platform_length) {
+        size_t extra = platform_length - platform_copy;
+        if(extra > content_capacity - used) {
+            extra = content_capacity - used;
+        }
+        platform_copy += extra;
+    }
+
+    memcpy(output, info->platform, platform_copy);
+    memcpy(output + platform_copy, " | ", separator_length);
+    memcpy(output + platform_copy + separator_length, info->software_version, software_copy);
+    output[platform_copy + separator_length + software_copy] = '\0';
+}
+
 bool cdp_fill_neighbor(const cdp_info_t* info, neighbor_t* neighbor) {
     if(!info || !neighbor || !info->valid) {
         return false;
@@ -273,14 +313,7 @@ bool cdp_fill_neighbor(const cdp_info_t* info, neighbor_t* neighbor) {
         "%s",
         info->management_address);
 
-    if(info->platform[0] || info->software_version[0]) {
-        snprintf(
-            neighbor->description,
-            sizeof(neighbor->description),
-            "%.47s | %.77s",
-            info->platform,
-            info->software_version);
-    }
+    cdp_store_description(info, neighbor->description, sizeof(neighbor->description));
 
     neighbor->ttl = info->ttl;
 
