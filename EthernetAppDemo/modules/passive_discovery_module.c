@@ -5,8 +5,51 @@
 #include "lldp_module.h"
 #include <stdio.h>
 
+#define PASSIVE_DISCOVERY_STACK_BYTES 3072U
+
+/*
+ * Heap blocks used by furi_thread_alloc_ex() on API 87.1:
+ *   align_up(stack payload + 8-byte allocator header, 8-byte alignment)
+ *   + 224 FuriThread + 48 two FuriStrings + 24 app id + 32 thread name.
+ * With the 3072-byte stack this is 3080 + 328 = 3408 bytes.
+ * The first scanner semaphore is another 96-byte heap block. Preserve an
+ * additional fixed 1024 bytes in total-free headroom for allocator/API
+ * variation and concurrent small service allocations. The reserve is not
+ * itself allocated and therefore does not belong in a max-block requirement.
+ *
+ * The allocator is address-ordered first-fit, and the 328 bytes of thread
+ * metadata are allocated before the stack block. Requiring one combined
+ * metadata-plus-stack free block covers the worst case where all metadata
+ * consumes the same block that must subsequently hold the stack. The scanner
+ * semaphore is checked separately immediately before each wait.
+ */
+#define PASSIVE_HEAP_ALIGNMENT_BYTES         8U
+#define PASSIVE_HEAP_BLOCK_HEADER_BYTES      8U
+#define PASSIVE_THREAD_METADATA_HEAP_BYTES   328U
+#define PASSIVE_SCANNER_SEMAPHORE_HEAP_BYTES 96U
+#define PASSIVE_STARTUP_RESERVE_BYTES        1024U
+#define PASSIVE_HEAP_ALIGN_UP(value) \
+    (((value) + PASSIVE_HEAP_ALIGNMENT_BYTES - 1U) & ~(PASSIVE_HEAP_ALIGNMENT_BYTES - 1U))
+#define PASSIVE_THREAD_STACK_HEAP_BYTES \
+    PASSIVE_HEAP_ALIGN_UP(PASSIVE_DISCOVERY_STACK_BYTES + PASSIVE_HEAP_BLOCK_HEADER_BYTES)
+#define PASSIVE_THREAD_HEAP_BYTES \
+    (PASSIVE_THREAD_METADATA_HEAP_BYTES + PASSIVE_THREAD_STACK_HEAP_BYTES)
+#define PASSIVE_STARTUP_REQUIRED_TOTAL_BYTES                            \
+    (PASSIVE_THREAD_HEAP_BYTES + PASSIVE_SCANNER_SEMAPHORE_HEAP_BYTES + \
+     PASSIVE_STARTUP_RESERVE_BYTES)
+#define PASSIVE_STARTUP_REQUIRED_MAX_BLOCK_BYTES PASSIVE_THREAD_HEAP_BYTES
+#define PASSIVE_WAIT_REQUIRED_TOTAL_BYTES \
+    (PASSIVE_SCANNER_SEMAPHORE_HEAP_BYTES + PASSIVE_STARTUP_RESERVE_BYTES)
+#define PASSIVE_WAIT_REQUIRED_MAX_BLOCK_BYTES PASSIVE_SCANNER_SEMAPHORE_HEAP_BYTES
+
 // Forward declaration of the thread worker function
 static int32_t passive_discovery_thread(void* context);
+
+typedef struct {
+    App* app;
+    bool operational;
+    bool registered;
+} PassiveDiscoveryWaitState;
 
 // --- Protocol Registry Lookup Table ---
 
@@ -89,6 +132,27 @@ static bool
     return matched;
 }
 
+static bool passive_discovery_has_startup_headroom(void) {
+    return memmgr_get_free_heap() >= PASSIVE_STARTUP_REQUIRED_TOTAL_BYTES &&
+           memmgr_heap_get_max_free_block() >= PASSIVE_STARTUP_REQUIRED_MAX_BLOCK_BYTES;
+}
+
+static bool passive_discovery_has_wait_headroom(void) {
+    return memmgr_get_free_heap() >= PASSIVE_WAIT_REQUIRED_TOTAL_BYTES &&
+           memmgr_heap_get_max_free_block() >= PASSIVE_WAIT_REQUIRED_MAX_BLOCK_BYTES;
+}
+
+static void passive_discovery_rx_registered(void* context) {
+    PassiveDiscoveryWaitState* state = context;
+    state->registered = true;
+
+    if(!state->operational) {
+        state->operational = true;
+        view_dispatcher_send_custom_event(
+            state->app->view_dispatcher, PassiveDiscoveryEventStarted);
+    }
+}
+
 // --- Background Scanning Thread ---
 
 static int32_t passive_discovery_thread(void* context) {
@@ -104,14 +168,14 @@ static int32_t passive_discovery_thread(void* context) {
     }
 
     if(!start) {
-        draw_device_no_connected(app);
-        furi_delay_ms(300);
+        view_dispatcher_send_custom_event(
+            app->view_dispatcher, PassiveDiscoveryEventDeviceUnavailable);
         return 0;
     }
 
     if(!is_link_up(ethernet)) {
-        draw_network_not_connected(app);
-        furi_delay_ms(300);
+        view_dispatcher_send_custom_event(
+            app->view_dispatcher, PassiveDiscoveryEventLinkUnavailable);
         return 0;
     }
 
@@ -125,18 +189,41 @@ static int32_t passive_discovery_thread(void* context) {
     passive_discovery_handlers_init(app, selected_protocol);
 
     app->passive_neighbor_count = passive_discovery_neighbor_count(selected_protocol);
-    view_dispatcher_send_custom_event(app->view_dispatcher, 1);
+    view_dispatcher_send_custom_event(app->view_dispatcher, PassiveDiscoveryEventRefresh);
+
+    PassiveDiscoveryWaitState wait_state = {
+        .app = app,
+        .operational = false,
+        .registered = false,
+    };
+    uint32_t exit_event = 0;
 
     while(!app->passive_discovery_stop && !scanner_cancel_requested(&session)) {
+        if(!passive_discovery_has_wait_headroom()) {
+            exit_event = PassiveDiscoveryEventScannerLowMemory;
+            break;
+        }
+
         uint16_t length = 0;
+        wait_state.registered = false;
         bool result = scanner_wait_for_packet(
             &session,
             passive_discovery_dispatch_frame,
             &selected_protocol,
-            NULL,
-            NULL,
+            passive_discovery_rx_registered,
+            &wait_state,
             &length,
             500);
+
+        if(!wait_state.registered) {
+            if(scanner_session_get_last_wait_failure(&session) == ScannerWaitFailureNoMemory) {
+                exit_event = PassiveDiscoveryEventScannerLowMemory;
+            } else {
+                exit_event = PassiveDiscoveryEventRxUnavailable;
+            }
+            break;
+        }
+
         if(result) {
             FURI_LOG_I("PASSIVE", "Packet processed by selected handler");
         }
@@ -144,7 +231,7 @@ static int32_t passive_discovery_thread(void* context) {
         uint16_t count = passive_discovery_neighbor_count(selected_protocol);
         if(count != app->passive_neighbor_count) {
             app->passive_neighbor_count = count;
-            view_dispatcher_send_custom_event(app->view_dispatcher, 1);
+            view_dispatcher_send_custom_event(app->view_dispatcher, PassiveDiscoveryEventRefresh);
         }
     }
 
@@ -152,22 +239,34 @@ static int32_t passive_discovery_thread(void* context) {
     disable_multicast(ethernet);
     scanner_session_deinit(&session);
 
+    if(exit_event && !app->passive_discovery_stop) {
+        view_dispatcher_send_custom_event(app->view_dispatcher, exit_event);
+    }
+
     return 0;
 }
 
 // --- Public APIs implementation ---
 
-void passive_discovery_module_start(App* app) {
-    if(app_thread_is_owned(app, AppThreadOwnerPassiveDiscovery)) {
-        return;
+PassiveDiscoveryStartResult passive_discovery_module_start(App* app) {
+    if(!app || app->thread_alternative ||
+       app_thread_is_owned(app, AppThreadOwnerPassiveDiscovery)) {
+        return PassiveDiscoveryStartOwnerBusy;
+    }
+
+    if(!passive_discovery_has_startup_headroom()) {
+        return PassiveDiscoveryStartWorkerLowMemory;
     }
 
     app->passive_discovery_stop = false;
-    FuriThread* thread =
-        furi_thread_alloc_ex("Passive Discovery", 4096, passive_discovery_thread, app);
-    if(app_thread_claim(app, AppThreadOwnerPassiveDiscovery, thread)) {
-        furi_thread_start(thread);
+    FuriThread* thread = furi_thread_alloc_ex(
+        "Passive Discovery", PASSIVE_DISCOVERY_STACK_BYTES, passive_discovery_thread, app);
+    if(!app_thread_claim(app, AppThreadOwnerPassiveDiscovery, thread)) {
+        return PassiveDiscoveryStartOwnerBusy;
     }
+
+    furi_thread_start(thread);
+    return PassiveDiscoveryStartPending;
 }
 
 void passive_discovery_module_stop(App* app) {

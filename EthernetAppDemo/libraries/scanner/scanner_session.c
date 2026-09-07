@@ -19,6 +19,7 @@ void scanner_session_init(scanner_session_t* s, App* app) {
     s->cancelled = false;
     s->external_cancel = NULL;
     s->app_shutdown = &app->thread_shutdown_requested;
+    s->last_wait_failure = ScannerWaitFailureNone;
 
     for(uint8_t i = 0; i < SCANNER_RESOLVE_CACHE_ENTRIES; i++) {
         s->cache[i].valid = false;
@@ -33,6 +34,11 @@ void scanner_session_deinit(scanner_session_t* s) {
 void scanner_session_set_cancel_flag(scanner_session_t* s, volatile const bool* cancel_flag) {
     furi_assert(s);
     s->external_cancel = cancel_flag;
+}
+
+scanner_wait_failure_t scanner_session_get_last_wait_failure(const scanner_session_t* s) {
+    furi_assert(s);
+    return s->last_wait_failure;
 }
 
 void scanner_send_packet_trigger(void* ctx) {
@@ -181,9 +187,9 @@ bool scanner_wait_for_packet(
     furi_assert(s);
     furi_assert(pred);
     furi_assert(len_out);
-    UNUSED(s);
 
     *len_out = 0;
+    s->last_wait_failure = ScannerWaitFailureNone;
 
     scanner_wait_state_t state = {
         .user_pred = pred,
@@ -192,10 +198,14 @@ bool scanner_wait_for_packet(
         .matched_len = 0,
         .matched = false,
     };
-    if(!state.signal) return false;
+    if(!state.signal) {
+        s->last_wait_failure = ScannerWaitFailureNoMemory;
+        return false;
+    }
 
     rx_handle_t* handle = rx_register(wait_predicate, wait_signal_handler, &state);
     if(!handle) {
+        s->last_wait_failure = ScannerWaitFailureRxUnavailable;
         furi_semaphore_free(state.signal);
         return false;
     }

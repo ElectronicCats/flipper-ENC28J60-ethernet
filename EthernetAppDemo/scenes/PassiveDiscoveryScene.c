@@ -120,11 +120,31 @@ static void passive_discovery_draw_listening(App* app) {
         app->widget, GuiButtonTypeCenter, "Stop", passive_discovery_button_callback, app);
 }
 
+static void passive_discovery_draw_status(App* app, const char* status, bool can_retry) {
+    widget_reset(app->widget);
+
+    widget_add_string_element(
+        app->widget, 64, 10, AlignCenter, AlignCenter, FontPrimary, "Passive Discovery");
+
+    widget_add_string_multiline_element(
+        app->widget, 64, 35, AlignCenter, AlignCenter, FontSecondary, status);
+
+    if(can_retry) {
+        widget_add_button_element(
+            app->widget, GuiButtonTypeCenter, "Retry", passive_discovery_button_callback, app);
+    }
+}
+
 static void passive_discovery_refresh(App* app) {
     switch(app->passive_discovery.state) {
     case PassiveDiscoveryStateConfig:
 
         passive_discovery_draw_config(app);
+        break;
+
+    case PassiveDiscoveryStateStarting:
+
+        passive_discovery_draw_status(app, "Starting...", false);
         break;
 
     case PassiveDiscoveryStateListening:
@@ -140,6 +160,44 @@ static void passive_discovery_refresh(App* app) {
 
         break;
 
+    case PassiveDiscoveryStateErrorDbMemory:
+
+        passive_discovery_draw_status(
+            app, "Not enough memory\nDatabase unavailable\nClose active services", true);
+        break;
+
+    case PassiveDiscoveryStateErrorWorkerMemory:
+
+        passive_discovery_draw_status(
+            app, "Not enough memory\nWorker unavailable\nClose active services", true);
+        break;
+
+    case PassiveDiscoveryStateErrorScannerMemory:
+
+        passive_discovery_draw_status(
+            app, "Not enough memory\nScanner unavailable\nClose active services", true);
+        break;
+
+    case PassiveDiscoveryStateErrorBusy:
+
+        passive_discovery_draw_status(app, "Another operation\nis still active", true);
+        break;
+
+    case PassiveDiscoveryStateErrorDevice:
+
+        passive_discovery_draw_status(app, "Device not\nconnected", true);
+        break;
+
+    case PassiveDiscoveryStateErrorLink:
+
+        passive_discovery_draw_status(app, "Network not\ndetected", true);
+        break;
+
+    case PassiveDiscoveryStateErrorRxUnavailable:
+
+        passive_discovery_draw_status(app, "Receiver unavailable\nTry again", true);
+        break;
+
     default:
         break;
     }
@@ -153,6 +211,9 @@ void app_scene_passive_discovery_on_enter(void* context) {
     }
 
     if(!neighbor_db_acquire()) {
+        app->passive_discovery.state = PassiveDiscoveryStateErrorDbMemory;
+        passive_discovery_refresh(app);
+        view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
         return;
     }
 
@@ -175,7 +236,8 @@ bool app_scene_passive_discovery_on_event(void* context, SceneManagerEvent event
     App* app = context;
 
     if(event.type == SceneManagerEventTypeBack) {
-        if(app->passive_discovery.state == PassiveDiscoveryStateListening) {
+        if(app->passive_discovery.state == PassiveDiscoveryStateStarting ||
+           app->passive_discovery.state == PassiveDiscoveryStateListening) {
             passive_discovery_module_stop(app);
 
             app->passive_discovery.state = PassiveDiscoveryStateConfig;
@@ -192,11 +254,42 @@ bool app_scene_passive_discovery_on_event(void* context, SceneManagerEvent event
     }
 
     if(event.type == SceneManagerEventTypeCustom) {
-        if(event.event == 1) {
+        if(event.event == PassiveDiscoveryEventRefresh) {
             passive_discovery_refresh(app);
 
             return true;
         }
+
+        if(event.event == PassiveDiscoveryEventStarted) {
+            if(app->passive_discovery.state == PassiveDiscoveryStateStarting) {
+                app->passive_discovery.state = PassiveDiscoveryStateListening;
+                passive_discovery_refresh(app);
+            }
+            return true;
+        }
+
+        passive_discovery_state_t error_state;
+        switch(event.event) {
+        case PassiveDiscoveryEventScannerLowMemory:
+            error_state = PassiveDiscoveryStateErrorScannerMemory;
+            break;
+        case PassiveDiscoveryEventDeviceUnavailable:
+            error_state = PassiveDiscoveryStateErrorDevice;
+            break;
+        case PassiveDiscoveryEventLinkUnavailable:
+            error_state = PassiveDiscoveryStateErrorLink;
+            break;
+        case PassiveDiscoveryEventRxUnavailable:
+            error_state = PassiveDiscoveryStateErrorRxUnavailable;
+            break;
+        default:
+            return false;
+        }
+
+        passive_discovery_module_stop(app);
+        app->passive_discovery.state = error_state;
+        passive_discovery_refresh(app);
+        return true;
     }
 
     return false;
@@ -247,12 +340,39 @@ static void
 
     case GuiButtonTypeCenter:
 
-        if(app->passive_discovery.state == PassiveDiscoveryStateConfig) {
-            app->passive_discovery.state = PassiveDiscoveryStateListening;
+        if(app->passive_discovery.state == PassiveDiscoveryStateConfig ||
+           app->passive_discovery.state == PassiveDiscoveryStateErrorDbMemory ||
+           app->passive_discovery.state == PassiveDiscoveryStateErrorWorkerMemory ||
+           app->passive_discovery.state == PassiveDiscoveryStateErrorScannerMemory ||
+           app->passive_discovery.state == PassiveDiscoveryStateErrorBusy ||
+           app->passive_discovery.state == PassiveDiscoveryStateErrorDevice ||
+           app->passive_discovery.state == PassiveDiscoveryStateErrorLink ||
+           app->passive_discovery.state == PassiveDiscoveryStateErrorRxUnavailable) {
+            PassiveDiscoveryStartResult result;
+            if(!neighbor_db_acquire()) {
+                app->passive_discovery.state = PassiveDiscoveryStateErrorDbMemory;
+                passive_discovery_refresh(app);
+                break;
+            } else {
+                result = passive_discovery_module_start(app);
+            }
+
+            switch(result) {
+            case PassiveDiscoveryStartPending:
+                app->passive_discovery.state = PassiveDiscoveryStateStarting;
+                break;
+            case PassiveDiscoveryStartWorkerLowMemory:
+                app->passive_discovery.state = PassiveDiscoveryStateErrorWorkerMemory;
+                break;
+            case PassiveDiscoveryStartOwnerBusy:
+                app->passive_discovery.state = PassiveDiscoveryStateErrorBusy;
+                break;
+            default:
+                app->passive_discovery.state = PassiveDiscoveryStateErrorBusy;
+                break;
+            }
 
             passive_discovery_refresh(app);
-
-            passive_discovery_module_start(app);
 
         } else if(app->passive_discovery.state == PassiveDiscoveryStateListening) {
             passive_discovery_module_stop(app);

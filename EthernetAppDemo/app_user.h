@@ -68,8 +68,16 @@ typedef enum {
 // For Passive Discovery scene
 typedef enum {
     PassiveDiscoveryStateConfig,
+    PassiveDiscoveryStateStarting,
     PassiveDiscoveryStateListening,
     PassiveDiscoveryStateFinished,
+    PassiveDiscoveryStateErrorDbMemory,
+    PassiveDiscoveryStateErrorWorkerMemory,
+    PassiveDiscoveryStateErrorScannerMemory,
+    PassiveDiscoveryStateErrorBusy,
+    PassiveDiscoveryStateErrorDevice,
+    PassiveDiscoveryStateErrorLink,
+    PassiveDiscoveryStateErrorRxUnavailable,
 } passive_discovery_state_t;
 
 // For Passive Discovery scene protocols

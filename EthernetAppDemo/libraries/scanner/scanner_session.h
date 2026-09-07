@@ -9,6 +9,12 @@
  */
 typedef bool (*scanner_packet_predicate_fn)(const uint8_t* frame, uint16_t len, void* ctx);
 
+typedef enum {
+    ScannerWaitFailureNone,
+    ScannerWaitFailureNoMemory,
+    ScannerWaitFailureRxUnavailable,
+} scanner_wait_failure_t;
+
 // Named-tag typedef so other module headers can forward-declare
 // `struct ScannerSession;` and use `struct ScannerSession*` in their
 // public signatures without dragging this whole header in.
@@ -30,6 +36,7 @@ typedef struct ScannerSession {
     bool cancelled;
     volatile const bool* external_cancel;
     volatile const bool* app_shutdown;
+    scanner_wait_failure_t last_wait_failure;
 } scanner_session_t;
 
 /**
@@ -47,6 +54,9 @@ void scanner_session_init(scanner_session_t* s, App* app);
 void scanner_session_deinit(scanner_session_t* s);
 
 void scanner_session_set_cancel_flag(scanner_session_t* s, volatile const bool* cancel_flag);
+
+/** Return the resource-boundary failure from the most recent packet wait. */
+scanner_wait_failure_t scanner_session_get_last_wait_failure(const scanner_session_t* s);
 
 /**
  * Given a target IPv4, return via mac_out the MAC of the next hop:
@@ -96,6 +106,9 @@ void scanner_send_packet_trigger(void* ctx);
  *
  * Honors cancel: if the back button is pressed during the wait, returns
  * false immediately with *len_out=0.
+ * `scanner_session_get_last_wait_failure()` distinguishes semaphore allocation
+ * and RX registration failures. Timeout, cancellation, and successful waits
+ * leave the failure as ScannerWaitFailureNone.
  *
  * F0.5d — if `trigger_fn` is non-NULL, it runs after registration and
  * before the wait. Send the request frame from inside the trigger so

@@ -4,6 +4,10 @@
 
 static void passive_details_callback(GuiButtonType type, InputType input_type, void* context);
 
+typedef enum {
+    PassiveNeighborDetailsEventRedraw = 1,
+} PassiveNeighborDetailsCustomEvent;
+
 static uint8_t passive_details_get_source(const App* app) {
     switch(app->passive_discovery.protocol) {
     case PassiveProtocolLLDP:
@@ -147,8 +151,6 @@ static void passive_details_callback(GuiButtonType type, InputType input_type, v
             app->passive_details_page = 0;
         }
 
-        passive_draw_details(app, neighbor);
-
     } else if(type == GuiButtonTypeLeft) {
         /*
          * Move to the previous page.
@@ -162,12 +164,21 @@ static void passive_details_callback(GuiButtonType type, InputType input_type, v
             app->passive_details_page--;
         }
 
-        passive_draw_details(app, neighbor);
+    } else {
+        return;
     }
+
+    view_dispatcher_send_custom_event(app->view_dispatcher, PassiveNeighborDetailsEventRedraw);
 }
 
 bool app_scene_passive_neighbor_details_on_event(void* context, SceneManagerEvent event) {
     App* app = context;
+
+    if(event.type == SceneManagerEventTypeCustom &&
+       event.event == PassiveNeighborDetailsEventRedraw) {
+        passive_draw_details(app, passive_details_get_selected_neighbor(app));
+        return true;
+    }
 
     if(event.type == SceneManagerEventTypeBack) {
         /*
