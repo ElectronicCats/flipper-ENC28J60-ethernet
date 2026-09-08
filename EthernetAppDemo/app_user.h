@@ -119,6 +119,12 @@ typedef struct {
 // The full definition lives in libraries/chip/rx_dispatch.h, which is
 // included below the App typedef (it depends on App* in its API).
 typedef struct rx_handle rx_handle_t;
+typedef struct PassiveHistory PassiveHistory;
+
+typedef enum {
+    PassiveNeighborSourceLive,
+    PassiveNeighborSourceSaved,
+} PassiveNeighborSource;
 
 typedef enum {
     AppThreadOwnerNone = 0,
@@ -163,6 +169,11 @@ typedef struct {
     uint16_t passive_neighbor_count;
     uint8_t passive_selected_neighbor;
     uint8_t passive_details_page;
+    uint8_t passive_neighbor_source;
+    PassiveHistory* passive_history;
+    uint8_t passive_saved_mac[6];
+    uint8_t passive_saved_protocol;
+    volatile bool passive_capture_operational;
     volatile bool arpspoofing_stop;
     volatile bool arp_scanner_stop;
     volatile bool os_detector_stop;

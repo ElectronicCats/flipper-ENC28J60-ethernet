@@ -145,6 +145,7 @@ static bool passive_discovery_has_wait_headroom(void) {
 static void passive_discovery_rx_registered(void* context) {
     PassiveDiscoveryWaitState* state = context;
     state->registered = true;
+    state->app->passive_capture_operational = true;
 
     if(!state->operational) {
         state->operational = true;
@@ -259,6 +260,7 @@ PassiveDiscoveryStartResult passive_discovery_module_start(App* app) {
     }
 
     app->passive_discovery_stop = false;
+    app->passive_capture_operational = false;
     FuriThread* thread = furi_thread_alloc_ex(
         "Passive Discovery", PASSIVE_DISCOVERY_STACK_BYTES, passive_discovery_thread, app);
     if(!app_thread_claim(app, AppThreadOwnerPassiveDiscovery, thread)) {

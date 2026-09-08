@@ -1,6 +1,7 @@
 #include "../app_user.h"
 #include "../modules/passive_discovery_module.h"
 #include "../libraries/protocol_tools/neighbor_db.h"
+#include "../libraries/protocol_tools/passive_history.h"
 
 static void passive_details_callback(GuiButtonType type, InputType input_type, void* context);
 
@@ -25,6 +26,13 @@ static uint8_t passive_details_get_source(const App* app) {
 }
 
 static neighbor_t* passive_details_get_selected_neighbor(App* app) {
+    if(app->passive_neighbor_source == PassiveNeighborSourceSaved) {
+        return passive_history_decode(
+            app->passive_history,
+            app->storage,
+            app->passive_saved_mac,
+            (PassiveHistoryProtocol)app->passive_saved_protocol);
+    }
     if(app->passive_discovery.protocol == PassiveProtocolALL) {
         return neighbor_db_get_by_position(app->passive_selected_neighbor);
     }
@@ -35,6 +43,18 @@ static neighbor_t* passive_details_get_selected_neighbor(App* app) {
 
 static passive_protocol_t
     passive_details_get_protocol(const App* app, const neighbor_t* neighbor) {
+    if(app->passive_neighbor_source == PassiveNeighborSourceSaved) {
+        switch((PassiveHistoryProtocol)app->passive_saved_protocol) {
+        case PassiveHistoryProtocolLldp:
+            return PassiveProtocolLLDP;
+        case PassiveHistoryProtocolCdp:
+            return PassiveProtocolCDP;
+        case PassiveHistoryProtocolEapol:
+            return PassiveProtocolEAPOL;
+        default:
+            return PassiveProtocolALL;
+        }
+    }
     if(app->passive_discovery.protocol != PassiveProtocolALL) {
         return app->passive_discovery.protocol;
     }

@@ -2,6 +2,7 @@
 #include "libraries/protocol_tools/arp.h"
 #include "libraries/protocol_tools/icmp.h"
 #include "libraries/protocol_tools/neighbor_db.h"
+#include "libraries/protocol_tools/passive_history.h"
 
 // Just to set as initial MAC the user must to modify to have other MAC address
 uint8_t MAC_INITIAL[6] = {0xba, 0x3f, 0x91, 0xc2, 0x7e, 0x5d};
@@ -300,6 +301,8 @@ void app_free(App* app) {
     // Passive Discovery normally releases its database on final family exit.
     // Keep a post-worker shutdown fallback for app exits from any passive scene.
     neighbor_db_release();
+    passive_history_free(app->passive_history);
+    app->passive_history = NULL;
 
     // Read PCAP normally releases this after joining its worker in scene exit.
     // Keep an app-shutdown fallback for exits that bypass the scene callback.

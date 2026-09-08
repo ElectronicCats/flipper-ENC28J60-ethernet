@@ -1,8 +1,38 @@
 #include "../app_user.h"
 #include "../libraries/protocol_tools/neighbor_db.h"
+#include "../libraries/protocol_tools/passive_history.h"
 
 static void passive_neighbor_callback(void* context, uint32_t index);
 static void build_neighbor_submenu(App* app);
+
+#define PASSIVE_LIST_CLEAR_ITEM 0xFFFFU
+#define PASSIVE_LIST_EMPTY_ITEM 0xFFFEU
+
+static PassiveHistoryProtocol passive_history_filter(const App* app) {
+    switch(app->passive_discovery.protocol) {
+    case PassiveProtocolLLDP:
+        return PassiveHistoryProtocolLldp;
+    case PassiveProtocolCDP:
+        return PassiveHistoryProtocolCdp;
+    case PassiveProtocolEAPOL:
+        return PassiveHistoryProtocolEapol;
+    default:
+        return PassiveHistoryProtocolAll;
+    }
+}
+
+static const char* passive_history_protocol_label(PassiveHistoryProtocol protocol) {
+    switch(protocol) {
+    case PassiveHistoryProtocolLldp:
+        return "LLDP";
+    case PassiveHistoryProtocolCdp:
+        return "CDP";
+    case PassiveHistoryProtocolEapol:
+        return "EAPOL";
+    default:
+        return "?";
+    }
+}
 
 static uint8_t passive_scene_get_source(App* app) {
     switch(app->passive_discovery.protocol) {
@@ -53,7 +83,81 @@ void app_scene_passive_neighbor_list_on_enter(void* context) {
 static void build_neighbor_submenu(App* app) {
     submenu_reset(app->submenu);
 
-    submenu_set_header(app->submenu, "DISCOVERED DEVICES");
+    submenu_set_header(
+        app->submenu,
+        app->passive_neighbor_source == PassiveNeighborSourceSaved ? "SAVED NEIGHBORS" :
+                                                                     "DISCOVERED DEVICES");
+
+    if(app->passive_neighbor_source == PassiveNeighborSourceSaved) {
+        PassiveHistoryStatus status = passive_history_get_status(app->passive_history);
+        size_t count = passive_history_count(app->passive_history, passive_history_filter(app));
+
+        if(status == PassiveHistoryStatusInvalid) {
+            submenu_add_item(
+                app->submenu,
+                "Saved results unavailable",
+                PASSIVE_LIST_EMPTY_ITEM,
+                passive_neighbor_callback,
+                app);
+        } else if(count == 0) {
+            submenu_add_item(
+                app->submenu,
+                "No saved results",
+                PASSIVE_LIST_EMPTY_ITEM,
+                passive_neighbor_callback,
+                app);
+        } else {
+            for(size_t i = 0; i < count; i++) {
+                uint8_t mac[6];
+                PassiveHistoryProtocol protocol;
+                if(!passive_history_get_key(
+                       app->passive_history, passive_history_filter(app), i, mac, &protocol)) {
+                    continue;
+                }
+                neighbor_t* neighbor =
+                    passive_history_decode(app->passive_history, app->storage, mac, protocol);
+                if(!neighbor) continue;
+
+                char identity[32];
+                if(neighbor->name[0]) {
+                    snprintf(identity, sizeof(identity), "%.31s", neighbor->name);
+                } else {
+                    snprintf(
+                        identity,
+                        sizeof(identity),
+                        "%02X:%02X:%02X:%02X:%02X:%02X",
+                        mac[0],
+                        mac[1],
+                        mac[2],
+                        mac[3],
+                        mac[4],
+                        mac[5]);
+                }
+
+                char name[32];
+                if(app->passive_discovery.protocol == PassiveProtocolALL) {
+                    snprintf(
+                        name,
+                        sizeof(name),
+                        "[%s] %.23s",
+                        passive_history_protocol_label(protocol),
+                        identity);
+                } else {
+                    snprintf(name, sizeof(name), "%s", identity);
+                }
+                submenu_add_item(app->submenu, name, i, passive_neighbor_callback, app);
+            }
+        }
+
+        submenu_add_item(
+            app->submenu,
+            "[ Clear Results ]",
+            PASSIVE_LIST_CLEAR_ITEM,
+            passive_neighbor_callback,
+            app);
+        submenu_set_selected_item(app->submenu, app->passive_selected_neighbor);
+        return;
+    }
 
     uint8_t source = passive_scene_get_source(app);
 
@@ -67,7 +171,8 @@ static void build_neighbor_submenu(App* app) {
     }
 
     if(count == 0) {
-        submenu_add_item(app->submenu, "No neighbors", 0, passive_neighbor_callback, app);
+        submenu_add_item(
+            app->submenu, "No neighbors", PASSIVE_LIST_EMPTY_ITEM, passive_neighbor_callback, app);
 
     } else {
         for(size_t i = 0; i < count; i++) {
@@ -118,7 +223,8 @@ static void build_neighbor_submenu(App* app) {
         }
     }
 
-    submenu_add_item(app->submenu, "[ Clear Results ]", 0xFFFF, passive_neighbor_callback, app);
+    submenu_add_item(
+        app->submenu, "[ Clear Results ]", PASSIVE_LIST_CLEAR_ITEM, passive_neighbor_callback, app);
 
     submenu_set_selected_item(app->submenu, app->passive_selected_neighbor);
 }
@@ -126,16 +232,34 @@ static void build_neighbor_submenu(App* app) {
 static void passive_neighbor_callback(void* context, uint32_t index) {
     App* app = context;
 
-    if(index == 0xFFFF) {
-        neighbor_db_clear_by_source(passive_scene_get_source(app));
+    if(index == PASSIVE_LIST_EMPTY_ITEM) return;
 
-        neighbor_db_save();
+    if(index == PASSIVE_LIST_CLEAR_ITEM) {
+        if(app->passive_neighbor_source == PassiveNeighborSourceSaved) {
+            passive_history_clear(app->passive_history, app->storage, passive_history_filter(app));
+        } else {
+            passive_history_clear_storage(app->storage, passive_history_filter(app));
+            neighbor_db_clear_by_source(passive_scene_get_source(app));
+        }
 
+        app->passive_selected_neighbor = 0;
         build_neighbor_submenu(app);
 
         return;
     }
 
+    if(app->passive_neighbor_source == PassiveNeighborSourceSaved) {
+        PassiveHistoryProtocol protocol;
+        if(!passive_history_get_key(
+               app->passive_history,
+               passive_history_filter(app),
+               index,
+               app->passive_saved_mac,
+               &protocol)) {
+            return;
+        }
+        app->passive_saved_protocol = (uint8_t)protocol;
+    }
     app->passive_selected_neighbor = index;
 
     scene_manager_next_scene(app->scene_manager, app_scene_passive_neighbor_details_option);
