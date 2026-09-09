@@ -11,7 +11,9 @@ typedef bool (*scanner_packet_predicate_fn)(const uint8_t* frame, uint16_t len, 
 
 typedef enum {
     ScannerWaitFailureNone,
-    ScannerWaitFailureNoMemory,
+    ScannerWaitFailureNoMemoryTotal,
+    ScannerWaitFailureNoMemoryBlock,
+    ScannerWaitFailureNoMemoryAllocation,
     ScannerWaitFailureRxUnavailable,
 } scanner_wait_failure_t;
 
@@ -57,6 +59,8 @@ void scanner_session_set_cancel_flag(scanner_session_t* s, volatile const bool* 
 
 /** Return the resource-boundary failure from the most recent packet wait. */
 scanner_wait_failure_t scanner_session_get_last_wait_failure(const scanner_session_t* s);
+
+bool scanner_wait_failure_is_memory(scanner_wait_failure_t failure);
 
 /**
  * Given a target IPv4, return via mac_out the MAC of the next hop:

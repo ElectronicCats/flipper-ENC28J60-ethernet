@@ -1,6 +1,9 @@
 #include "../app_user.h"
 #include "../modules/ping_module.h"
 #include "../modules/arp_module.h"
+#include "../libraries/functions/startup_guard.h"
+
+#define PING_STACK_BYTES 10240U
 
 // F0.4g — predicate context for the ping reply match. Lives only on
 // the ping_thread stack; predicate runs in rx_dispatch and writes
@@ -238,18 +241,39 @@ void app_scene_ping_set_ip_scene_on_exit(void* context) {
  */
 
 // Function for ping scene on enter
-void app_scene_ping_scene_on_enter(void* context) {
+static void ping_start(void* context) {
     App* app = (App*)context;
+
+    startup_guard_clear(app);
+    widget_reset(app->widget);
+
+    if(!startup_guard_thread_slot_available(app, ping_start)) return;
+
+    StartupGuardRequirements requirements = startup_guard_thread_requirements(
+        PING_STACK_BYTES,
+        STARTUP_GUARD_SCANNER_SEMAPHORE_HEAP_BYTES,
+        STARTUP_GUARD_SCANNER_SEMAPHORE_HEAP_BYTES);
+    if(startup_guard_check(requirements) != StartupGuardReady) {
+        startup_guard_show_low_memory(
+            app, "Feature unavailable\nClose active services\nand try again", ping_start);
+        return;
+    }
 
     // F0.4c — no thread_suspend; ping_thread uses scanner_session.
     // Allocate and start the thread
-    FuriThread* thread = furi_thread_alloc_ex("PING", 10 * 1024, ping_thread, app);
+    FuriThread* thread = furi_thread_alloc_ex("PING", PING_STACK_BYTES, ping_thread, app);
+    if(!thread) {
+        startup_guard_show_low_memory(
+            app, "Feature unavailable\nClose active services\nand try again", ping_start);
+        return;
+    }
     if(app_thread_claim(app, AppThreadOwnerPing, thread)) {
         furi_thread_start(thread);
     }
+}
 
-    // Reset the widget and switch view
-    widget_reset(app->widget);
+void app_scene_ping_scene_on_enter(void* context) {
+    ping_start(context);
 }
 
 // Function for  ping scene on event
@@ -295,6 +319,7 @@ bool app_scene_ping_scene_on_event(void* context, SceneManagerEvent event) {
 void app_scene_ping_scene_on_exit(void* context) {
     App* app = (App*)context;
 
+    startup_guard_clear(app);
     app_thread_join_and_free(app, AppThreadOwnerPing);
     // F0.4c — no thread_resume.
 }

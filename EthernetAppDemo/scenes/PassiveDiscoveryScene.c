@@ -165,10 +165,22 @@ static void passive_discovery_refresh(App* app) {
 
         break;
 
-    case PassiveDiscoveryStateErrorDbMemory:
+    case PassiveDiscoveryStateErrorDbTotalMemory:
 
         passive_discovery_draw_status(
-            app, "Not enough memory\nDatabase unavailable\nClose active services", true);
+            app, "Not enough memory\nDatabase total unavailable\nClose active services", true);
+        break;
+
+    case PassiveDiscoveryStateErrorDbBlockMemory:
+
+        passive_discovery_draw_status(
+            app, "Not enough memory\nDatabase block unavailable\nClose active services", true);
+        break;
+
+    case PassiveDiscoveryStateErrorDbAllocation:
+
+        passive_discovery_draw_status(
+            app, "Not enough memory\nDatabase allocation failed\nTry again", true);
         break;
 
     case PassiveDiscoveryStateErrorWorkerMemory:
@@ -350,7 +362,9 @@ static void
     case GuiButtonTypeCenter:
 
         if(app->passive_discovery.state == PassiveDiscoveryStateConfig ||
-           app->passive_discovery.state == PassiveDiscoveryStateErrorDbMemory ||
+           app->passive_discovery.state == PassiveDiscoveryStateErrorDbTotalMemory ||
+           app->passive_discovery.state == PassiveDiscoveryStateErrorDbBlockMemory ||
+           app->passive_discovery.state == PassiveDiscoveryStateErrorDbAllocation ||
            app->passive_discovery.state == PassiveDiscoveryStateErrorWorkerMemory ||
            app->passive_discovery.state == PassiveDiscoveryStateErrorScannerMemory ||
            app->passive_discovery.state == PassiveDiscoveryStateErrorBusy ||
@@ -358,8 +372,15 @@ static void
            app->passive_discovery.state == PassiveDiscoveryStateErrorLink ||
            app->passive_discovery.state == PassiveDiscoveryStateErrorRxUnavailable) {
             PassiveDiscoveryStartResult result;
-            if(!neighbor_db_acquire()) {
-                app->passive_discovery.state = PassiveDiscoveryStateErrorDbMemory;
+            NeighborDbAcquireResult db_result = neighbor_db_acquire();
+            if(db_result != NeighborDbAcquireReady) {
+                if(db_result == NeighborDbAcquireInsufficientTotal) {
+                    app->passive_discovery.state = PassiveDiscoveryStateErrorDbTotalMemory;
+                } else if(db_result == NeighborDbAcquireInsufficientBlock) {
+                    app->passive_discovery.state = PassiveDiscoveryStateErrorDbBlockMemory;
+                } else {
+                    app->passive_discovery.state = PassiveDiscoveryStateErrorDbAllocation;
+                }
                 passive_discovery_refresh(app);
                 break;
             } else {
@@ -372,9 +393,11 @@ static void
                 app->passive_discovery.state = PassiveDiscoveryStateStarting;
                 break;
             case PassiveDiscoveryStartWorkerLowMemory:
+                neighbor_db_release();
                 app->passive_discovery.state = PassiveDiscoveryStateErrorWorkerMemory;
                 break;
             case PassiveDiscoveryStartOwnerBusy:
+                neighbor_db_release();
                 app->passive_discovery.state = PassiveDiscoveryStateErrorBusy;
                 break;
             default:

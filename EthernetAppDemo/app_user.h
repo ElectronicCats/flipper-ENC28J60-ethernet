@@ -71,7 +71,9 @@ typedef enum {
     PassiveDiscoveryStateStarting,
     PassiveDiscoveryStateListening,
     PassiveDiscoveryStateFinished,
-    PassiveDiscoveryStateErrorDbMemory,
+    PassiveDiscoveryStateErrorDbTotalMemory,
+    PassiveDiscoveryStateErrorDbBlockMemory,
+    PassiveDiscoveryStateErrorDbAllocation,
     PassiveDiscoveryStateErrorWorkerMemory,
     PassiveDiscoveryStateErrorScannerMemory,
     PassiveDiscoveryStateErrorBusy,
@@ -120,6 +122,7 @@ typedef struct {
 // included below the App typedef (it depends on App* in its API).
 typedef struct rx_handle rx_handle_t;
 typedef struct PassiveHistory PassiveHistory;
+typedef void (*startup_retry_callback_t)(void* context);
 
 typedef enum {
     PassiveNeighborSourceLive,
@@ -162,6 +165,8 @@ typedef struct {
     // alt thread's DORA loop can break out before
     // its 10 s timeout fires.
     bool open_pcap_after_sniff;
+    bool read_pcap_from_sniffer;
+    bool pcap_browser_started;
     volatile bool sniffer_stop;
     volatile bool sniffer_finished;
     bool sniffer_link_error;
@@ -174,6 +179,7 @@ typedef struct {
     uint8_t passive_saved_mac[6];
     uint8_t passive_saved_protocol;
     volatile bool passive_capture_operational;
+    startup_retry_callback_t startup_retry_callback;
     volatile bool arpspoofing_stop;
     volatile bool arp_scanner_stop;
     volatile bool os_detector_stop;

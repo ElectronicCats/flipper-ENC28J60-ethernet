@@ -1,5 +1,8 @@
 #include "app_user.h"
 #include "../modules/os_detector_module.h"
+#include "../libraries/functions/startup_guard.h"
+
+#define OS_DETECTOR_STACK_BYTES 5120U
 
 static const char* os_texts[] = {"WINDOWS", "LINUX", "IOS/MAC OS", "NO DETECTED"};
 
@@ -92,7 +95,10 @@ static void os_detector_draw_results(App* app, uint32_t value) {
     view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
 }
 
-static void os_detector_start(App* app) {
+static void os_detector_start(void* context) {
+    App* app = context;
+    startup_guard_clear(app);
+
     if(!app->is_dora) {
         draw_dora_needed(app);
         scene_manager_set_scene_state(
@@ -122,7 +128,33 @@ static void os_detector_start(App* app) {
     }
 
     app->os_detector_stop = false;
-    FuriThread* thread = furi_thread_alloc_ex("Detect OS", 5 * 1024, os_detector_thread, app);
+    if(!startup_guard_thread_slot_available(app, os_detector_start)) {
+        scene_manager_set_scene_state(
+            app->scene_manager, app_scene_os_detector_option, OS_DETECTOR_SCENE_WIDGET);
+        return;
+    }
+
+    StartupGuardRequirements requirements = startup_guard_thread_requirements(
+        OS_DETECTOR_STACK_BYTES,
+        STARTUP_GUARD_SCANNER_SEMAPHORE_HEAP_BYTES,
+        STARTUP_GUARD_SCANNER_SEMAPHORE_HEAP_BYTES);
+    if(startup_guard_check(requirements) != StartupGuardReady) {
+        scene_manager_set_scene_state(
+            app->scene_manager, app_scene_os_detector_option, OS_DETECTOR_SCENE_WIDGET);
+        startup_guard_show_low_memory(
+            app, "Feature unavailable\nClose active services\nand try again", os_detector_start);
+        return;
+    }
+
+    FuriThread* thread =
+        furi_thread_alloc_ex("Detect OS", OS_DETECTOR_STACK_BYTES, os_detector_thread, app);
+    if(!thread) {
+        scene_manager_set_scene_state(
+            app->scene_manager, app_scene_os_detector_option, OS_DETECTOR_SCENE_WIDGET);
+        startup_guard_show_low_memory(
+            app, "Feature unavailable\nClose active services\nand try again", os_detector_start);
+        return;
+    }
     if(!app_thread_claim(app, AppThreadOwnerOsDetector, thread)) return;
 
     scene_manager_set_scene_state(
@@ -154,6 +186,7 @@ void variable_list_os_detector_callback(void* context, uint32_t index) {
 
 void app_scene_os_detector_on_enter(void* context) {
     App* app = context;
+    startup_guard_clear(app);
     arp_load_last_scan(app);
 
     submenu_reset(app->submenu);
@@ -240,6 +273,7 @@ bool app_scene_os_detector_on_event(void* context, SceneManagerEvent event) {
 
 void app_scene_os_detector_on_exit(void* context) {
     App* app = context;
+    startup_guard_clear(app);
     if(app_thread_is_owned(app, AppThreadOwnerOsDetector)) {
         app->os_detector_stop = true;
         app_thread_join_and_free(app, AppThreadOwnerOsDetector);

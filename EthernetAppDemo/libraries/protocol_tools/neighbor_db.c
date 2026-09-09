@@ -19,28 +19,32 @@ static size_t neighbor_db_heap_block_size(size_t payload_size) {
            ~(NEIGHBOR_DB_HEAP_ALIGNMENT_BYTES - 1U);
 }
 
-static bool neighbor_db_has_allocation_headroom(void) {
+static NeighborDbAcquireResult neighbor_db_has_allocation_headroom(void) {
     const size_t payload_size = NEIGHBOR_DB_MAX_ENTRIES * sizeof(neighbor_t);
     const size_t allocation_block = neighbor_db_heap_block_size(payload_size);
     const size_t required_total = allocation_block + NEIGHBOR_DB_POST_ALLOC_RESERVE_BYTES;
     const size_t required_max_block = allocation_block;
 
-    return memmgr_get_free_heap() >= required_total &&
-           memmgr_heap_get_max_free_block() >= required_max_block;
+    if(memmgr_get_free_heap() < required_total) {
+        return NeighborDbAcquireInsufficientTotal;
+    }
+    if(memmgr_heap_get_max_free_block() < required_max_block) {
+        return NeighborDbAcquireInsufficientBlock;
+    }
+    return NeighborDbAcquireReady;
 }
 
-bool neighbor_db_acquire(void) {
+NeighborDbAcquireResult neighbor_db_acquire(void) {
     if(neighbors) {
-        return true;
+        return NeighborDbAcquireReady;
     }
 
     /* calloc() is fatal on OOM in the target firmware, so guard it first. */
-    if(!neighbor_db_has_allocation_headroom()) {
-        return false;
-    }
+    NeighborDbAcquireResult result = neighbor_db_has_allocation_headroom();
+    if(result != NeighborDbAcquireReady) return result;
 
     neighbors = calloc(NEIGHBOR_DB_MAX_ENTRIES, sizeof(neighbor_t));
-    return neighbors != NULL;
+    return neighbors ? NeighborDbAcquireReady : NeighborDbAcquireAllocationFailed;
 }
 
 void neighbor_db_release(void) {

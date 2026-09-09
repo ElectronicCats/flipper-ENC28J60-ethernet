@@ -94,7 +94,14 @@ typedef struct {
 
 } neighbor_t;
 
-bool neighbor_db_acquire(void);
+typedef enum {
+    NeighborDbAcquireReady,
+    NeighborDbAcquireInsufficientTotal,
+    NeighborDbAcquireInsufficientBlock,
+    NeighborDbAcquireAllocationFailed,
+} NeighborDbAcquireResult;
+
+NeighborDbAcquireResult neighbor_db_acquire(void);
 
 void neighbor_db_release(void);
 

@@ -1,4 +1,7 @@
 #include "../app_user.h"
+#include "../libraries/functions/startup_guard.h"
+
+#define GET_IP_STACK_BYTES 4096U
 
 uint8_t router_ip[4] = {192, 168, 0, 1};
 
@@ -41,10 +44,10 @@ static int32_t get_ip_dora_thread(void* context) {
 }
 
 // Function for the testing scene on enter
-void app_scene_get_ip_scene_on_enter(void* context) {
+static void get_ip_start(void* context) {
     App* app = (App*)context;
 
-    // Reset the widget and switch view
+    startup_guard_clear(app);
     widget_reset(app->widget);
 
     // Start ethernet
@@ -54,13 +57,28 @@ void app_scene_get_ip_scene_on_enter(void* context) {
     }
 
     if(app->enc28j60_connected) {
+        if(!startup_guard_thread_slot_available(app, get_ip_start)) return;
+
+        StartupGuardRequirements requirements =
+            startup_guard_thread_requirements(GET_IP_STACK_BYTES, 0U, 0U);
+        if(startup_guard_check(requirements) != StartupGuardReady) {
+            startup_guard_show_low_memory(
+                app, "Feature unavailable\nClose active services\nand try again", get_ip_start);
+            return;
+        }
+
         // F0.4e — replaced flag_dhcp_dora signal-to-worker with a
         // dedicated alt thread that runs DORA directly.
         // F0.5f — clear the cancel flag before starting; on_exit may
         // have left it set from a prior cancelled run.
         app->dora_cancel = false;
         FuriThread* thread =
-            furi_thread_alloc_ex("Get IP DORA", 4 * 1024, get_ip_dora_thread, app);
+            furi_thread_alloc_ex("Get IP DORA", GET_IP_STACK_BYTES, get_ip_dora_thread, app);
+        if(!thread) {
+            startup_guard_show_low_memory(
+                app, "Feature unavailable\nClose active services\nand try again", get_ip_start);
+            return;
+        }
         if(app_thread_claim(app, AppThreadOwnerGetIp, thread)) {
             furi_thread_start(thread);
         }
@@ -70,6 +88,10 @@ void app_scene_get_ip_scene_on_enter(void* context) {
 
     // Change view
     view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
+}
+
+void app_scene_get_ip_scene_on_enter(void* context) {
+    get_ip_start(context);
 }
 
 // Function for the testing scene on event
@@ -102,6 +124,7 @@ bool app_scene_get_ip_scene_on_event(void* context, SceneManagerEvent event) {
 // Function for the testing scene on exit
 void app_scene_get_ip_scene_on_exit(void* context) {
     App* app = (App*)context;
+    startup_guard_clear(app);
     if(app_thread_is_owned(app, AppThreadOwnerGetIp)) {
         // F0.5f — request cancel before join. The DORA loop polls this
         // flag every iteration and breaks out early, so join completes

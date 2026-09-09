@@ -1,4 +1,13 @@
 #include "../app_user.h"
+#include "../libraries/functions/startup_guard.h"
+
+#define ARP_SPOOFING_STACK_BYTES 10240U
+
+typedef enum {
+    ArpSpoofingEventDeviceUnavailable = 1,
+    ArpSpoofingEventLinkUnavailable,
+    ArpSpoofingEventDoraNeeded,
+} ArpSpoofingCustomEvent;
 
 /**
  * In this file you will find the ARP Spoofing scene and it worker,
@@ -10,20 +19,83 @@
 int32_t arpspoofing_thread(void* context);
 
 // ArpSpoofing on enter
-void app_scene_arp_spoofing_on_enter(void* context) {
+static void arpspoofing_start(void* context) {
     App* app = (App*)context;
+    startup_guard_clear(app);
+    widget_reset(app->widget);
+
+    bool started = app->enc28j60_connected;
+    if(!started) {
+        started = enc28j60_start(app->ethernet) != 0xff;
+        app->enc28j60_connected = started;
+    }
+    if(!started) {
+        draw_device_no_connected(app);
+        view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
+        return;
+    }
+    if(!is_the_network_connected(app->ethernet)) {
+        draw_network_not_connected(app);
+        view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
+        return;
+    }
+    if(!app->is_dora) {
+        draw_dora_needed(app);
+        view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
+        return;
+    }
+
+    if(!startup_guard_thread_slot_available(app, arpspoofing_start)) return;
+
+    StartupGuardRequirements requirements =
+        startup_guard_thread_requirements(ARP_SPOOFING_STACK_BYTES, 0U, 0U);
+    if(startup_guard_check(requirements) != StartupGuardReady) {
+        startup_guard_show_low_memory(
+            app, "Feature unavailable\nClose active services\nand try again", arpspoofing_start);
+        return;
+    }
+
     app->arpspoofing_stop = false;
     // F0.4c — no thread_suspend; arpspoofing_thread is pure TX with
     // scanner_cancel_requested.
-    FuriThread* thread = furi_thread_alloc_ex("ArpSpoofing", 10 * 1024, arpspoofing_thread, app);
+    FuriThread* thread =
+        furi_thread_alloc_ex("ArpSpoofing", ARP_SPOOFING_STACK_BYTES, arpspoofing_thread, app);
+    if(!thread) {
+        startup_guard_show_low_memory(
+            app, "Feature unavailable\nClose active services\nand try again", arpspoofing_start);
+        return;
+    }
     if(app_thread_claim(app, AppThreadOwnerArpSpoofing, thread)) {
         furi_thread_start(thread);
     }
 }
 
+void app_scene_arp_spoofing_on_enter(void* context) {
+    arpspoofing_start(context);
+}
+
 // ArpSpoofing on event
 bool app_scene_arp_spoofing_on_event(void* context, SceneManagerEvent event) {
     App* app = (App*)context;
+
+    if(event.type == SceneManagerEventTypeCustom) {
+        app_thread_join_and_free(app, AppThreadOwnerArpSpoofing);
+        switch(event.event) {
+        case ArpSpoofingEventDeviceUnavailable:
+            draw_device_no_connected(app);
+            break;
+        case ArpSpoofingEventLinkUnavailable:
+            draw_network_not_connected(app);
+            break;
+        case ArpSpoofingEventDoraNeeded:
+            draw_dora_needed(app);
+            break;
+        default:
+            return false;
+        }
+        view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
+        return true;
+    }
 
     if(event.type == SceneManagerEventTypeBack) {
         app->arpspoofing_stop = true;
@@ -39,6 +111,8 @@ bool app_scene_arp_spoofing_on_event(void* context, SceneManagerEvent event) {
 // ArpSpoofing on exit
 void app_scene_arp_spoofing_on_exit(void* context) {
     App* app = (App*)context;
+
+    startup_guard_clear(app);
 
     if(app_thread_is_owned(app, AppThreadOwnerArpSpoofing)) {
         app->arpspoofing_stop = true;
@@ -128,12 +202,12 @@ int32_t arpspoofing_thread(void* context) {
     bool program_loop = start; // This variable will help for the loop
 
     if(!is_the_network_connected(ethernet) && start) {
-        draw_network_not_connected(app);
+        view_dispatcher_send_custom_event(app->view_dispatcher, ArpSpoofingEventLinkUnavailable);
         program_loop = false;
     }
 
     if(!app->is_dora) {
-        draw_dora_needed(app);
+        view_dispatcher_send_custom_event(app->view_dispatcher, ArpSpoofingEventDoraNeeded);
         program_loop = false;
     }
 
@@ -205,7 +279,7 @@ int32_t arpspoofing_thread(void* context) {
 
     // If the device is not connected
     if(!start) {
-        draw_device_no_connected(app);
+        view_dispatcher_send_custom_event(app->view_dispatcher, ArpSpoofingEventDeviceUnavailable);
     }
 
     scanner_session_deinit(&scanner);

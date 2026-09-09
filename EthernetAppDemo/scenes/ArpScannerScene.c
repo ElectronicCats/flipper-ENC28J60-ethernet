@@ -1,4 +1,7 @@
 #include "../app_user.h"
+#include "../libraries/functions/startup_guard.h"
+
+#define ARP_SCANNER_STACK_BYTES 10240U
 
 typedef enum {
     SET_IP = 0,
@@ -11,6 +14,9 @@ typedef enum {
     ArpEventScanFinished = 1,
     ArpEventSelectTargetIP,
     ArpEventScanCancelled,
+    ArpEventScannerMemoryTotal,
+    ArpEventScannerMemoryBlock,
+    ArpEventScannerMemoryAllocation,
 } ArpCustomEvent;
 
 /**
@@ -215,7 +221,27 @@ int32_t arp_scanner_thread(void* context);
 void build_ip_submenu(App* app, uint32_t selection);
 
 // Function to set the thread and the view
+void draw_the_arp_list(App* app);
+
+static void arp_scanner_retry(void* context) {
+    draw_the_arp_list(context);
+}
+
+static void arp_scanner_show_memory_error(App* app, uint32_t event) {
+    const char* reason = "Scanner unavailable\nAllocation failed\nTry again";
+    if(event == ArpEventScannerMemoryTotal) {
+        reason = "Scanner unavailable\nTotal heap unavailable\nClose active services";
+    } else if(event == ArpEventScannerMemoryBlock) {
+        reason = "Scanner unavailable\nContiguous block unavailable\nClose active services";
+    }
+    startup_guard_show_low_memory(app, reason, arp_scanner_retry);
+}
+
+// Function to set the thread and the view
 void draw_the_arp_list(App* app) {
+    startup_guard_clear(app);
+    widget_reset(app->widget);
+
     enc28j60_t* ethernet = app->ethernet;
 
     bool start = app->enc28j60_connected;
@@ -239,7 +265,27 @@ void draw_the_arp_list(App* app) {
 
     app->arp_scanner_stop = false;
 
-    FuriThread* thread = furi_thread_alloc_ex("ARP SCANNER", 10 * 1024, arp_scanner_thread, app);
+    if(!startup_guard_thread_slot_available(app, arp_scanner_retry)) return;
+
+    StartupGuardRequirements requirements = startup_guard_thread_requirements(
+        ARP_SCANNER_STACK_BYTES,
+        STARTUP_GUARD_SCANNER_SEMAPHORE_HEAP_BYTES,
+        STARTUP_GUARD_SCANNER_SEMAPHORE_HEAP_BYTES);
+    StartupGuardResult guard_result = startup_guard_check(requirements);
+    if(guard_result != StartupGuardReady) {
+        arp_scanner_show_memory_error(
+            app,
+            guard_result == StartupGuardInsufficientTotal ? ArpEventScannerMemoryTotal :
+                                                            ArpEventScannerMemoryBlock);
+        return;
+    }
+
+    FuriThread* thread =
+        furi_thread_alloc_ex("ARP SCANNER", ARP_SCANNER_STACK_BYTES, arp_scanner_thread, app);
+    if(!thread) {
+        arp_scanner_show_memory_error(app, ArpEventScannerMemoryAllocation);
+        return;
+    }
     if(!app_thread_claim(app, AppThreadOwnerArpScanner, thread)) return;
 
     furi_thread_start(thread);
@@ -318,6 +364,13 @@ bool app_scene_arp_scanner_on_event(void* context, SceneManagerEvent event) {
     }
 
     if(event.type == SceneManagerEventTypeCustom) {
+        if(event.event >= ArpEventScannerMemoryTotal &&
+           event.event <= ArpEventScannerMemoryAllocation) {
+            finished_arp_thread(app);
+            arp_scanner_show_memory_error(app, event.event);
+            return true;
+        }
+
         if(event.event == ArpEventScanFinished || event.event == ArpEventScanCancelled) {
             bool cancelled = event.event == ArpEventScanCancelled || app->arp_scanner_stop;
             finished_arp_thread(app);
@@ -341,6 +394,8 @@ bool app_scene_arp_scanner_on_event(void* context, SceneManagerEvent event) {
 // function on exit for the arp scanner scene
 void app_scene_arp_scanner_on_exit(void* context) {
     App* app = (App*)context;
+
+    startup_guard_clear(app);
 
     if(app_thread_is_owned(app, AppThreadOwnerArpScanner)) {
         app->arp_scanner_stop = true;
@@ -581,16 +636,25 @@ int32_t arp_scanner_thread(void* context) {
         &app->ip_counter,
         app->scan_params.range_ip);
 
+    scanner_wait_failure_t wait_failure = scanner_session_get_last_wait_failure(&scanner);
+
     bool cancelled = scanner.cancelled || app->arp_scanner_stop;
 
-    if(!cancelled) {
+    if(!cancelled && wait_failure == ScannerWaitFailureNone) {
         arp_save_last_scan(app);
     }
 
     scanner_session_deinit(&scanner);
 
-    view_dispatcher_send_custom_event(
-        app->view_dispatcher, cancelled ? ArpEventScanCancelled : ArpEventScanFinished);
+    uint32_t event = cancelled ? ArpEventScanCancelled : ArpEventScanFinished;
+    if(wait_failure == ScannerWaitFailureNoMemoryTotal) {
+        event = ArpEventScannerMemoryTotal;
+    } else if(wait_failure == ScannerWaitFailureNoMemoryBlock) {
+        event = ArpEventScannerMemoryBlock;
+    } else if(wait_failure == ScannerWaitFailureNoMemoryAllocation) {
+        event = ArpEventScannerMemoryAllocation;
+    }
+    view_dispatcher_send_custom_event(app->view_dispatcher, event);
 
     return 0;
 }

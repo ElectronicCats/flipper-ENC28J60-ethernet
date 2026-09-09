@@ -1,4 +1,7 @@
 #include "../app_user.h"
+#include "../libraries/functions/startup_guard.h"
+
+#define SNIFFER_STACK_BYTES 4096U
 
 // Per-session sniffer state. Lives in App.thread_alternative-allocated
 // stack of the alt thread; a pointer to it is passed as the rx_dispatch
@@ -14,6 +17,10 @@ typedef struct {
 typedef enum {
     SnifferEventStop,
     SnifferEventOpenPcap,
+    SnifferEventDeviceUnavailable,
+    SnifferEventLinkUnavailable,
+    SnifferEventStorageUnavailable,
+    SnifferEventReceiverUnavailable,
 } SnifferCustomEvent;
 
 // Forward decls
@@ -84,6 +91,15 @@ void draw_count_packets(App* app, uint32_t packets) {
 // Runs in dispatcher thread context, so SD writes block other handlers
 // briefly. Tolerable for typical LAN traffic; bursty sniff may drop
 // frames at the chip RX FIFO if writes can't keep up — known limit.
+static void sniffer_draw_resource_error(App* app, const char* message) {
+    widget_reset(app->widget);
+    widget_add_string_element(
+        app->widget, 64, 16, AlignCenter, AlignCenter, FontPrimary, "Sniffer unavailable");
+    widget_add_string_multiline_element(
+        app->widget, 64, 39, AlignCenter, AlignCenter, FontSecondary, message);
+    view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
+}
+
 static bool sniffer_predicate(const uint8_t* frame, uint16_t len, void* ctx) {
     UNUSED(frame);
     UNUSED(len);
@@ -99,9 +115,10 @@ static void sniffer_handler(const uint8_t* frame, uint16_t len, void* ctx) {
 }
 
 // Function for the testing scene on enter
-void app_scene_sniffer_on_enter(void* context) {
+static void sniffer_start(void* context) {
     App* app = (App*)context;
 
+    startup_guard_clear(app);
     widget_reset(app->widget);
     view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
 
@@ -110,12 +127,43 @@ void app_scene_sniffer_on_enter(void* context) {
     app->sniffer_finished = false;
     app->sniffer_link_error = false;
 
+    if(!app->enc28j60_connected) {
+        draw_device_no_connected(app);
+        app->sniffer_link_error = true;
+        return;
+    }
+    if(!is_link_up(app->ethernet)) {
+        draw_network_not_connected(app);
+        app->sniffer_link_error = true;
+        return;
+    }
+
+    if(!startup_guard_thread_slot_available(app, sniffer_start)) return;
+
+    StartupGuardRequirements requirements =
+        startup_guard_thread_requirements(SNIFFER_STACK_BYTES, 0U, 0U);
+    if(startup_guard_check(requirements) != StartupGuardReady) {
+        startup_guard_show_low_memory(
+            app, "Feature unavailable\nClose active services\nand try again", sniffer_start);
+        return;
+    }
+
     // Allocate and start the UI thread (does no chip I/O — only counter
     // display + back-button poll).
-    FuriThread* thread = furi_thread_alloc_ex("Sniffer Therad", 4 * 1024, sniffer_thread, app);
+    FuriThread* thread =
+        furi_thread_alloc_ex("Sniffer Therad", SNIFFER_STACK_BYTES, sniffer_thread, app);
+    if(!thread) {
+        startup_guard_show_low_memory(
+            app, "Feature unavailable\nClose active services\nand try again", sniffer_start);
+        return;
+    }
     if(app_thread_claim(app, AppThreadOwnerSniffer, thread)) {
         furi_thread_start(thread);
     }
+}
+
+void app_scene_sniffer_on_enter(void* context) {
+    sniffer_start(context);
 }
 
 // Function for the testing scene on event
@@ -123,6 +171,12 @@ bool app_scene_sniffer_on_event(void* context, SceneManagerEvent event) {
     App* app = context;
 
     if(event.type == SceneManagerEventTypeBack) {
+        if(!app_thread_is_owned(app, AppThreadOwnerSniffer)) {
+            startup_guard_clear(app);
+            scene_manager_previous_scene(app->scene_manager);
+            return true;
+        }
+
         if(app->sniffer_link_error) {
             app->sniffer_link_error = false;
             scene_manager_previous_scene(app->scene_manager);
@@ -145,7 +199,31 @@ bool app_scene_sniffer_on_event(void* context, SceneManagerEvent event) {
 
         if(event.event == SnifferEventOpenPcap) {
             app_thread_join_and_free(app, AppThreadOwnerSniffer);
+            app->read_pcap_from_sniffer = true;
             scene_manager_next_scene(app->scene_manager, app_scene_read_pcap_option);
+            return true;
+        }
+
+        if(event.event >= SnifferEventDeviceUnavailable &&
+           event.event <= SnifferEventReceiverUnavailable) {
+            app_thread_join_and_free(app, AppThreadOwnerSniffer);
+            app->sniffer_link_error = true;
+            switch(event.event) {
+            case SnifferEventDeviceUnavailable:
+                draw_device_no_connected(app);
+                break;
+            case SnifferEventLinkUnavailable:
+                draw_network_not_connected(app);
+                break;
+            case SnifferEventStorageUnavailable:
+                sniffer_draw_resource_error(app, "Storage unavailable");
+                break;
+            case SnifferEventReceiverUnavailable:
+                sniffer_draw_resource_error(app, "Receiver unavailable");
+                break;
+            default:
+                break;
+            }
             return true;
         }
     }
@@ -157,6 +235,7 @@ bool app_scene_sniffer_on_event(void* context, SceneManagerEvent event) {
 void app_scene_sniffer_on_exit(void* context) {
     App* app = (App*)context;
 
+    startup_guard_clear(app);
     app_thread_join_and_free(app, AppThreadOwnerSniffer);
 }
 
@@ -189,14 +268,13 @@ int32_t sniffer_thread(void* context) {
     bool start = app->enc28j60_connected;
     if(!start) {
         app->sniffer_link_error = true;
-
-        draw_device_no_connected(app);
+        view_dispatcher_send_custom_event(app->view_dispatcher, SnifferEventDeviceUnavailable);
         return 0;
     }
 
     if(!is_link_up(ethernet)) {
         app->sniffer_link_error = true;
-        draw_network_not_connected(app);
+        view_dispatcher_send_custom_event(app->view_dispatcher, SnifferEventLinkUnavailable);
         return 0;
     }
 
@@ -214,6 +292,7 @@ int32_t sniffer_thread(void* context) {
     // counter still ticked up, but every frame was lost (no file).
     if(!pcap_capture_init(app->file, furi_string_get_cstr(app->path))) {
         disable_promiscuous(ethernet);
+        view_dispatcher_send_custom_event(app->view_dispatcher, SnifferEventStorageUnavailable);
         return 0;
     }
 
@@ -223,6 +302,7 @@ int32_t sniffer_thread(void* context) {
         // Out of handler slots. Cleanup and exit.
         pcap_close(app->file);
         disable_promiscuous(ethernet);
+        view_dispatcher_send_custom_event(app->view_dispatcher, SnifferEventReceiverUnavailable);
         return 0;
     }
 

@@ -235,6 +235,8 @@ void arp_scan_network(
                1000)) {
             memcpy(list[counter].ip, start_list, 4);
             counter++;
+        } else if(scanner_session_get_last_wait_failure(scanner) != ScannerWaitFailureNone) {
+            break;
         }
 
         if(scanner->cancelled) break;

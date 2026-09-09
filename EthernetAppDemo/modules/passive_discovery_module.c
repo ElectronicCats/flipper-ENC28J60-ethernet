@@ -3,6 +3,7 @@
 #include "cdp_module.h"
 #include "eapol_module.h"
 #include "lldp_module.h"
+#include "../libraries/functions/startup_guard.h"
 #include <stdio.h>
 
 #define PASSIVE_DISCOVERY_STACK_BYTES 3072U
@@ -23,25 +24,6 @@
  * consumes the same block that must subsequently hold the stack. The scanner
  * semaphore is checked separately immediately before each wait.
  */
-#define PASSIVE_HEAP_ALIGNMENT_BYTES         8U
-#define PASSIVE_HEAP_BLOCK_HEADER_BYTES      8U
-#define PASSIVE_THREAD_METADATA_HEAP_BYTES   328U
-#define PASSIVE_SCANNER_SEMAPHORE_HEAP_BYTES 96U
-#define PASSIVE_STARTUP_RESERVE_BYTES        1024U
-#define PASSIVE_HEAP_ALIGN_UP(value) \
-    (((value) + PASSIVE_HEAP_ALIGNMENT_BYTES - 1U) & ~(PASSIVE_HEAP_ALIGNMENT_BYTES - 1U))
-#define PASSIVE_THREAD_STACK_HEAP_BYTES \
-    PASSIVE_HEAP_ALIGN_UP(PASSIVE_DISCOVERY_STACK_BYTES + PASSIVE_HEAP_BLOCK_HEADER_BYTES)
-#define PASSIVE_THREAD_HEAP_BYTES \
-    (PASSIVE_THREAD_METADATA_HEAP_BYTES + PASSIVE_THREAD_STACK_HEAP_BYTES)
-#define PASSIVE_STARTUP_REQUIRED_TOTAL_BYTES                            \
-    (PASSIVE_THREAD_HEAP_BYTES + PASSIVE_SCANNER_SEMAPHORE_HEAP_BYTES + \
-     PASSIVE_STARTUP_RESERVE_BYTES)
-#define PASSIVE_STARTUP_REQUIRED_MAX_BLOCK_BYTES PASSIVE_THREAD_HEAP_BYTES
-#define PASSIVE_WAIT_REQUIRED_TOTAL_BYTES \
-    (PASSIVE_SCANNER_SEMAPHORE_HEAP_BYTES + PASSIVE_STARTUP_RESERVE_BYTES)
-#define PASSIVE_WAIT_REQUIRED_MAX_BLOCK_BYTES PASSIVE_SCANNER_SEMAPHORE_HEAP_BYTES
-
 // Forward declaration of the thread worker function
 static int32_t passive_discovery_thread(void* context);
 
@@ -133,13 +115,20 @@ static bool
 }
 
 static bool passive_discovery_has_startup_headroom(void) {
-    return memmgr_get_free_heap() >= PASSIVE_STARTUP_REQUIRED_TOTAL_BYTES &&
-           memmgr_heap_get_max_free_block() >= PASSIVE_STARTUP_REQUIRED_MAX_BLOCK_BYTES;
+    StartupGuardRequirements requirements = startup_guard_thread_requirements(
+        PASSIVE_DISCOVERY_STACK_BYTES,
+        STARTUP_GUARD_SCANNER_SEMAPHORE_HEAP_BYTES,
+        STARTUP_GUARD_SCANNER_SEMAPHORE_HEAP_BYTES);
+    return startup_guard_check(requirements) == StartupGuardReady;
 }
 
 static bool passive_discovery_has_wait_headroom(void) {
-    return memmgr_get_free_heap() >= PASSIVE_WAIT_REQUIRED_TOTAL_BYTES &&
-           memmgr_heap_get_max_free_block() >= PASSIVE_WAIT_REQUIRED_MAX_BLOCK_BYTES;
+    StartupGuardRequirements requirements = {
+        .required_total_free =
+            STARTUP_GUARD_SCANNER_SEMAPHORE_HEAP_BYTES + STARTUP_GUARD_RESERVE_BYTES,
+        .required_max_block = STARTUP_GUARD_SCANNER_SEMAPHORE_HEAP_BYTES,
+    };
+    return startup_guard_check(requirements) == StartupGuardReady;
 }
 
 static void passive_discovery_rx_registered(void* context) {
@@ -217,7 +206,7 @@ static int32_t passive_discovery_thread(void* context) {
             500);
 
         if(!wait_state.registered) {
-            if(scanner_session_get_last_wait_failure(&session) == ScannerWaitFailureNoMemory) {
+            if(scanner_wait_failure_is_memory(scanner_session_get_last_wait_failure(&session))) {
                 exit_event = PassiveDiscoveryEventScannerLowMemory;
             } else {
                 exit_event = PassiveDiscoveryEventRxUnavailable;
@@ -263,6 +252,9 @@ PassiveDiscoveryStartResult passive_discovery_module_start(App* app) {
     app->passive_capture_operational = false;
     FuriThread* thread = furi_thread_alloc_ex(
         "Passive Discovery", PASSIVE_DISCOVERY_STACK_BYTES, passive_discovery_thread, app);
+    if(!thread) {
+        return PassiveDiscoveryStartWorkerLowMemory;
+    }
     if(!app_thread_claim(app, AppThreadOwnerPassiveDiscovery, thread)) {
         return PassiveDiscoveryStartOwnerBusy;
     }

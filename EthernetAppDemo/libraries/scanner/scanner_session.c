@@ -4,6 +4,7 @@
 #include "../../modules/arp_module.h"
 #include "../protocol_tools/ethernet_protocol.h"
 #include "../protocol_tools/arp.h"
+#include "../functions/startup_guard.h"
 
 void scanner_session_init(scanner_session_t* s, App* app) {
     furi_assert(s);
@@ -39,6 +40,12 @@ void scanner_session_set_cancel_flag(scanner_session_t* s, volatile const bool* 
 scanner_wait_failure_t scanner_session_get_last_wait_failure(const scanner_session_t* s) {
     furi_assert(s);
     return s->last_wait_failure;
+}
+
+bool scanner_wait_failure_is_memory(scanner_wait_failure_t failure) {
+    return failure == ScannerWaitFailureNoMemoryTotal ||
+           failure == ScannerWaitFailureNoMemoryBlock ||
+           failure == ScannerWaitFailureNoMemoryAllocation;
 }
 
 void scanner_send_packet_trigger(void* ctx) {
@@ -191,6 +198,19 @@ bool scanner_wait_for_packet(
     *len_out = 0;
     s->last_wait_failure = ScannerWaitFailureNone;
 
+    StartupGuardRequirements semaphore_requirements = {
+        .required_total_free =
+            STARTUP_GUARD_SCANNER_SEMAPHORE_HEAP_BYTES + STARTUP_GUARD_RESERVE_BYTES,
+        .required_max_block = STARTUP_GUARD_SCANNER_SEMAPHORE_HEAP_BYTES,
+    };
+    StartupGuardResult semaphore_guard = startup_guard_check(semaphore_requirements);
+    if(semaphore_guard != StartupGuardReady) {
+        s->last_wait_failure = semaphore_guard == StartupGuardInsufficientTotal ?
+                                   ScannerWaitFailureNoMemoryTotal :
+                                   ScannerWaitFailureNoMemoryBlock;
+        return false;
+    }
+
     scanner_wait_state_t state = {
         .user_pred = pred,
         .user_ctx = pred_ctx,
@@ -199,7 +219,7 @@ bool scanner_wait_for_packet(
         .matched = false,
     };
     if(!state.signal) {
-        s->last_wait_failure = ScannerWaitFailureNoMemory;
+        s->last_wait_failure = ScannerWaitFailureNoMemoryAllocation;
         return false;
     }
 
