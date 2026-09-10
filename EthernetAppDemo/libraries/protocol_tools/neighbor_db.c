@@ -1,4 +1,5 @@
 #include "neighbor_db.h"
+#include "../functions/startup_guard.h"
 
 static neighbor_t* neighbors = NULL;
 
@@ -19,32 +20,47 @@ static size_t neighbor_db_heap_block_size(size_t payload_size) {
            ~(NEIGHBOR_DB_HEAP_ALIGNMENT_BYTES - 1U);
 }
 
-static NeighborDbAcquireResult neighbor_db_has_allocation_headroom(void) {
+static NeighborDbAcquireResult
+    neighbor_db_has_allocation_headroom(StartupDiagnosticSnapshot* diagnostic) {
     const size_t payload_size = NEIGHBOR_DB_MAX_ENTRIES * sizeof(neighbor_t);
     const size_t allocation_block = neighbor_db_heap_block_size(payload_size);
-    const size_t required_total = allocation_block + NEIGHBOR_DB_POST_ALLOC_RESERVE_BYTES;
-    const size_t required_max_block = allocation_block;
+    const StartupGuardRequirements requirements = {
+        .required_total_free = allocation_block + NEIGHBOR_DB_POST_ALLOC_RESERVE_BYTES,
+        .required_max_block = allocation_block,
+    };
+    const StartupGuardResult guard_result =
+        startup_guard_check_capture(diagnostic, requirements, StartupDiagnosticBoundaryPassiveDb);
 
-    if(memmgr_get_free_heap() < required_total) {
-        return NeighborDbAcquireInsufficientTotal;
-    }
-    if(memmgr_heap_get_max_free_block() < required_max_block) {
-        return NeighborDbAcquireInsufficientBlock;
-    }
+    if(guard_result == StartupGuardInsufficientTotal) return NeighborDbAcquireInsufficientTotal;
+    if(guard_result == StartupGuardInsufficientBlock) return NeighborDbAcquireInsufficientBlock;
     return NeighborDbAcquireReady;
 }
 
-NeighborDbAcquireResult neighbor_db_acquire(void) {
+NeighborDbAcquireResult neighbor_db_acquire(StartupDiagnosticSnapshot* diagnostic) {
+    furi_assert(diagnostic);
+
     if(neighbors) {
+        startup_guard_diagnostic_clear(diagnostic);
         return NeighborDbAcquireReady;
     }
 
     /* calloc() is fatal on OOM in the target firmware, so guard it first. */
-    NeighborDbAcquireResult result = neighbor_db_has_allocation_headroom();
+    NeighborDbAcquireResult result = neighbor_db_has_allocation_headroom(diagnostic);
     if(result != NeighborDbAcquireReady) return result;
 
     neighbors = calloc(NEIGHBOR_DB_MAX_ENTRIES, sizeof(neighbor_t));
-    return neighbors ? NeighborDbAcquireReady : NeighborDbAcquireAllocationFailed;
+    if(!neighbors) {
+        const size_t allocation_block =
+            neighbor_db_heap_block_size(NEIGHBOR_DB_MAX_ENTRIES * sizeof(neighbor_t));
+        const StartupGuardRequirements requirements = {
+            .required_total_free = allocation_block + NEIGHBOR_DB_POST_ALLOC_RESERVE_BYTES,
+            .required_max_block = allocation_block,
+        };
+        startup_guard_capture_allocation_failure(
+            diagnostic, requirements, StartupDiagnosticBoundaryPassiveDb);
+        return NeighborDbAcquireAllocationFailed;
+    }
+    return NeighborDbAcquireReady;
 }
 
 void neighbor_db_release(void) {

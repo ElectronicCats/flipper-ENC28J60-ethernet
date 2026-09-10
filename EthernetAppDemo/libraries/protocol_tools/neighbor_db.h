@@ -6,6 +6,8 @@
 
 #define NEIGHBOR_DB_MAX_ENTRIES 32
 
+typedef struct StartupDiagnosticSnapshot StartupDiagnosticSnapshot;
+
 /**
  * @brief Discovery protocols that identified a neighbor.
  *
@@ -101,7 +103,7 @@ typedef enum {
     NeighborDbAcquireAllocationFailed,
 } NeighborDbAcquireResult;
 
-NeighborDbAcquireResult neighbor_db_acquire(void);
+NeighborDbAcquireResult neighbor_db_acquire(StartupDiagnosticSnapshot* diagnostic);
 
 void neighbor_db_release(void);
 

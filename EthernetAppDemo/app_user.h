@@ -124,6 +124,38 @@ typedef struct rx_handle rx_handle_t;
 typedef struct PassiveHistory PassiveHistory;
 typedef void (*startup_retry_callback_t)(void* context);
 
+/*
+ * Temporary Stage 1 diagnostic snapshot. Values are captured at the guard
+ * boundary before any error-screen allocations can change the heap. Keep this
+ * fixed-size and App-owned so the diagnostic itself needs no heap allocation.
+ */
+typedef enum {
+    StartupDiagnosticResultNone = 0,
+    StartupDiagnosticResultTotal,
+    StartupDiagnosticResultBlock,
+    StartupDiagnosticResultAllocation,
+} StartupDiagnosticResult;
+
+typedef enum {
+    StartupDiagnosticBoundaryNone = 0,
+    StartupDiagnosticBoundaryPassiveDb,
+    StartupDiagnosticBoundaryReadPcapStart,
+    StartupDiagnosticBoundaryReadPcapPostIndex,
+    StartupDiagnosticBoundaryReadPcapWorker,
+    StartupDiagnosticBoundaryArpScannerWorker,
+    StartupDiagnosticBoundaryScannerWait,
+} StartupDiagnosticBoundary;
+
+typedef struct StartupDiagnosticSnapshot {
+    size_t free_heap;
+    size_t max_block;
+    size_t required_total;
+    size_t required_block;
+    uint8_t result;
+    uint8_t boundary;
+    bool valid;
+} StartupDiagnosticSnapshot;
+
 typedef enum {
     PassiveNeighborSourceLive,
     PassiveNeighborSourceSaved,
@@ -180,6 +212,7 @@ typedef struct {
     uint8_t passive_saved_protocol;
     volatile bool passive_capture_operational;
     startup_retry_callback_t startup_retry_callback;
+    StartupDiagnosticSnapshot startup_diagnostic;
     volatile bool arpspoofing_stop;
     volatile bool arp_scanner_stop;
     volatile bool os_detector_stop;

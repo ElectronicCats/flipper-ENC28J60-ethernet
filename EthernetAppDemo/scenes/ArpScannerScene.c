@@ -228,13 +228,8 @@ static void arp_scanner_retry(void* context) {
 }
 
 static void arp_scanner_show_memory_error(App* app, uint32_t event) {
-    const char* reason = "Scanner unavailable\nAllocation failed\nTry again";
-    if(event == ArpEventScannerMemoryTotal) {
-        reason = "Scanner unavailable\nTotal heap unavailable\nClose active services";
-    } else if(event == ArpEventScannerMemoryBlock) {
-        reason = "Scanner unavailable\nContiguous block unavailable\nClose active services";
-    }
-    startup_guard_show_low_memory(app, reason, arp_scanner_retry);
+    UNUSED(event);
+    startup_guard_show_diagnostic(app, arp_scanner_retry);
 }
 
 // Function to set the thread and the view
@@ -271,7 +266,8 @@ void draw_the_arp_list(App* app) {
         ARP_SCANNER_STACK_BYTES,
         STARTUP_GUARD_SCANNER_SEMAPHORE_HEAP_BYTES,
         STARTUP_GUARD_SCANNER_SEMAPHORE_HEAP_BYTES);
-    StartupGuardResult guard_result = startup_guard_check(requirements);
+    StartupGuardResult guard_result = startup_guard_check_capture(
+        &app->startup_diagnostic, requirements, StartupDiagnosticBoundaryArpScannerWorker);
     if(guard_result != StartupGuardReady) {
         arp_scanner_show_memory_error(
             app,
@@ -283,6 +279,8 @@ void draw_the_arp_list(App* app) {
     FuriThread* thread =
         furi_thread_alloc_ex("ARP SCANNER", ARP_SCANNER_STACK_BYTES, arp_scanner_thread, app);
     if(!thread) {
+        startup_guard_capture_allocation_failure(
+            &app->startup_diagnostic, requirements, StartupDiagnosticBoundaryArpScannerWorker);
         arp_scanner_show_memory_error(app, ArpEventScannerMemoryAllocation);
         return;
     }

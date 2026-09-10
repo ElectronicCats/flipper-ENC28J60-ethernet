@@ -32,8 +32,7 @@ static void read_pcap_show_error(App* app, const char* message) {
 }
 
 static void read_pcap_show_low_memory(App* app) {
-    startup_guard_show_low_memory(
-        app, "View packets unavailable\nClose active services\nand try again", read_pcap_start);
+    startup_guard_show_diagnostic(app, read_pcap_start);
 }
 
 static void read_pcap_start(void* context) {
@@ -61,7 +60,9 @@ static void read_pcap_start(void* context) {
      */
     StartupGuardRequirements full_requirements = startup_guard_thread_requirements(
         READ_PCAP_STACK_BYTES, index_block + render_text_block, index_block);
-    if(startup_guard_check(full_requirements) != StartupGuardReady) {
+    if(startup_guard_check_capture(
+           &app->startup_diagnostic, full_requirements, StartupDiagnosticBoundaryReadPcapStart) !=
+       StartupGuardReady) {
         read_pcap_show_low_memory(app);
         return;
     }
@@ -69,6 +70,8 @@ static void read_pcap_start(void* context) {
     furi_assert(app->packet_positions == NULL);
     app->packet_positions = malloc(index_payload);
     if(!app->packet_positions) {
+        startup_guard_capture_allocation_failure(
+            &app->startup_diagnostic, full_requirements, StartupDiagnosticBoundaryReadPcapStart);
         read_pcap_show_low_memory(app);
         return;
     }
@@ -84,7 +87,10 @@ static void read_pcap_start(void* context) {
     /* pcap_scan may run long enough for another service to change heap state. */
     StartupGuardRequirements remaining_requirements = startup_guard_thread_requirements(
         READ_PCAP_STACK_BYTES, render_text_block, render_text_block);
-    if(startup_guard_check(remaining_requirements) != StartupGuardReady) {
+    if(startup_guard_check_capture(
+           &app->startup_diagnostic,
+           remaining_requirements,
+           StartupDiagnosticBoundaryReadPcapPostIndex) != StartupGuardReady) {
         read_pcap_release_index(app);
         read_pcap_show_low_memory(app);
         return;
@@ -94,7 +100,10 @@ static void read_pcap_start(void* context) {
 
     StartupGuardRequirements thread_requirements =
         startup_guard_thread_requirements(READ_PCAP_STACK_BYTES, 0U, 0U);
-    if(startup_guard_check(thread_requirements) != StartupGuardReady) {
+    if(startup_guard_check_capture(
+           &app->startup_diagnostic,
+           thread_requirements,
+           StartupDiagnosticBoundaryReadPcapWorker) != StartupGuardReady) {
         read_pcap_release_index(app);
         read_pcap_show_low_memory(app);
         return;
@@ -103,6 +112,10 @@ static void read_pcap_start(void* context) {
     FuriThread* thread =
         furi_thread_alloc_ex("PCAP reader", READ_PCAP_STACK_BYTES, thread_read_pcaps, app);
     if(!thread) {
+        startup_guard_capture_allocation_failure(
+            &app->startup_diagnostic,
+            thread_requirements,
+            StartupDiagnosticBoundaryReadPcapWorker);
         read_pcap_release_index(app);
         read_pcap_show_low_memory(app);
         return;

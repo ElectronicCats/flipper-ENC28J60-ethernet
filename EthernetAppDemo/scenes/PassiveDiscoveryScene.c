@@ -1,6 +1,7 @@
 #include "../app_user.h"
 #include "../modules/lldp_module.h"
 #include "../modules/passive_discovery_module.h"
+#include "../libraries/functions/startup_guard.h"
 #include "../libraries/protocol_tools/neighbor_db.h"
 #include "../libraries/protocol_tools/passive_history.h"
 
@@ -140,6 +141,25 @@ static void passive_discovery_draw_status(App* app, const char* status, bool can
     }
 }
 
+static void passive_discovery_draw_db_diagnostic(App* app) {
+    char diagnostic[112];
+    startup_guard_format_diagnostic(&app->startup_diagnostic, diagnostic, sizeof(diagnostic));
+
+    widget_reset(app->widget);
+    widget_add_string_element(
+        app->widget,
+        64,
+        8,
+        AlignCenter,
+        AlignCenter,
+        FontPrimary,
+        startup_guard_diagnostic_title(&app->startup_diagnostic));
+    widget_add_string_multiline_element(
+        app->widget, 64, 34, AlignCenter, AlignCenter, FontSecondary, diagnostic);
+    widget_add_button_element(
+        app->widget, GuiButtonTypeCenter, "Retry", passive_discovery_button_callback, app);
+}
+
 static void passive_discovery_refresh(App* app) {
     switch(app->passive_discovery.state) {
     case PassiveDiscoveryStateConfig:
@@ -166,21 +186,9 @@ static void passive_discovery_refresh(App* app) {
         break;
 
     case PassiveDiscoveryStateErrorDbTotalMemory:
-
-        passive_discovery_draw_status(
-            app, "Not enough memory\nDatabase total unavailable\nClose active services", true);
-        break;
-
     case PassiveDiscoveryStateErrorDbBlockMemory:
-
-        passive_discovery_draw_status(
-            app, "Not enough memory\nDatabase block unavailable\nClose active services", true);
-        break;
-
     case PassiveDiscoveryStateErrorDbAllocation:
-
-        passive_discovery_draw_status(
-            app, "Not enough memory\nDatabase allocation failed\nTry again", true);
+        passive_discovery_draw_db_diagnostic(app);
         break;
 
     case PassiveDiscoveryStateErrorWorkerMemory:
@@ -372,7 +380,7 @@ static void
            app->passive_discovery.state == PassiveDiscoveryStateErrorLink ||
            app->passive_discovery.state == PassiveDiscoveryStateErrorRxUnavailable) {
             PassiveDiscoveryStartResult result;
-            NeighborDbAcquireResult db_result = neighbor_db_acquire();
+            NeighborDbAcquireResult db_result = neighbor_db_acquire(&app->startup_diagnostic);
             if(db_result != NeighborDbAcquireReady) {
                 if(db_result == NeighborDbAcquireInsufficientTotal) {
                     app->passive_discovery.state = PassiveDiscoveryStateErrorDbTotalMemory;

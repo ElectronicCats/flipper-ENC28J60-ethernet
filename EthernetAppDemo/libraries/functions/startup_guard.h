@@ -33,11 +33,32 @@ StartupGuardRequirements startup_guard_thread_requirements(
 
 StartupGuardResult startup_guard_check(StartupGuardRequirements requirements);
 
+StartupGuardResult startup_guard_check_capture(
+    StartupDiagnosticSnapshot* snapshot,
+    StartupGuardRequirements requirements,
+    StartupDiagnosticBoundary boundary);
+
+void startup_guard_capture_allocation_failure(
+    StartupDiagnosticSnapshot* snapshot,
+    StartupGuardRequirements requirements,
+    StartupDiagnosticBoundary boundary);
+
+void startup_guard_diagnostic_clear(StartupDiagnosticSnapshot* snapshot);
+
+const char* startup_guard_diagnostic_title(const StartupDiagnosticSnapshot* snapshot);
+
+void startup_guard_format_diagnostic(
+    const StartupDiagnosticSnapshot* snapshot,
+    char* output,
+    size_t output_size);
+
 bool startup_guard_thread_slot_available(App* app, startup_retry_callback_t retry_callback);
 
 void startup_guard_show_low_memory(
     App* app,
     const char* reason,
     startup_retry_callback_t retry_callback);
+
+void startup_guard_show_diagnostic(App* app, startup_retry_callback_t retry_callback);
 
 void startup_guard_clear(App* app);

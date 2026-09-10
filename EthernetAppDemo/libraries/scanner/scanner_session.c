@@ -11,6 +11,7 @@ void scanner_session_init(scanner_session_t* s, App* app) {
     furi_assert(app);
     furi_assert(app->ethernet);
 
+    s->app = app;
     s->ethernet = app->ethernet;
     s->view_dispatcher = app->view_dispatcher;
     s->ip_gateway = app->ip_gateway;
@@ -203,7 +204,8 @@ bool scanner_wait_for_packet(
             STARTUP_GUARD_SCANNER_SEMAPHORE_HEAP_BYTES + STARTUP_GUARD_RESERVE_BYTES,
         .required_max_block = STARTUP_GUARD_SCANNER_SEMAPHORE_HEAP_BYTES,
     };
-    StartupGuardResult semaphore_guard = startup_guard_check(semaphore_requirements);
+    StartupGuardResult semaphore_guard = startup_guard_check_capture(
+        &s->app->startup_diagnostic, semaphore_requirements, StartupDiagnosticBoundaryScannerWait);
     if(semaphore_guard != StartupGuardReady) {
         s->last_wait_failure = semaphore_guard == StartupGuardInsufficientTotal ?
                                    ScannerWaitFailureNoMemoryTotal :
@@ -219,6 +221,10 @@ bool scanner_wait_for_packet(
         .matched = false,
     };
     if(!state.signal) {
+        startup_guard_capture_allocation_failure(
+            &s->app->startup_diagnostic,
+            semaphore_requirements,
+            StartupDiagnosticBoundaryScannerWait);
         s->last_wait_failure = ScannerWaitFailureNoMemoryAllocation;
         return false;
     }
