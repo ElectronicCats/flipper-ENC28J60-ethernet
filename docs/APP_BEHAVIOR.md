@@ -998,7 +998,7 @@ In the described current behavior, running another feature with the Add-On/netwo
 
 The current user-level hypothesis is that network-dependent features do not consistently refresh Add-On/network state immediately before starting.
 
-This is **not** treated as a confirmed implementation fact in Phase 0.
+This is **not** treated as a confirmed implementation fact yet, it will be considered in a unespecified future.
 
 It must later be verified against source.
 
@@ -1152,10 +1152,10 @@ The Target IP can be changed:
 
 ## 11.3 Confirmation versus cancellation
 
-For editable values, the desired interaction model is:
+For persistent configurable values, the intended interaction model is:
 
-- explicit OK/Set/Save/Enter action → commit;
-- BACK → cancel and return without modifying the stored value.
+- explicit OK / Set / Save / Enter action → commit the new value and update `settings.cfg`;
+- BACK → cancel the edit and return without modifying either the active configuration or its persisted value.
 
 The current application does not follow this consistently.
 
@@ -1163,7 +1163,7 @@ Known affected editors include:
 
 - Scan Hosts Start IP
 - shared Target IP
-- manually configured Settings IP
+- manually configured Flipper/application IP
 - manually configured MAC
 
 The Range keypad behavior is the reference example where BACK already cancels correctly.
@@ -1294,8 +1294,6 @@ The later fix should address the shared root cause where possible rather than pa
 
 ## 13.4 Protocol and parser correctness
 
-Phase 0 documents the fields and behaviors visible to the user.
-
 Later source audit must independently verify:
 
 - LLDP parsing;
@@ -1311,6 +1309,7 @@ Later source audit must independently verify:
 
 Later audit must verify the implementation details and robustness of:
 
+- `apps_data/ethernet/settings.cfg`
 - `apps_data/ethernet/last_scan.bin`
 - `apps_data/ethernet/passive_discovery.bin`
 - `apps_data/ethernet/files/*`
@@ -1323,6 +1322,44 @@ including:
 - corruption handling;
 - compatibility across application versions;
 - update/replace semantics.
+
+## 13.6 Configuration Persistence
+
+The application stores its configurable operational values in:
+
+`apps_data/ethernet/settings.cfg`
+
+This file is used to preserve user-configurable settings across application sessions and Flipper Zero reboots.
+
+Persisted settings include the values exposed by the application's configurable fields, such as:
+
+- Start IP
+- Target IP
+- Flipper/application IP
+- Range values
+- other feature-specific configuration values exposed by the UI
+
+When one of these configurable fields is explicitly modified and committed by the user, the corresponding stored configuration is updated so that the value is restored the next time the application is opened.
+
+As a result, configuration values are expected to persist across:
+
+- leaving the application;
+- reopening the application;
+- rebooting the Flipper Zero.
+
+This configuration persistence is distinct from feature-result persistence such as:
+
+- `last_scan.bin` for the latest Scan Hosts results;
+- `passive_discovery.bin` for saved Passive Discovery neighbors;
+- PCAP files under `apps_data/ethernet/files`.
+
+### Expected commit semantics
+
+A persistent configuration value should be written only when the user explicitly confirms the modification through the corresponding OK / Set / Save / Enter action.
+
+BACK should cancel an unconfirmed edit and must not persist the temporary value.
+
+The current application does not follow this rule consistently for every editor; those cases are documented as known behavioral deviations elsewhere in this specification.
 
 ---
 
