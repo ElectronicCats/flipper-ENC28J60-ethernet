@@ -1,14 +1,16 @@
 ---
 name: Bug report
-about: Reproducible problem in the Ethernet App
+about: Reproducible problem in FLIPPER ETHERNET
 title: "[BUG] "
 labels: bug
 ---
 
 ## What happened
+
 <short description>
 
 ## Steps to reproduce
+
 1.
 2.
 3.
@@ -18,11 +20,16 @@ labels: bug
 ## Actual behavior
 
 ## Environment
-- App artifact: ethernet-admin.fap | ethernet-pentest.fap
-- App version / commit:
-- Flipper firmware: official | unleashed | momentum (version: )
-- Shield revision (if visible):
-- Network details (relevant only): switch model, VLAN setup, IPv4/IPv6
 
-## Logs / screenshots / PCAP
-<attach if available — PCAP from /ext/apps_data/ethernet/files/ helps>
+- Actual FAP/artifact filename:
+- App display version and source commit, if known:
+- Build source: GitHub release | local uFBT | other
+- Build flags, if known (`PENTEST_MODE`, `DEV_MODE`, others):
+- Flipper firmware distribution and version:
+- ENC28J60 module/shield vendor and revision, if visible:
+- Relevant network details (switch, VLAN, IPv4 configuration):
+
+## Supporting material
+
+Attach screenshots or a PCAP if useful. Captures created by the app are normally
+stored under `/ext/apps_data/ethernet/files/`.

@@ -1,236 +1,277 @@
-# Bug backlog (deferred fixes)
+# FLIPPER ETHERNET — Current Backlog
 
-Bugs and rough edges discovered during F0 hardware testing that are NOT
-in the scope of the sub-phase that found them. Each entry says where it
-will be fixed.
+This file is the canonical list of current unresolved work. Current source is
+the implementation ground truth, [`APP_BEHAVIOR.md`](APP_BEHAVIOR.md) defines
+intended user-visible behavior, and [`ARCHITECTURE.md`](ARCHITECTURE.md)
+describes the implementation and invariants that changes must preserve.
 
----
+Finding IDs beginning with `F4-` are stable audit identifiers. Their priority
+is audit priority based on reachability, consequence, and architectural scope;
+it is not an approved implementation order or roadmap.
 
-## B-1 — DHCP DORA timeout too short (3s) ✅ CLOSED in F0.7
+Historical plans and specifications are not automatically active backlog.
 
-**Found:** F0.3 hardware testing against a `dnsmasq` server doing standard
-ARP/ICMP collision check before sending DHCPOFFER.
+## 1. Active current work
 
-**Location:** `EthernetAppDemo/modules/dhcp_protocol.c` — 3 s hardcoded
-timeout while waiting for OFFER. Confirmed in F0.0 audit.
+### RX and concurrency
 
-**Symptom:** Flipper sends `DHCPDISCOVER`, server takes ~3 s to send
-`DHCPOFFER` (because of its own collision-check delay), Flipper has
-already given up by the time OFFER arrives, retries DISCOVER 40 s later.
-DORA never completes; user sees no IP. Workaround on the test rig:
-`dnsmasq --no-ping` skips the server's collision check so OFFER comes
-back in <10 ms.
+#### F4-001 — OS Detector directly competes with RX Dispatch — P0
 
-**Severity:** High — affects compatibility with most production DHCP
-servers in the wild (almost all do collision-check by default).
+OS Detector's active TCP probe loop calls `receive_packet()` while the
+long-lived dispatcher also drains the same ENC queue. OS has no temporary
+dispatcher registration for those replies and does not pause Dispatch.
+Frames can be consumed by the wrong context.
 
-**Fix in:** F0.7 bug fixes consolidation. Either bump the timeout to
-~10 s or rework into an async wait that doesn't constrain server
-latency.
+#### F4-002 — OS Detector and RX Dispatch share the RX buffer — P0
 
----
+Both receive paths write `ethernet->rx_buffer`. The ENC mutex serializes an
+individual receive but not subsequent parsing, so an overlapping receive can
+replace the frame while the other context parses it.
 
-## B-2 — SnifferScene busy-loop on link-up wait blocks BACK ✅ CLOSED in F0.4d
+#### F4-003 — ARP reply construction uses concurrent mutable globals — P1
 
-**Found:** F0.3 hardware testing — pressed OK to start sniffing,
-ENC28J60 PHY momentarily reported link-down (probably a glitch from a
-recent state transition), Flipper got stuck in
-`while(!is_link_up(ethernet)) { if (BACK) break; }` busy-loop. The
-BACK check is inside the loop but the SPI read of `PHSTAT2` (via
-`read_Phy_byte`) had hung, so the BACK comparison was never reached.
-User had to hard-reset the Flipper (BACK + LEFT 10 s).
+Automatic ARP handling and the OS direct-RX ARP path can interleave updates to
+`my_mac`, `my_ip`, `mac_dest`, and `IP_SRC_REQUESTED`, producing a reply built
+from mixed state. Its harmful active overlap depends on the OS RX exception.
 
-**Location:** `EthernetAppDemo/scenes/SnifferScene.c:191-196`.
+#### F4-004 — Dispatcher pause is not a guaranteed quiescence barrier — P1
 
-**Severity:** Medium — only triggers when the PHY register read hangs,
-which is rare. But when it happens, the user is fully locked out
-without a hard reset. Pre-existing; not a regression.
+`rx_dispatch_pause()` performs a bounded acknowledgement wait and returns even
+if acknowledgement was not observed. DHCP then begins direct RX. A collision
+requires the explicit delayed-acknowledgement timing condition; none is claimed
+to have been observed at runtime.
 
-**Fix in:** F0.4 (RX dispatch decoupling) replaces the entire
-"suspend-worker-and-poll" pattern with a single shared dispatcher and
-event-driven scenes — the busy-loop disappears as a byproduct.
-Alternatively a one-line `furi_delay_ms(1)` inside the loop in F0.6
-would give the kernel a chance to interrupt. Choosing F0.4 since the
-arch fix subsumes it.
+### PCAP, packet parsing, and protocol selection
 
----
+#### F4-005 — PCAP analysis payload destination overflow — P0
 
-## B-3 — "Dead window" between sniffer entry and capture start ✅ CLOSED in F0.4d
+The unknown-Ethernet analysis path can copy a 1,504-byte payload from a maximum
+1,518-byte frame into a 1,500-byte stack array.
 
-**Found:** F0.3 hardware testing — generated traffic from laptop while
-SnifferScene was in its OK-wait + link-up-wait phase. Worker thread
-already suspended at scene entry; promiscuous mode + capture only
-enabled after the user confirms with OK and link-up succeeds. During
-that window the chip drops everything. ICMP from the laptop saw 100 %
-packet loss because the worker (the auto-replier) was suspended and
-the sniffer was not yet capturing.
+#### F4-006 — Generic packet analysis lacks complete length validation — P0
 
-**Location:** `EthernetAppDemo/scenes/SnifferScene.c` (entry sequence).
+Generic Ethernet/ARP/IPv4/TCP/UDP analysis contains fixed-offset access,
+unsigned length-subtraction, and trusted TCP data-offset paths that can read or
+copy outside validated captured data. This does not apply equally to the more
+strongly bounded DHCP, CDP, EAPOL, inner LLDP, or Passive History decoders.
 
-**Severity:** Low — only meaningful in the test rig where you need
-captures of arbitrary external traffic that arrives *during* setup.
-Real users don't notice because they start the sniffer first and then
-go cause traffic.
+#### F4-007 — PCAP records are indexed without complete structural validation — P1
 
-**Fix in:** F0.4. With rx_dispatch, there's no "suspend worker" step;
-the dispatcher is always running. Sniffer just registers a
-capture-everything handler.
+The reader can commit an index entry before proving a complete packet header,
+uses `orig_len` for traversal while record data is described by `incl_len`, and
+does not fully validate global-header fields, length relationships, or remaining
+file bytes. Malformed records can reach generic analysis.
 
----
+#### F4-008 — Sniffer does not propagate capture-write failure — P1
 
-## B-4 — UDP scanner doesn't distinguish open vs closed
+The capture helper reports write failure, but the Sniffer handler ignores the
+result and advances its displayed packet count.
 
-**Found:** F0.3 hardware testing — UDP scan of closed ports gets
-ICMP-port-unreachable replies but the predicate ignores them (only
-matches actual UDP responses). Result: `nmap -sU --reason` would say
-`open|filtered` for every port, which is what the Flipper effectively
-reports (no port appears open even when the host is responsive).
-Pre-existing behavior, not a regression. To distinguish, the predicate
-needs to also match ICMP type 3 code 3 with the embedded UDP header
-referring to the scan port.
+#### F4-009 — Persisted protocol index can index past the UI table — P0
 
-**Location:** `EthernetAppDemo/modules/udp_module.c` —
-`udp_scan_match()` predicate (added in F0.3d).
+Settings accepts `scan_protocols_index` without bounds validation. The active
+Ports UI has one protocol label (`TCP`) and indexes that table directly.
 
-**Severity:** Low — UDP scanning is inherently unreliable. The
-overall feature works enough to report responses from active services.
+#### F4-010 / B-4 — UDP scan route is latent and incomplete — P3
 
-**Fix in:** F1 UDP service scan rewrite (per roadmap §4 F1.14
-"Payload-aware UDP service scan"). Don't bolt on ICMP-unreachable
-detection to the current generic UDP probe; replace with per-protocol
-payloads (DNS, NTP, SNMP, NetBIOS, mDNS, SSDP) that get real replies.
+The worker retains a UDP branch, but the active UI exposes only TCP. The UDP
+predicate does not distinguish closed ports from no response. Treat this as
+architectural debt in a currently dormant route, not as failure of the active
+TCP UI.
 
----
+### Network-state consistency
 
-## B-5 — LoadingView clock animation freezes during ARP scan ✅ CLOSED in F0.4b
+#### F4-011 — Manual IP can create a mixed network tuple — P1
 
-**Found:** F0.3a hardware testing — during a 30-IP ARP scan the
-spinning clock animation in the LoadingView stops updating. Scan still
-completes correctly. Plausible cause: the extra GPIO read in
-`scanner_cancel_requested` shifts the worker thread's yielding pattern
-just enough for the GUI thread's render timer to lag.
+Manual IP confirmation replaces the IPv4 address and acquisition flags while
+retaining the previous subnet, gateway IP, and gateway MAC.
 
-**Location:** Cosmetic; the offending code is the busy-poll inside
-`scanner_wait_for_packet` (`libraries/scanner/scanner_session.c`).
+#### F4-012 — DHCP cancellation can split tuple and acquisition flags — P1
 
-**Severity:** Cosmetic.
+Cancellation after an ACK can occur after IP/subnet/gateway fields are copied
+but before `is_dora` and `is_static_ip` are finalized. This is a timing-dependent
+state transition.
 
-**Fix in:** F0.4 (rx_dispatch eliminates the polling pattern).
+#### F4-013 — Controller availability cache can become stale — P1
 
----
+`enc28j60_connected` represents a prior controller-start result rather than
+current PHY link or usable network state. Feature paths do not consistently
+refresh or invalidate it.
 
-## B-6 — ENC28J60 driver `bank` is unprotected file-static — CLOSED
+#### F4-014 — Ping and Ports/OS use different target fields — P2
 
-**Found:** F0.4a hardware diagnosis. `enc28j60.c` keeps `static uint8_t
-bank` to track the chip's selected bank register. `set_bank_with_mask`
-reads/writes this without a mutex. Multiple threads (rx_dispatch,
-scanner_session callers, settings_load, etc.) racing in this code path
-corrupt the chip's actual register state. The MAADR corruption that
-broke F0.4a's first hardware test was an instance of this; we worked
-around it by reordering `settings_load` before `rx_dispatch_init` and
-by adding `rx_dispatch_pause/_resume` wrappers in `scanner_resolve_next_hop`,
-`SettingsScene`, and `SnifferScene`. The pauses were stop-gaps.
+Ping uses `scan_params.ip_ping`; Ports and OS use `scan_params.target_ip`.
+This contradicts the intended shared Target IP behavior.
 
-**Closed:** F0.5a (commits abf9790 + 9d45f31, tag v2.0-f0.5a). Added a
-`FuriMutex* mutex` to `enc28j60_t` and wrapped every public chip
-function (alloc/free, soft_reset, set_mac, start, is_link_up,
-send/receive_packet, broadcast/multicast/promiscuous toggles) with
-acquire/release. Static helpers inherit the lock from the caller.
-Removed pause/resume from `SettingsScene` and `SnifferScene`. The
-pauses around DORA (GetIPScene) and `arp_get_specific_mac`
-(scanner_resolve_next_hop) STAY for now — those exist for FIFO
-ordering, not just bank race; they go away in F0.4f when the last
-two scanner paths migrate onto rx_dispatch handlers.
+### Input and persistence semantics
 
----
+#### F4-015 — Custom IPv4 editor mutates state before confirmation — P2
 
-## B-7 — Two scanner_session paths still poll the chip directly — CLOSED
+UP/DOWN edits write directly into the bound App field and BACK has no rollback.
+Affected paths include Scan Hosts start IP, Ping target, Ports target, OS
+target, and Settings manual IP. Later application teardown can persist the
+unconfirmed value.
 
-**Found:** F0.4 design review. Two code paths inside scanner_session
-were not migrated onto rx_dispatch:
-  - `scanner_resolve_next_hop` calls `arp_get_specific_mac` (in
-    `arp_module.c`) which still did its own send_packet + inline
-    `while ... receive_packet` poll loop. Wrapped in
-    `rx_dispatch_pause/_resume` as a stop-gap.
-  - `enable_promiscuous`, `pcap_capture_init` in SnifferScene also
-    pause/resume around chip access.
+#### F4-016 — Confirmation does not update settings storage immediately — P2
 
-**Closed:**
-  - SnifferScene + SettingsScene pauses removed in F0.5a once the
-    chip-level FuriMutex covered the bank-race the pauses were
-    masking.
-  - `scanner_resolve_next_hop` migrated in F0.4f (tag v2.0-f0.4f):
-    builds the ARP request inline via `set_arp_request` + `send_packet`
-    and waits for the reply through `scanner_wait_for_packet` using
-    the new public `arp_reply_match_predicate`. No more pause/resume
-    on this path. `arp_get_specific_mac` stays for now — still called
-    by `tcp_module.c`, `udp_module.c`, and `ArpSpoofingSpecificIP.c`
-    (those call sites have a latent FIFO race vs. rx_dispatch but it's
-    masked by the cache from `scanner_resolve_next_hop`; deferred to a
-    follow-up pass if user reports symptoms).
+The user contract requires an explicit OK/Set/Save/Enter action to commit the
+value and update `settings.cfg`. Current source commits RAM but normally writes
+the file only during `app_free()`.
 
----
+### Storage robustness
 
-## B-8 — `ethernet_thread` and `app_worker.c` survive as DORA-only stub
+#### F4-017 — Settings save can destroy the last valid copy — P1
 
-**Found:** F0.4 closure. ethernet_thread no longer polls the chip; it
-just services `flag_dhcp_dora`. The thread is kept alive purely so
-GetIPScene can post the flag and have someone process it.
+`settings.cfg` is opened with create-always and written sequentially. A partial
+write failure can leave a truncated file and is not surfaced to the user.
 
-**Location:** `EthernetAppDemo/app_worker.c`.
+#### F4-018 — Settings load is partial and incompletely range-validated — P2
 
-**Severity:** Cosmetic / cleanup.
+Earlier fields can remain applied when later fields are absent or malformed,
+and scan numeric fields are not all semantically validated. F4-009 is one
+concrete downstream consequence.
 
-**Fix in:** F0.4e (deferred sub-phase). Move DORA processing into
-GetIPScene's alt thread; delete `ethernet_thread`, `app_worker.c`,
-and the `flag_dhcp_dora` flag entirely.
+#### F4-019 — Short last-scan body can expose incomplete results — P1
 
----
+`last_scan.bin` accepts timestamp/count before proving the full result body was
+read. The one-byte count cannot exceed the 255-entry App array, but accepted
+entries can still contain stale or zero data.
 
-## B-9 — OS Detector reliability (deferred to F1)
+#### F4-020 — Last-scan rewrite does not validate all writes — P1
 
-**Found:** External code review against F0.4g.1 state. Six issues; the
-three small ones landed in F0.5h. The four below are structural and
-need real work, not patches:
+The create-always writer can replace the last valid scan with an incomplete
+file after an I/O failure.
 
-1. **Direct receive_packet vs rx_dispatch.** `os_scan`'s burst-probe
-   loop polls `receive_packet` while rx_dispatch is also draining the
-   chip RX FIFO. With INT-driven dispatch (F0.5c) the dispatcher
-   almost always wins; SYN-ACKs are consumed before os_scan sees them
-   or arrive out of order. Same family of bug fixed in PingScene
-   (F0.4g.1). Fix: register a per-scan rx_dispatch handler and
-   collect responses via predicate side effects, then unregister
-   before deinit.
+#### F4-021 — Cancelled Scan Hosts state can remain visible — P2
 
-2. **Sample arrays indexed by `attemp` (attempt round), not response
-   counter.** When multiple ports respond inside the same round (the
-   common case for a 11-port probe), every reply overwrites
-   `sequences[attemp]`, `ids[attemp]`, `windows[attemp]`,
-   `tcp_opts_vec[attemp]`. Heuristics then fingerprint a single
-   surviving sample. Fix: use a per-response counter; treat each
-   matched frame as one sample regardless of which round it landed in.
+Cancellation leaves partial RAM results. If restoration from the prior scan
+file fails, later host-selection screens can expose those partial results.
 
-3. **PORT_OPEN before ACK validation.** `port_results[port_idx].state =
-   PORT_OPEN` is set inside the SYN-ACK branch *before* `ack_recv`
-   has been initialised and validated. A duplicate, late, or unrelated
-   SYN-ACK survives as a port-open vote. Fix: reorder so the OPEN
-   write happens only after the matching ACK is confirmed.
+#### F4-022 — Last-scan format is native and unversioned — P3
 
-4. **UI blocks during scan.** `OsDetector.c` allocates the worker
-   thread and immediately joins inside the menu callback. Cancel via
-   Back is technically possible (the worker reads gpio_button_back)
-   but the event loop is frozen so the user sees no feedback. Fix:
-   return from the callback after `furi_thread_start`; expose
-   progress via custom events; let on_exit join + cancel.
+The format depends on native layout and has no explicit compatibility version.
+This is architectural portability debt, not an array-overflow finding.
 
-**Location:** `EthernetAppDemo/modules/os_detector_module.c`,
-`EthernetAppDemo/scenes/OsDetector.c`.
+#### F4-023 — Passive history merge failure is ignored — P2
 
-**Severity:** Medium overall. v2.0 ships with the feature labeled
-"EXPERIMENTAL — Heuristic, may be wrong" in submenu header and
-result page so users don't trust the output blindly. Real fix is
-F1 territory.
+Normal Passive scene cleanup invokes the merge but ignores failure, so new
+observations may be lost silently when the live database is released.
 
----
+### User-visible behavior
 
-(Add new entries below as they're found.)
+#### F4-025 — BACK stops active ARP Spoof All — P2
+
+Current BACK handling stops the active operation, while the intended behavior
+reserves stop for the explicit center-button STOP action.
+
+### Memory, resource, and startup-guard work
+
+#### F4-026 — Large contiguous and dynamic resource demands — P2
+
+The PCAP reader requires a 16,000-byte contiguous index payload and Passive
+requires an approximately 15.5 KiB contiguous neighbor database. Ports result
+menus and SDK-backed GUI/storage/string objects add data-dependent demand.
+These are resource constraints, not memory leaks.
+
+#### F4-027 — Stack headroom requires runtime high-water validation — P1
+
+The 4 KiB RX Dispatch stack has substantial automatic-ICMP call-stack demand;
+the 5 KiB OS worker and 4 KiB PCAP reader also have large nested locals. Source
+does not prove a stack overflow.
+
+#### F4-028 — Startup guards are incomplete preflight models — P2
+
+Guard formulas depend partly on SDK allocator/thread metadata assumptions and
+do not include every later GUI, storage, string, scanner, or automatic-handler
+allocation. Passing a guard does not reserve memory.
+
+### OS Detector concerns awaiting bounded classification
+
+The following B-9 source patterns remain visible but do not yet have formal
+`F4-` classifications:
+
+- multiple replies in an attempt can overwrite sample arrays indexed by the
+  attempt number rather than a response counter;
+- a port can be marked `PORT_OPEN` before the received ACK is validated.
+
+The earlier B-9 claim that the UI immediately joins and blocks after starting
+the worker is closed; the current scene starts asynchronously and joins on its
+completion/exit paths.
+
+## 2. Conditional and external-contract questions
+
+These items must remain conditional until the named platform contract is
+established.
+
+| ID | Question |
+|---|---|
+| F4-024 | Does normal top-level SceneManager/ViewDispatcher shutdown invoke Passive `on_exit()` before `app_free()` fallback cleanup? |
+| F4-029 | Are direct worker GUI/string mutations, custom-event publication/ordering, `volatile` stop flags, and physical BACK polling sufficient under the current SDK/runtime contracts? |
+| F4-030 | Does ByteInput mutate the supplied MAC buffer before SAVE, and what does BACK guarantee? |
+| F4-031 | When are FileBrowser worker callbacks guaranteed quiescent during scene teardown? |
+| F4-032 | Does GPIO callback removal quiesce an in-flight ISR, and must controller RX/EIE be explicitly disabled before wrapper teardown? |
+| F4-033 | What atomic replacement/crash-consistency guarantees apply when Passive History renames its temporary file? |
+| F4-034 | Can the active ENC/filter/driver path deliver a short/runt frame to application wrappers that inspect fixed Ethernet offsets? |
+
+The allocator-dependent portion of F4-028 also remains conditional on the
+current SDK allocator and thread-object contracts.
+
+## 3. Product and resource limits
+
+The following are bounded current capabilities, not defects by themselves:
+
+- 32 Passive live/history records;
+- 2,000 PCAP index entries;
+- eight RX registry slots, normally including two permanent handlers;
+- 255 Scan Hosts result entries;
+- 1,518-byte application frame buffers;
+- one application-owned feature worker at a time;
+- a 16,000-byte contiguous PCAP index design;
+- an approximately 15.5 KiB contiguous Passive DB design.
+
+## 4. Audit priority summary
+
+Current P0 findings are:
+
+- F4-001 — OS dual RX ownership;
+- F4-002 — shared RX-buffer overwrite;
+- F4-005 — PCAP analysis stack overwrite;
+- F4-006 — generic parser memory-safety boundaries;
+- F4-009 — persisted protocol-index out-of-bounds access.
+
+This priority identifies high-confidence safety/correctness blockers. It is not
+an approved fix order and does not authorize implementation.
+
+## 5. Closed and implemented history
+
+| ID | Closed work | Current contract |
+|---|---|---|
+| B-1 | DHCP offer timeout increased | Current DHCP wait accommodates the earlier server collision-check delay |
+| B-2 | Sniffer link-wait busy loop removed | Current capture runs in a feature worker |
+| B-3 | Pre-capture worker-suspension dead window removed | RX Dispatch remains available during setup |
+| B-5 | ARP-scan loading freeze tied to old polling | Scanner waits use registered RX/semaphore flow |
+| B-6 | File-static ENC bank race | Bank state is per-instance and public chip operations use the ENC mutex |
+| B-7 (primary) | Scanner next-hop direct-RX path | `scanner_resolve_next_hop()` uses registered receive waiting; remaining legacy callers are disabled or currently uncalled |
+| B-8 | DORA-only `app_worker.c` stub | File/thread removed; Get IP owns its feature worker |
+| B-9 (UI portion) | OS scene immediately blocking on worker join | Current scene starts asynchronously and joins on finish/exit |
+
+## 6. Findings not supported as current defects
+
+Do not re-add the following without new current-source evidence:
+
+- a general dangling feature-worker pointer or worker surviving `app_free()`;
+- normal Passive or Sniffer filter poisoning;
+- a foreground/automatic-responder shared-TX-buffer race;
+- scanner callback-context use-after-free after unregister;
+- an active source-proven memory leak;
+- persistent allocator fragmentation;
+- `last_scan.bin` count overflowing the 255-entry App array;
+- corruption on every ordinary DHCP failure;
+- a claim that all protocol parsers are equally unsafe.
+
+## 7. Documentation item resolved
+
+F4-035 is resolved at the documentation level: current Saved Neighbor History
+uses `apps_data/ethernet/passive_history.bin`, with
+`passive_history.tmp` used during replacement. The behavioral contract is
+history persistence until the user clears it, rather than a required filename.

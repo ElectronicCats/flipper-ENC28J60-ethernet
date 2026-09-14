@@ -46,16 +46,16 @@ The user can repeatedly execute the available features without normally encounte
 - leaving and reopening the application;
 - rebooting the Flipper Zero and opening the application again.
 
-### 3.1 Deferred qFlipper / CLI resource-coexistence concern
+### 3.1 qFlipper / CLI resource-coexistence concern
 
 The above baseline applies when the application is operating by itself.
 
 When qFlipper is active in the background, or when the CLI is open, reduced memory availability has been observed. The issue is more noticeable with qFlipper and less severe with CLI use.
 
-This document records this only as a resource/memory-coexistence concern.
-Detailed diagnosis is intentionally deferred to the memory/resource audit.
-
-The exact failure patterns are intentionally not specified here. They must be investigated later during the comprehensive memory/resource audit without assuming in advance that any specific feature is defective.
+This document records that observation only as a resource-coexistence
+concern. It does not attribute it to a particular feature, a memory leak, or
+allocator fragmentation. Source-visible resource constraints and validation
+needs are maintained in `ARCHITECTURE.md` and `BACKLOG.md`.
 
 ## 4. Global UI and Navigation Conventions
 
@@ -523,9 +523,17 @@ instead of the existing custom Network Not Detected screen.
 
 ### Persistence
 
-Passive Discovery neighbors are stored under:
+Saved Neighbor History persists across supported application exit,
+relaunch, and Flipper Zero reboot flows until the user clears it.
 
-`apps_data/ethernet/passive_discovery.bin`
+The current on-card implementation stores that history under:
+
+`apps_data/ethernet/passive_history.bin`
+
+and may use `apps_data/ethernet/passive_history.tmp` while replacing the
+saved history. These filenames describe the current storage location; the
+behavioral contract is the persistence of saved neighbors, not a particular
+internal file format.
 
 They remain available after:
 
@@ -694,7 +702,8 @@ A scan of approximately 60,000 ports can take close to one hour.
 
 ### Desired future improvements
 
-After the current architecture is fully audited, the feature should be evaluated for possible optimization/refactoring.
+The feature may be evaluated for future optimization without changing the
+current behavioral contract.
 
 Potential future improvements include:
 
@@ -994,13 +1003,11 @@ However, connecting the Add-On/network while the application remains open does n
 
 In the described current behavior, running another feature with the Add-On/network correctly connected can indirectly cause the state to become usable, after which Sniffing can be started.
 
-### Implementation assumption requiring verification
+### Known implementation limitation
 
-The current user-level hypothesis is that network-dependent features do not consistently refresh Add-On/network state immediately before starting.
-
-This is **not** treated as a confirmed implementation fact yet, it will be considered in a unespecified future.
-
-It must later be verified against source.
+Network-dependent features do not consistently refresh Add-On/network state
+immediately before starting. The intended state distinctions are defined in
+section 11.4; implementation details are documented in `ARCHITECTURE.md`.
 
 ---
 
@@ -1092,9 +1099,13 @@ When a hexadecimal character is entered:
 
 The keypad exposes a SAVE/confirmation action.
 
-### Known deviation — BACK incorrectly commits manually edited MAC
+### Observed/possible deviation — BACK may retain a manually edited MAC
 
-BACK currently preserves the modified MAC as though SAVE had been selected.
+User-observed behavior indicates that BACK can preserve the modified MAC as
+though SAVE had been selected. The application passes its MAC buffer to the
+platform ByteInput component, so the exact buffer-mutation and BACK behavior
+also depends on that component's SDK contract. That contract has not been
+established from repository source alone.
 
 **Desired behavior:** BACK should cancel the edit and return without storing the modified MAC. Only explicit SAVE/OK confirmation should commit the new value.
 
@@ -1126,9 +1137,9 @@ Controls:
 
 # 11. Cross-Feature Behavioral Patterns
 
-The following patterns are derived from the behavioral description and should be reviewed during the source audit.
-
-They are not claims about current implementation.
+The following patterns are normative behavioral relationships. Differences in
+the current implementation are documented as known deviations; internal
+representation is owned by `ARCHITECTURE.md`.
 
 ## 11.1 Shared saved-host selection
 
@@ -1178,7 +1189,8 @@ Network-dependent features should distinguish at least:
 
 The physical state should be evaluated at the relevant feature/operation entry rather than relying on stale state from application startup or another feature.
 
-This is a desired behavioral rule. The implementation must later be audited to determine how connection state is actually tracked.
+This is a desired behavioral rule. Current implementation differences are
+documented in `ARCHITECTURE.md` and `BACKLOG.md`.
 
 ## 11.5 Long-running operation cancellation
 
@@ -1246,15 +1258,15 @@ They are **not** intended behavior and must not be normalized as part of the spe
 
 ---
 
-# 13. Deferred Investigation Areas
+# 13. Implementation Boundaries and Deferred Product Areas
 
-The following topics are intentionally deferred from this behavioral specification.
-
-They belong to later source/architecture audit phases.
+This specification owns user-visible behavior. Internal resource ownership,
+parsing mechanics, persistence formats, and platform contracts are documented
+in `ARCHITECTURE.md`, `HARDWARE.md`, and `BACKLOG.md`.
 
 ## 13.1 Memory and external service coexistence
 
-Audit:
+Relevant implementation concerns include:
 
 - FAP resident memory;
 - main stack;
@@ -1266,11 +1278,12 @@ Audit:
 - coexistence with CLI-related activity;
 - actual available headroom.
 
-No specific feature should be presumed to be the root cause before this audit.
+These concerns do not by themselves establish a defective feature, memory
+leak, or persistent allocator fragmentation.
 
 ## 13.2 Connection-state architecture
 
-Determine from source:
+The implementation must consistently account for:
 
 - how Add-On presence is detected;
 - how Ethernet link/network state is detected;
@@ -1278,11 +1291,12 @@ Determine from source:
 - whether they are cached;
 - which features refresh them;
 - whether state can become stale across scene transitions;
-- what the correct shared abstraction should be, if any.
+- how state remains consistent across scene transitions.
 
 ## 13.3 Editor commit/cancel semantics
 
-Determine why several IPv4/MAC editors currently commit on BACK and whether the behavior comes from:
+Several editors currently or reportedly retain changes on BACK. The shared
+implementation boundary includes:
 
 - scene exit handling;
 - shared widget behavior;
@@ -1290,11 +1304,12 @@ Determine why several IPv4/MAC editors currently commit on BACK and whether the 
 - model mutation before confirmation;
 - another shared implementation pattern.
 
-The later fix should address the shared root cause where possible rather than patching each screen independently.
+The user-visible contract remains explicit confirmation to commit and BACK to
+cancel.
 
 ## 13.4 Protocol and parser correctness
 
-Later source audit must independently verify:
+Protocol and capture handling must preserve:
 
 - LLDP parsing;
 - CDP parsing;
@@ -1307,21 +1322,17 @@ Later source audit must independently verify:
 
 ## 13.5 Persistence formats
 
-Later audit must verify the implementation details and robustness of:
+The current user-visible persistent artifacts are:
 
 - `apps_data/ethernet/settings.cfg`
 - `apps_data/ethernet/last_scan.bin`
-- `apps_data/ethernet/passive_discovery.bin`
+- `apps_data/ethernet/passive_history.bin`
 - `apps_data/ethernet/files/*`
 
-including:
-
-- format/version;
-- bounds checks;
-- short reads;
-- corruption handling;
-- compatibility across application versions;
-- update/replace semantics.
+Their implementation must handle format and version boundaries, short or
+corrupt input, compatibility across supported application versions, and
+safe update/replace behavior. The current implementation details and active
+robustness work are documented in `ARCHITECTURE.md` and `BACKLOG.md`.
 
 ## 13.6 Configuration Persistence
 
@@ -1350,7 +1361,7 @@ As a result, configuration values are expected to persist across:
 This configuration persistence is distinct from feature-result persistence such as:
 
 - `last_scan.bin` for the latest Scan Hosts results;
-- `passive_discovery.bin` for saved Passive Discovery neighbors;
+- `passive_history.bin` for saved Passive Discovery neighbors;
 - PCAP files under `apps_data/ethernet/files`.
 
 ### Expected commit semantics
@@ -1363,11 +1374,11 @@ The current application does not follow this rule consistently for every editor;
 
 ---
 
-# 14. Interpretation Rules for Source and Architecture Audits
+# 14. Document Authority
 
-Later audit phases should use this document as the canonical **user-level behavioral baseline**.
+This document is the canonical **user-level behavioral specification**.
 
-For every feature, the auditor should distinguish:
+Project documentation and implementation work must distinguish:
 
 1. **Expected behavior** — what the user intends the FAP to do.
 2. **Current observed deviation** — physical behavior already known to be undesirable.
@@ -1376,4 +1387,5 @@ For every feature, the auditor should distinguish:
 
 Existing source code, documentation, plans, skills, or historical debugging conclusions must not silently redefine the expected behavior documented here.
 
-Likewise, this document must not be treated as proof of internal implementation details. Internal behavior must be source-verified in the later audit phases.
+Likewise, this document is not proof of internal implementation details.
+Current source and `ARCHITECTURE.md` own the implementation description.

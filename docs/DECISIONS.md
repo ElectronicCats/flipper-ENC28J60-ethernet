@@ -158,10 +158,10 @@ materially better than polling-only ~5 Mbps.
 
 ---
 
-## D3 — SDK version pinning
+## D3 — SDK version selection
 
 **Date:** 2026-05-05
-**Status:** PINNING_DEFERRED_TO_CI (manifest pin not supported by Unleashed fbt)
+**Status:** MANIFEST_PIN_UNSUPPORTED; CI CURRENTLY USES A FLOATING RELEASE CHANNEL
 
 ### Context
 
@@ -173,9 +173,11 @@ materially better than polling-only ~5 Mbps.
 - `flipper_format_*` (F0.2)
 - `furi_hal_rtc_get_timestamp` (F0.7)
 
-### Findings
+### Findings at decision time
 
-Effective SDK at audit: **Unleashed `unlshd-087`, API 87.8, Target 7**.
+The effective SDK during the original F0.0 investigation was **Unleashed
+`unlshd-087`, API 87.8, Target 7**. This is a dated observation, not a
+guaranteed current SDK baseline.
 
 All 3 required APIs verified present:
 
@@ -208,21 +210,22 @@ is enforced **firmware-side at FAP load**, not by an app-declarative pin.
 
 - **A — Pin via `fap_min_sdk_version` in `application.fam`.** Not
   available on Unleashed.
-- **B — Pin via CI workflow** (`sdk-channel`, `sdk-index-url`,
-  `ufbt-version`). Already in place at `.github/workflows/build.yml`.
+- **B — Select the SDK via CI workflow** (`sdk-channel`, `sdk-index-url`,
+  `ufbt-version`). The workflow selected the Unleashed `release` channel.
 - **C — Add `fap_version=(1, 0)` baseline** even though it is not a
   pin — provides a starting point for the refactor's app-version
   numbering.
 
 ### Decision
 
-**Combination: B (CI-side pinning continues) + C (`fap_version=(1, 0)`
-added to `application.fam`).** No app-declarative SDK pin.
+**Combination: B (CI-side Unleashed release-channel selection) + C
+(`fap_version=(1, 0)` added to `application.fam`).** No app-declarative SDK
+pin.
 
 ### Rationale
 
-The manifest pin is unavailable. Channel pinning at CI level is the
-supported mechanism on Unleashed and already works correctly.
+The manifest pin is unavailable. CI channel selection is the available
+repository mechanism and works with the selected Unleashed channel.
 
 ### Consequences
 
@@ -232,8 +235,16 @@ supported mechanism on Unleashed and already works correctly.
   master plan `ENC28J60_REFACTOR_PLAN.md` should note this constraint
   on next revision (the implicit assumption that "we pin SDK in the
   manifest" is wrong on Unleashed).
-- If stricter pinning is wanted later, the lever is `ufbt-version` /
-  `sdk-index-url` in CI, not the manifest. Out of scope for F0.0.
+- If stricter pinning is wanted later, the lever is CI configuration rather
+  than the unsupported manifest field. Out of scope for F0.0.
 - Commit `401c6d4`.
+
+### Current implementation note
+
+`.github/workflows/build.yml` uses the Unleashed directory with
+`sdk-channel: release`. That channel can move to newer SDK builds, so the
+current workflow performs channel selection, not deterministic SDK-version
+pinning. The repository has not yet accepted a replacement version-pinning
+strategy.
 
 ---

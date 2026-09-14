@@ -1,9 +1,11 @@
-![GitHub release (with filter)](https://img.shields.io/github/v/release/ElectronicCats/flipper-ENC28J60-ethernet?color=%23008000)
-![GitHub actions](https://img.shields.io/github/actions/workflow/status/ElectronicCats/flipper-ENC28J60-ethernet/build.yml)
+![GitHub release](https://img.shields.io/github/v/release/ElectronicCats/flipper-ENC28J60-ethernet?color=%23008000)
+![GitHub Actions](https://img.shields.io/github/actions/workflow/status/ElectronicCats/flipper-ENC28J60-ethernet/build.yml)
 
+# FLIPPER ETHERNET
 
-# Flipper ENC28J60 Ethernet App 🐬
-ENC28J60 ethernet project to the Flipper Zero
+FLIPPER ETHERNET is a Flipper Zero external application for wired Ethernet
+administration, discovery, traffic capture, and authorized security testing
+with the Microchip ENC28J60 controller.
 
 <p align=center>
  <a href="https://github.com/ElectronicCats/flipper-addons/wiki">
@@ -11,14 +13,23 @@ ENC28J60 ethernet project to the Flipper Zero
  </a>
 </p>
 
-Requires the [**Electronic Cats Flipper Add-On: Ethernet Bus**](https://electroniccats.com/store/flipper-zero-add-on-ethernet/).
+Requires the [**Electronic Cats Flipper Add-On: Ethernet**](https://electroniccats.com/store/flipper-zero-add-on-ethernet/).
 
-## Applications:
+The current manifest builds one FAP containing the Administration, Pentesting,
+Settings, and About menus. Separate Admin and Pentesting artifacts are not part
+of the current build.
 
-- Wired network auditing
-- Device discovery and traffic monitoring
-- Packet capture (PCAP) for later analysis
-- Simulating ARP-based MITM attacks for security testing
+## Features
+
+- DHCP and manual IPv4 configuration
+- ARP host scanning and saved scan results
+- Passive neighbor discovery and history
+- Ping, TCP port scanning, and OS detection
+- ARP spoof testing
+- Packet capture to PCAP and on-device packet viewing
+
+Use active or disruptive functionality only on networks where you have
+authorization.
 
 # Key Features:
 
@@ -26,8 +37,19 @@ Requires the [**Electronic Cats Flipper Add-On: Ethernet Bus**](https://electron
 - Based on the Microchip ENC28J60 Ethernet chip
 - Enables wired LAN scanning and analysis
 - Supports ARP scan, ping, ARP spoofing, PCAP generation, and more
-- Plug & Play — no Flipper hardware modifications required
+- Plug & Play, no Flipper hardware modifications required
 
+## Documentation
+
+- [Application behavior](docs/APP_BEHAVIOR.md): Intended user-visible behavior
+- [Architecture](docs/ARCHITECTURE.md): Current implementation structure and invariants
+- [Hardware](docs/HARDWARE.md): ENC28J60 integration and electrical/network contracts
+- [Decisions](docs/DECISIONS.md): Accepted project decisions and their status
+- [Backlog](docs/BACKLOG.md): Current defects, conditional questions, and resource limits
+
+Current source is the ground truth for implementation details. Dated plans and
+specifications under `docs/superpowers/` and release notes are historical
+records, not descriptions of the current implementation.
 
 ## How to contribute <img src="https://electroniccats.com/wp-content/uploads/2018/01/fav.png" alt="Electronic Cats Logo" height="35"/><img src="https://raw.githubusercontent.com/gist/ManulMax/2d20af60d709805c55fd784ca7cba4b9/raw/bcfeac7604f674ace63623106eb8bb8471d844a6/github.gif" alt="GitHub Logo" height="30"/>
 
@@ -53,9 +75,14 @@ Electronic Cats invests time and resources in providing this open-source design,
 
 ## License
 
-This project is distributed under the **MIT License** (see [`LICENSE`](LICENSE)) **except** for the ENC28J60 driver files, which are derivative works of the [EtherCard](https://github.com/njh/EtherCard) library and therefore carry **GPL-2.0-or-later**:
+This project is distributed under the **MIT License** (see [`LICENSE`](LICENSE))
+except for the ENC28J60 driver files, which are derivative works of
+[EtherCard](https://github.com/njh/EtherCard) and carry
+**GPL-2.0-or-later**:
 
 - `EthernetAppDemo/libraries/chip/enc28j60.c`
 - `EthernetAppDemo/libraries/chip/enc28j60.h`
 
-Both files include an SPDX header and reference [`LICENSES/EtherCard.LICENSE`](LICENSES/EtherCard.LICENSE) for the full GPLv2 text. The remainder of the source tree (scenes, modules, protocol helpers, SPI shim, etc.) is original Electronic Cats code under MIT.
+Those files include SPDX headers and refer to
+[`LICENSES/EtherCard.LICENSE`](LICENSES/EtherCard.LICENSE). The remaining source
+tree is original Electronic Cats code under MIT.
