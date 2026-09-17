@@ -6,9 +6,10 @@ static neighbor_t* neighbors = NULL;
 /*
  * API 87.1 uses an 8-byte, 8-byte-aligned heap block header. Keep one KiB
  * available after the DB allocation for the configuration widget and other
- * small scene allocations. That reserve matches 25% of the 4 KiB Passive
- * worker stack. The reserve contributes to total-free headroom, but it is not
- * part of the DB allocation and therefore need not be contiguous with it.
+ * small scene allocations. This is an explicit post-allocation reserve, not
+ * a fraction of the current Passive worker stack. The reserve contributes to
+ * total-free headroom, but it is not part of the DB allocation and therefore
+ * need not be contiguous with it.
  */
 #define NEIGHBOR_DB_HEAP_HEADER_BYTES        8U
 #define NEIGHBOR_DB_HEAP_ALIGNMENT_BYTES     8U

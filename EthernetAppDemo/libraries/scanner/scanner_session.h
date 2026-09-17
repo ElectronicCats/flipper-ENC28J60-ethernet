@@ -69,8 +69,9 @@ bool scanner_wait_failure_is_memory(scanner_wait_failure_t failure);
  *     ARP-resolve target_ip directly;
  *   - otherwise, return the cached gateway MAC.
  *
- * Cached results are reused. Cache misses pay one arp_get_specific_mac
- * call, which today blocks up to ~20 s. Returns true on success.
+ * Cached results are reused. On a cache miss, the session resolves the
+ * next-hop MAC through its current dispatcher-backed request/reply flow and
+ * stores the result in the session cache. Returns true on success.
  */
 bool scanner_resolve_next_hop(scanner_session_t* s, const uint8_t target_ip[4], uint8_t mac_out[6]);
 

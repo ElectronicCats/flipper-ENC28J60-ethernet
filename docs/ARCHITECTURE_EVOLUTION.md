@@ -90,7 +90,9 @@ Early controller code relied on shared file-static receive/bank state and did no
 
 ### Implemented transition
 
-Commit `abf9790` introduced a per-controller `FuriMutex`; follow-up `9d45f31` closed missing synchronization coverage across allocation/reset/MAC/start/link paths. Receive cursor state is now in `enc28j60_t.rx_next_packet`; RX and TX frame buffers are instance members. Bank selection is derived from the chip registers during access rather than relying on the earlier mutable global bank cache. Later lifecycle work (`dc03227`, `f1e7e14`) hardened controller and shutdown state.
+Commit `abf9790` introduced a per-controller `FuriMutex`; follow-up `9d45f31` closed missing synchronization coverage across allocation/reset/MAC/start/link paths. Receive cursor state is now in `enc28j60_t.rx_next_packet`; RX and TX frame
+buffers are instance members. The earlier process-global bank cache was replaced by the per-instance `enc28j60_t.bank` cache. Bank-switch logic compares against that instance state, consults the controller bank state when a switch is needed,
+and updates the per-instance cache under the ENC synchronization boundary. Later lifecycle work (`dc03227`, `f1e7e14`) hardened controller and shutdown state.
 
 PA14 interrupt registration became the dispatcher wakeup source in `410c092`, with fallback polling retained. The bulk-SPI roadmap idea was not adopted because the ENC28J60 command protocol and chip-select transaction boundaries did not support the proposed blanket conversion without changing semantics.
 
@@ -259,7 +261,7 @@ These are current invariants because they address architectural failure modes ex
 | One polling `app_worker` owns automatic RX | RX dispatcher plus registered automatic handlers | Superseded |
 | Suspend/resume `app_worker` around feature threads | One explicitly owned `thread_alternative` slot | Superseded |
 | Scanner helpers poll the controller directly | Dispatcher-backed temporary registrations/semaphore waits | Mostly superseded; OS has a direct-RX exception |
-| Mutable file-static ENC bank/receive cursor state | Instance state plus controller mutex/register-derived bank | Superseded |
+| Mutable file-static ENC bank/receive cursor state | Per-instance bank/RX state plus controller mutex | Superseded |
 | Tight RX polling | PA14 interrupt wakeup with bounded polling fallback | Superseded |
 | Blanket bulk-SPI conversion | Command-appropriate SPI transactions | Historical proposal not adopted |
 | Separate LLDP, CDP, and EAPOL user features | Integrated Passive Discovery modes and shared data model | Superseded feature decomposition |

@@ -78,7 +78,7 @@ remain platform-contract questions.
 
 ### Feature-worker contract
 
-`App.thread_alternative` and `App.thread_owner` implement a single shared
+`App.thread_alternative` and `App.thread_alternative_owner` implement a single shared
 feature-worker slot:
 
 1. `app_thread_claim()` accepts a worker only when the slot is empty.
@@ -292,7 +292,7 @@ for the final rename remain filesystem-dependent.
 ## 11. Passive Discovery
 
 Passive Discovery has one 3 KiB feature worker and one live `neighbor_db_t`
-with 32 entries. Entries are keyed by `(source MAC, protocol source)`, so the
+with 32 entries. Entries are keyed by `(source MAC, protocol)`, so the
 same MAC may have distinct LLDP, CDP, and EAPOL observations.
 
 The worker owns one scanner session, one temporary RX wait at a time,
