@@ -31,11 +31,12 @@ jobs:
           fi
 
       - name: Build with ufbt
-        uses: flipperdevices/flipperzero-ufbt-action@v0.1
+        uses: flipperdevices/flipperzero-ufbt-action@v0.1.4
         id: build-app
         env:
           EXTRA_CFLAGS: '-DFAP_APP_VERSION=\"${{ env.TAG_NAME }}\"'
         with:
+          ufbt-version: "==0.2.6"
           sdk-index-url: https://up.unleashedflip.com/directory.json
           sdk-channel: release
           app-dir: ./EthernetAppDemo/
