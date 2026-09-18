@@ -41,8 +41,14 @@ memory tables, decisions, or findings into this skill.
   development steps.
 - Git history and release records can establish when and how the repository
   evolved, but do not override current source or canonical documentation.
+- Use Git history to establish implementation lineage when current source shows
+  that a historical capability exists but the historical plan no longer describes
+  its present architecture. Prefer the commits that introduced or materially
+  reworked the capability over inferring progress from document checklists alone.
 
-Historical plans/specifications preserve intent and implementation history.
+Historical plans/specifications preserve design intent and planned
+implementation history. Git history and current source establish what actually
+landed and how that implementation subsequently evolved.
 They are not authoritative descriptions of the current implementation.
 
 ## Historical roadmap and design lineage
@@ -61,9 +67,15 @@ then reconcile it in this order:
 5. `docs/BACKLOG.md`.
 
 Classify the item as `IMPLEMENTED`, `PARTIALLY IMPLEMENTED`, `SUPERSEDED`,
-`OBSOLETE`, or `STILL A CANDIDATE / NOT YET ADOPTED`, with evidence. An
-unchecked historical checklist item is not proof that work remains, and a
-similarly named module is not proof that the intended capability landed.
+`OBSOLETE`, `HISTORICAL / NOT CURRENTLY ADOPTED`, or `CURRENT CANDIDATE`,
+with evidence. An unchecked historical checklist item is not proof that work
+remains, and a similarly named module is not proof that the intended capability
+landed.
+
+Use `CURRENT CANDIDATE` only when current project evidence such as
+`docs/BACKLOG.md`, `docs/DECISIONS.md`, or an explicitly adopted current
+planning decision establishes that the capability is still under consideration.
+Historical inclusion alone supports only `HISTORICAL / NOT CURRENTLY ADOPTED`.
 
 ## Durable implementation evolution
 
