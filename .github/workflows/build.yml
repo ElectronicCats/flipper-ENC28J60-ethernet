@@ -37,9 +37,18 @@ jobs:
           EXTRA_CFLAGS: '-DFAP_APP_VERSION=\"${{ env.TAG_NAME }}\"'
         with:
           ufbt-version: "==0.2.6"
-          sdk-index-url: https://up.unleashedflip.com/directory.json
           sdk-channel: release
           app-dir: ./EthernetAppDemo/
+
+      - name: Build Information
+        run: |
+          echo "### FAP Build Information" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **App version:** ${{ env.TAG_NAME }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **SDK channel:** Official release" >> $GITHUB_STEP_SUMMARY
+          echo "- **SDK/API:** ${{ steps.build-app.outputs.suffix }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **API version:** ${{ steps.build-app.outputs.api-version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **uFBT:** 0.2.6" >> $GITHUB_STEP_SUMMARY
 
       - name: Rename FAP Artifact
         id: rename-fap
