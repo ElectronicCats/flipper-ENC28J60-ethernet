@@ -3,14 +3,30 @@
 #include "../app_user.h"
 #include "../libraries/protocol_tools/neighbor_db.h"
 
+typedef enum {
+    PassiveDiscoveryStartPending,
+    PassiveDiscoveryStartWorkerLowMemory,
+    PassiveDiscoveryStartOwnerBusy,
+} PassiveDiscoveryStartResult;
+
+typedef enum {
+    PassiveDiscoveryEventRefresh = 1,
+    PassiveDiscoveryEventStarted,
+    PassiveDiscoveryEventScannerLowMemory,
+    PassiveDiscoveryEventDeviceUnavailable,
+    PassiveDiscoveryEventLinkUnavailable,
+    PassiveDiscoveryEventRxUnavailable,
+} PassiveDiscoveryEvent;
+
 /**
  * @brief Start the passive discovery background scanning process.
  *
  * Allocates and spawns a background thread to orchestrate packet captures.
  *
  * @param app Pointer to the main App application context.
+ * @return Pending when the worker was started, otherwise a recoverable startup error.
  */
-void passive_discovery_module_start(App* app);
+PassiveDiscoveryStartResult passive_discovery_module_start(App* app);
 
 /**
  * @brief Stop the passive discovery scanning process and clean up the thread.

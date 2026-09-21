@@ -1,6 +1,8 @@
 #include "app_user.h"
 #include "libraries/protocol_tools/arp.h"
 #include "libraries/protocol_tools/icmp.h"
+#include "libraries/protocol_tools/neighbor_db.h"
+#include "libraries/protocol_tools/passive_history.h"
 
 // Just to set as initial MAC the user must to modify to have other MAC address
 uint8_t MAC_INITIAL[6] = {0xba, 0x3f, 0x91, 0xc2, 0x7e, 0x5d};
@@ -78,6 +80,103 @@ static bool auto_icmp_predicate(const uint8_t* frame, uint16_t len, void* ctx) {
 static void auto_icmp_handler(const uint8_t* frame, uint16_t len, void* ctx) {
     App* app = (App*)ctx;
     ping_reply_to_request(app->ethernet, (uint8_t*)frame, len);
+}
+
+bool arp_load_last_scan(App* app) {
+    if(!storage_file_open(app->file, PATH_LAST_SCAN, FSAM_READ, FSOM_OPEN_EXISTING)) {
+        storage_file_close(app->file);
+        return false;
+    }
+
+    arp_scan_header_t header;
+
+    if(storage_file_read(app->file, &header, sizeof(header)) != sizeof(header)) {
+        storage_file_close(app->file);
+        return false;
+    }
+
+    app->last_scan_time = header.datetime;
+    app->ip_counter = header.host_count;
+
+    if(app->ip_counter) {
+        storage_file_read(app->file, app->ip_list, sizeof(arp_list) * app->ip_counter);
+    }
+
+    storage_file_close(app->file);
+
+    return true;
+}
+
+bool arp_save_last_scan(App* app) {
+    if(!storage_file_open(app->file, PATH_LAST_SCAN, FSAM_WRITE, FSOM_CREATE_ALWAYS)) {
+        return false;
+    }
+
+    arp_scan_header_t header;
+
+    furi_hal_rtc_get_datetime(&header.datetime);
+    app->last_scan_time = header.datetime;
+    header.host_count = app->ip_counter;
+
+    storage_file_write(app->file, &header, sizeof(header));
+
+    if(app->ip_counter) {
+        storage_file_write(app->file, app->ip_list, sizeof(arp_list) * app->ip_counter);
+    }
+
+    storage_file_close(app->file);
+
+    return true;
+}
+
+bool app_thread_claim(App* app, AppThreadOwner owner, FuriThread* thread) {
+    furi_assert(app);
+
+    if(!thread || owner == AppThreadOwnerNone) return false;
+
+    if(app->thread_alternative || app->thread_alternative_owner != AppThreadOwnerNone) {
+        furi_thread_free(thread);
+        return false;
+    }
+
+    app->thread_alternative = thread;
+    app->thread_alternative_owner = owner;
+    app->thread_shutdown_requested = false;
+    return true;
+}
+
+bool app_thread_is_owned(const App* app, AppThreadOwner owner) {
+    return app && app->thread_alternative && app->thread_alternative_owner == owner;
+}
+
+uint32_t app_thread_join_and_free(App* app, AppThreadOwner owner) {
+    if(!app_thread_is_owned(app, owner)) return 0;
+
+    FuriThread* thread = app->thread_alternative;
+    furi_thread_join(thread);
+    uint32_t return_code = furi_thread_get_return_code(thread);
+
+    app->thread_alternative = NULL;
+    app->thread_alternative_owner = AppThreadOwnerNone;
+    furi_thread_free(thread);
+
+    return return_code;
+}
+
+void app_thread_shutdown(App* app) {
+    if(!app || !app->thread_alternative || app->thread_alternative_owner == AppThreadOwnerNone) {
+        return;
+    }
+
+    AppThreadOwner owner = app->thread_alternative_owner;
+    app->thread_shutdown_requested = true;
+    app->dora_cancel = true;
+    app->sniffer_stop = true;
+    app->passive_discovery_stop = true;
+    app->arpspoofing_stop = true;
+    app->arp_scanner_stop = true;
+    app->os_detector_stop = true;
+    app_thread_join_and_free(app, owner);
 }
 
 App* app_alloc() {
@@ -195,6 +294,21 @@ App* app_alloc() {
 }
 
 void app_free(App* app) {
+    // Stop and join the currently owned scene worker while App, dispatcher,
+    // storage, and ENC28J60 resources are all still valid.
+    app_thread_shutdown(app);
+
+    // Passive Discovery normally releases its database on final family exit.
+    // Keep a post-worker shutdown fallback for app exits from any passive scene.
+    neighbor_db_release();
+    passive_history_free(app->passive_history);
+    app->passive_history = NULL;
+
+    // Read PCAP normally releases this after joining its worker in scene exit.
+    // Keep an app-shutdown fallback for exits that bypass the scene callback.
+    free(app->packet_positions);
+    app->packet_positions = NULL;
+
     // F0.2 — persist current settings before tearing down storage and the
     // ethernet instance. Errors are silent; a failed save must not block
     // app exit.
@@ -226,11 +340,13 @@ void app_free(App* app) {
     // Free memory of GUI modules
     widget_free(app->widget);
     submenu_free(app->submenu);
+    variable_item_list_free(app->varList);
     text_box_free(app->text_box);
     byte_input_free(app->input_byte_value);
     file_browser_free(app->file_browser);
     ip_assigner_free(app->ip_assigner);
     loading_free(app->loading);
+    number_input_free(app->number_input);
 
     // Free memory of ENC
     free_enc28j60(app->ethernet);

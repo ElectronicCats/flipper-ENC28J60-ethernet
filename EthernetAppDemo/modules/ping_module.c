@@ -205,9 +205,24 @@ bool ping_reply_to_request(enc28j60_t* ethernet, uint8_t* packet, uint16_t size_
     uint16_t sequence = icmp_header.sequence[0] << 8 | icmp_header.sequence[1];
 
     // Get data from packet
-    uint16_t data_size = size_of_packet - (ETHERNET_HEADER_LEN + IP_HEADER_LEN + ICMP_HEADER_LEN);
-    uint8_t* data_extra = (uint8_t*)calloc(data_size, sizeof(uint8_t));
-    memcpy(data_extra, packet + ETHERNET_HEADER_LEN + IP_HEADER_LEN + ICMP_HEADER_LEN, data_size);
+    const uint16_t header_size = ETHERNET_HEADER_LEN + IP_HEADER_LEN + ICMP_HEADER_LEN;
+
+    if(size_of_packet < header_size) {
+        return false;
+    }
+
+    uint16_t data_size = size_of_packet - header_size;
+    uint8_t* data_extra = NULL;
+
+    if(data_size > 0) {
+        data_extra = (uint8_t*)malloc(data_size);
+        if(!data_extra) {
+            return false;
+        }
+
+        memcpy(
+            data_extra, packet + ETHERNET_HEADER_LEN + IP_HEADER_LEN + ICMP_HEADER_LEN, data_size);
+    }
 
     uint8_t packet_reply[MAX_FRAMELEN] = {0};
 

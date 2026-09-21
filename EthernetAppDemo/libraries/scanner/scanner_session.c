@@ -4,18 +4,25 @@
 #include "../../modules/arp_module.h"
 #include "../protocol_tools/ethernet_protocol.h"
 #include "../protocol_tools/arp.h"
+#include "../functions/startup_guard.h"
 
 void scanner_session_init(scanner_session_t* s, App* app) {
     furi_assert(s);
     furi_assert(app);
     furi_assert(app->ethernet);
 
+    s->app = app;
     s->ethernet = app->ethernet;
     s->view_dispatcher = app->view_dispatcher;
     s->ip_gateway = app->ip_gateway;
     s->mac_gateway = app->mac_gateway;
     s->subnet_mask = app->ethernet->subnet_mask;
     s->cache_next = 0;
+    s->cancelled = false;
+    s->external_cancel = NULL;
+    s->app_shutdown = &app->thread_shutdown_requested;
+    s->last_wait_failure = ScannerWaitFailureNone;
+
     for(uint8_t i = 0; i < SCANNER_RESOLVE_CACHE_ENTRIES; i++) {
         s->cache[i].valid = false;
     }
@@ -24,6 +31,22 @@ void scanner_session_init(scanner_session_t* s, App* app) {
 void scanner_session_deinit(scanner_session_t* s) {
     UNUSED(s);
     // No-op for now. F0.4 will add RX handler unsubscription here.
+}
+
+void scanner_session_set_cancel_flag(scanner_session_t* s, volatile const bool* cancel_flag) {
+    furi_assert(s);
+    s->external_cancel = cancel_flag;
+}
+
+scanner_wait_failure_t scanner_session_get_last_wait_failure(const scanner_session_t* s) {
+    furi_assert(s);
+    return s->last_wait_failure;
+}
+
+bool scanner_wait_failure_is_memory(scanner_wait_failure_t failure) {
+    return failure == ScannerWaitFailureNoMemoryTotal ||
+           failure == ScannerWaitFailureNoMemoryBlock ||
+           failure == ScannerWaitFailureNoMemoryAllocation;
 }
 
 void scanner_send_packet_trigger(void* ctx) {
@@ -172,9 +195,23 @@ bool scanner_wait_for_packet(
     furi_assert(s);
     furi_assert(pred);
     furi_assert(len_out);
-    UNUSED(s);
 
     *len_out = 0;
+    s->last_wait_failure = ScannerWaitFailureNone;
+
+    StartupGuardRequirements semaphore_requirements = {
+        .required_total_free =
+            STARTUP_GUARD_SCANNER_SEMAPHORE_HEAP_BYTES + STARTUP_GUARD_RESERVE_BYTES,
+        .required_max_block = STARTUP_GUARD_SCANNER_SEMAPHORE_HEAP_BYTES,
+    };
+    StartupGuardResult semaphore_guard = startup_guard_check_capture(
+        &s->app->startup_diagnostic, semaphore_requirements, StartupDiagnosticBoundaryScannerWait);
+    if(semaphore_guard != StartupGuardReady) {
+        s->last_wait_failure = semaphore_guard == StartupGuardInsufficientTotal ?
+                                   ScannerWaitFailureNoMemoryTotal :
+                                   ScannerWaitFailureNoMemoryBlock;
+        return false;
+    }
 
     scanner_wait_state_t state = {
         .user_pred = pred,
@@ -183,10 +220,18 @@ bool scanner_wait_for_packet(
         .matched_len = 0,
         .matched = false,
     };
-    if(!state.signal) return false;
+    if(!state.signal) {
+        startup_guard_capture_allocation_failure(
+            &s->app->startup_diagnostic,
+            semaphore_requirements,
+            StartupDiagnosticBoundaryScannerWait);
+        s->last_wait_failure = ScannerWaitFailureNoMemoryAllocation;
+        return false;
+    }
 
     rx_handle_t* handle = rx_register(wait_predicate, wait_signal_handler, &state);
     if(!handle) {
+        s->last_wait_failure = ScannerWaitFailureRxUnavailable;
         furi_semaphore_free(state.signal);
         return false;
     }
@@ -218,6 +263,22 @@ bool scanner_wait_for_packet(
 }
 
 bool scanner_cancel_requested(scanner_session_t* s) {
-    UNUSED(s);
-    return !furi_hal_gpio_read(&gpio_button_back);
+    if(!s) return false;
+
+    if(s->app_shutdown && *s->app_shutdown) {
+        s->cancelled = true;
+        return true;
+    }
+
+    if(s->external_cancel && *s->external_cancel) {
+        s->cancelled = true;
+        return true;
+    }
+
+    if(!furi_hal_gpio_read(&gpio_button_back)) {
+        s->cancelled = true;
+        return true;
+    }
+
+    return s->cancelled;
 }

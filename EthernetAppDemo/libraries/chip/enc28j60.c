@@ -93,6 +93,8 @@ void show_message(uint8_t* buffer, uint16_t len) {
 #define EPMM6 (0x0E | 0x20)
 #define EPMM7 (0x0F | 0x20)
 #define EPMCS (0x10 | 0x20)
+#define EPMOL (0x14 | 0x20)
+#define EPMOH (0x15 | 0x20)
 
 // #define EPMO            (0x14|0x20)
 #define EWOLIE  (0x16 | 0x20)
@@ -263,12 +265,6 @@ void show_message(uint8_t* buffer, uint16_t len) {
 #define ENC28J60_SOFT_RESET     0xFF
 
 /**
- * variable to know the bank
- */
-
-uint8_t bank = 0;
-
-/**
  * Functions to set the ENC28J60
  */
 
@@ -309,47 +305,45 @@ static uint8_t get_current_bank(FuriHalSpiBusHandle* spi) {
 }
 
 // Function to set the bank
-static void set_bank_with_mask(FuriHalSpiBusHandle* spi, const uint8_t address) {
-    // Set the bank
+static void set_bank_with_mask(enc28j60_t* instance, const uint8_t address) {
+    FuriHalSpiBusHandle* spi = instance->spi;
+
     uint8_t bank_to_set = (address & BANK_MASK) >> 5;
 
-    // Via software to know if it is the same
-    if(bank_to_set == bank) return;
+    if(bank_to_set == instance->bank) return;
 
-    // Read Actual Bank
     uint8_t current_bank = get_current_bank(spi);
 
-    // If the current bank is different, set the new bank
-    if(current_bank != (address & BANK_MASK)) {
+    if(current_bank != bank_to_set) {
         write_operation(spi, ENC28J60_BIT_FIELD_CLR, ECON1, 0x03);
         write_operation(spi, ENC28J60_BIT_FIELD_SET, ECON1, bank_to_set);
-
-        bank = bank_to_set;
     }
+
+    instance->bank = bank_to_set;
 }
 
 // Function to write just one byte of a register
-static void
-    write_register_byte(FuriHalSpiBusHandle* spi, const uint8_t address, const uint8_t data) {
-    set_bank_with_mask(spi, address);
-    write_operation(spi, ENC28J60_WRITE_CTRL_REG, address, data);
+static void write_register_byte(enc28j60_t* instance, const uint8_t address, const uint8_t data) {
+    set_bank_with_mask(instance, address);
+    write_operation(instance->spi, ENC28J60_WRITE_CTRL_REG, address, data);
 }
 
 // Function to write or set a register
-static void write_register(FuriHalSpiBusHandle* spi, uint8_t address, const uint16_t data) {
-    write_register_byte(spi, address, data);
-    write_register_byte(spi, address + 1, data >> 8);
+static void write_register(enc28j60_t* instance, uint8_t address, const uint16_t data) {
+    write_register_byte(instance, address, data);
+    write_register_byte(instance, address + 1, data >> 8);
 }
 
 // Function to read a byte register
-static uint8_t read_register_byte(FuriHalSpiBusHandle* spi, const uint8_t address) {
-    set_bank_with_mask(spi, address);
-    return read_operation(spi, ENC28J60_READ_CTRL_REG, address);
+static uint8_t read_register_byte(enc28j60_t* instance, const uint8_t address) {
+    set_bank_with_mask(instance, address);
+    return read_operation(instance->spi, ENC28J60_READ_CTRL_REG, address);
 }
 
 // Function to read a register
-static uint16_t read_register(FuriHalSpiBusHandle* spi, const uint8_t address) {
-    return read_register_byte(spi, address) + (read_register_byte(spi, address + 1) << 8);
+static uint16_t read_register(enc28j60_t* instance, const uint8_t address) {
+    return read_register_byte(instance, address) +
+           (read_register_byte(instance, address + 1) << 8);
 }
 
 // Function to send buffer
@@ -376,32 +370,64 @@ static void read_buffer(FuriHalSpiBusHandle* spi, uint16_t len, uint8_t* data) {
     furi_hal_spi_release(spi);
 }
 
-// To write the registers PHY
-static void write_Phy(FuriHalSpiBusHandle* spi, const uint8_t address, const uint16_t data) {
-    write_register_byte(spi, MIREGADR, address);
-    write_register(spi, MIWR, data);
-    while(read_register_byte(spi, MISTAT) & MISTAT_BUSY)
+#define PHY_BUSY_TIMEOUT_MS 100U
+
+static bool wait_phy_ready(enc28j60_t* instance) {
+    uint32_t started = furi_get_tick();
+    while(read_register_byte(instance, MISTAT) & MISTAT_BUSY) {
+        if((furi_get_tick() - started) >= PHY_BUSY_TIMEOUT_MS) return false;
         furi_delay_us(1);
+    }
+    return true;
+}
+
+// To write the registers PHY
+static bool write_Phy(enc28j60_t* instance, const uint8_t address, const uint16_t data) {
+    write_register_byte(instance, MIREGADR, address);
+    write_register(instance, MIWR, data);
+    return wait_phy_ready(instance);
 }
 
 // To read the register Phy
-static uint16_t read_Phy_byte(FuriHalSpiBusHandle* spi, const uint8_t address) {
-    write_register_byte(spi, MIREGADR, address);
-    write_register_byte(spi, MICMD, MICMD_MIIRD);
-    while(read_register_byte(spi, MISTAT) & MISTAT_BUSY)
-        ;
-    write_register_byte(spi, MICMD, 0x00);
-    return read_register_byte(spi, MIRD + 1);
+static bool read_Phy_byte(enc28j60_t* instance, const uint8_t address, uint8_t* data) {
+    if(!data) return false;
+    write_register_byte(instance, MIREGADR, address);
+    write_register_byte(instance, MICMD, MICMD_MIIRD);
+    bool ready = wait_phy_ready(instance);
+    write_register_byte(instance, MICMD, 0x00);
+    if(!ready) return false;
+    *data = read_register_byte(instance, MIRD + 1);
+    return true;
 }
 
 // Alloc memory for the enc28j60 struct
 enc28j60_t* enc28j60_alloc(uint8_t* mac_address, uint8_t* ip_address) {
     enc28j60_t* ethernet_enc = (enc28j60_t*)malloc(sizeof(enc28j60_t));
+
+    if(!ethernet_enc) {
+        return NULL;
+    }
+
+    memset(ethernet_enc, 0, sizeof(*ethernet_enc));
+
     ethernet_enc->spi = spi_alloc();
+
+    if(!ethernet_enc->spi) {
+        free(ethernet_enc);
+        return NULL;
+    }
     // F0.5a — chip-level mutex serializes register access across threads.
     // Each public function below acquires this around set_bank + SPI op
     // sequences. Closes B-6 (unprotected file-static `bank`).
     ethernet_enc->mutex = furi_mutex_alloc(FuriMutexTypeNormal);
+    if(!ethernet_enc->mutex) {
+        spi_free(ethernet_enc->spi);
+        free(ethernet_enc);
+        return NULL;
+    }
+    ethernet_enc->bank = 0;
+    ethernet_enc->rx_next_packet = RXSTART_INIT;
+    ethernet_enc->rx_packet_unreleased = false;
     memcpy(ethernet_enc->mac_address, mac_address, 6);
     memcpy(ethernet_enc->ip_address, ip_address, 4);
     return ethernet_enc;
@@ -422,6 +448,9 @@ void enc28j60_soft_reset(enc28j60_t* instance) {
 
     furi_mutex_acquire(instance->mutex, FuriWaitForever);
     write_operation(spi, ENC28J60_SOFT_RESET, 0, ENC28J60_SOFT_RESET);
+    instance->bank = 0;
+    instance->rx_next_packet = RXSTART_INIT;
+    instance->rx_packet_unreleased = false;
     furi_mutex_release(instance->mutex);
 
     furi_delay_ms(2);
@@ -429,14 +458,15 @@ void enc28j60_soft_reset(enc28j60_t* instance) {
 
 //  Set MAC Adress
 void enc28j60_set_mac(enc28j60_t* instance) {
-    FuriHalSpiBusHandle* spi = instance->spi;
     furi_mutex_acquire(instance->mutex, FuriWaitForever);
-    write_register_byte(spi, MAADR5, instance->mac_address[0]);
-    write_register_byte(spi, MAADR4, instance->mac_address[1]);
-    write_register_byte(spi, MAADR3, instance->mac_address[2]);
-    write_register_byte(spi, MAADR2, instance->mac_address[3]);
-    write_register_byte(spi, MAADR1, instance->mac_address[4]);
-    write_register_byte(spi, MAADR0, instance->mac_address[5]);
+
+    write_register_byte(instance, MAADR5, instance->mac_address[0]);
+    write_register_byte(instance, MAADR4, instance->mac_address[1]);
+    write_register_byte(instance, MAADR3, instance->mac_address[2]);
+    write_register_byte(instance, MAADR2, instance->mac_address[3]);
+    write_register_byte(instance, MAADR1, instance->mac_address[4]);
+    write_register_byte(instance, MAADR0, instance->mac_address[5]);
+
     furi_mutex_release(instance->mutex);
 }
 
@@ -449,6 +479,10 @@ uint8_t enc28j60_start(enc28j60_t* instance) {
 
     furi_mutex_acquire(instance->mutex, FuriWaitForever);
 
+    instance->bank = 0;
+    instance->rx_next_packet = RXSTART_INIT;
+    instance->rx_packet_unreleased = false;
+
     uint32_t prev_time = furi_get_tick();
 
     while(!(read_operation(spi, ENC28J60_READ_CTRL_REG, ESTAT) & ESTAT_CLKRDY)) {
@@ -459,39 +493,76 @@ uint8_t enc28j60_start(enc28j60_t* instance) {
         furi_delay_us(1);
     }
 
-    write_register(spi, ERXST, RXSTART_INIT);
-    write_register(spi, ERXRDPT, RXSTART_INIT);
-    write_register(spi, ERXND, RXSTOP_INIT);
-    write_register(spi, ETXST, TXSTART_INIT);
-    write_register(spi, ETXND, TXSTOP_INIT);
+    write_register(instance, ERXST, RXSTART_INIT);
+    write_register(instance, ERXRDPT, RXSTART_INIT);
+    write_register(instance, ERXND, RXSTOP_INIT);
+    write_register(instance, ETXST, TXSTART_INIT);
+    write_register(instance, ETXND, TXSTOP_INIT);
 
-    write_register_byte(spi, ERXFCON, ERXFCON_UCEN | ERXFCON_CRCEN | ERXFCON_PMEN | ERXFCON_BCEN);
-    write_register(spi, EPMM0, 0x303f);
-    write_register(spi, EPMCS, 0xf7f9);
+    /*
+ * F1.1 — Hardware LLDP filtering.
+ *
+ * EtherType is located at Ethernet bytes 12-13:
+ *   byte 12 = 0x88
+ *   byte 13 = 0xCC
+ *
+ * EPMM1 bit 4 selects byte 12.
+ * EPMM1 bit 5 selects byte 13.
+ *
+ * Therefore:
+ *   EPMM0 = 0x00
+ *   EPMM1 = 0x30
+ *
+ * The ENC28J60 calculates an IP checksum over the selected bytes.
+ * IP checksum of {0x88, 0xCC} = 0x7733.
+ */
+    write_register_byte(instance, EPMOL, 0x00);
+    write_register_byte(instance, EPMOH, 0x00);
 
-    write_Phy(spi, PHLCON, 0x476);
+    write_register_byte(instance, EPMM0, 0x00);
+    write_register_byte(instance, EPMM1, 0x30);
 
-    write_register_byte(spi, MACON1, MACON1_MARXEN);
+    write_register_byte(instance, EPMM2, 0x00);
+    write_register_byte(instance, EPMM3, 0x00);
+    write_register_byte(instance, EPMM4, 0x00);
+    write_register_byte(instance, EPMM5, 0x00);
+    write_register_byte(instance, EPMM6, 0x00);
+    write_register_byte(instance, EPMM7, 0x00);
+
+    write_register(instance, EPMCS, 0x7733);
+
+    write_register_byte(
+        instance, ERXFCON, ERXFCON_UCEN | ERXFCON_CRCEN | ERXFCON_PMEN | ERXFCON_BCEN);
+
+    if(!write_Phy(instance, PHLCON, 0x476)) {
+        furi_mutex_release(instance->mutex);
+        return 0xff;
+    }
+
+    write_register_byte(instance, MACON1, MACON1_MARXEN);
 
     write_operation(
         spi, ENC28J60_BIT_FIELD_SET, MACON3, MACON3_PADCFG0 | MACON3_TXCRCEN | MACON3_FRMLNEN);
-    write_register(spi, MAIPG, 0x0C12);
-    write_register_byte(spi, MABBIPG, 0x12);
-    write_register(spi, MAMXFL, MAX_FRAMELEN);
+    write_register(instance, MAIPG, 0x0C12);
+    write_register_byte(instance, MABBIPG, 0x12);
+    write_register(instance, MAMXFL, MAX_FRAMELEN);
 
-    write_register_byte(spi, MAADR5, instance->mac_address[0]);
-    write_register_byte(spi, MAADR4, instance->mac_address[1]);
-    write_register_byte(spi, MAADR3, instance->mac_address[2]);
-    write_register_byte(spi, MAADR2, instance->mac_address[3]);
-    write_register_byte(spi, MAADR1, instance->mac_address[4]);
-    write_register_byte(spi, MAADR0, instance->mac_address[5]);
+    write_register_byte(instance, MAADR5, instance->mac_address[0]);
+    write_register_byte(instance, MAADR4, instance->mac_address[1]);
+    write_register_byte(instance, MAADR3, instance->mac_address[2]);
+    write_register_byte(instance, MAADR2, instance->mac_address[3]);
+    write_register_byte(instance, MAADR1, instance->mac_address[4]);
+    write_register_byte(instance, MAADR0, instance->mac_address[5]);
 
-    write_Phy(spi, PHCON2, PHCON2_HDLDIS);
-    set_bank_with_mask(spi, ECON1);
+    if(!write_Phy(instance, PHCON2, PHCON2_HDLDIS)) {
+        furi_mutex_release(instance->mutex);
+        return 0xff;
+    }
+    set_bank_with_mask(instance, ECON1);
     write_operation(spi, ENC28J60_BIT_FIELD_SET, EIE, EIE_INTIE | EIE_PKTIE);
     write_operation(spi, ENC28J60_BIT_FIELD_SET, ECON1, ECON1_RXEN);
 
-    uint8_t rev = read_register_byte(spi, EREVID);
+    uint8_t rev = read_register_byte(instance, EREVID);
 
     furi_mutex_release(instance->mutex);
 
@@ -503,8 +574,12 @@ uint8_t enc28j60_start(enc28j60_t* instance) {
 // Get if the ENC is linked
 bool is_link_up(enc28j60_t* instance) {
     furi_mutex_acquire(instance->mutex, FuriWaitForever);
-    bool result = (read_Phy_byte(instance->spi, PHSTAT2) >> 2) & 1;
+
+    uint8_t phy_status = 0;
+    bool result = read_Phy_byte(instance, PHSTAT2, &phy_status) && ((phy_status >> 2) & 1);
+
     furi_mutex_release(instance->mutex);
+
     return result;
 }
 
@@ -532,8 +607,8 @@ void send_packet(enc28j60_t* instance, uint8_t* buffer, uint16_t len) {
         write_operation(spi, ENC28J60_BIT_FIELD_CLR, EIR, EIR_TXERIF | EIR_TXIF);
 
         if(retry == 0) {
-            write_register(spi, EWRPT, TXSTART_INIT);
-            write_register(spi, ETXND, TXSTART_INIT + len);
+            write_register(instance, EWRPT, TXSTART_INIT);
+            write_register(instance, ETXND, TXSTART_INIT + len);
             write_operation(spi, ENC28J60_WRITE_BUF_MEM, 0, 0x00);
             write_buffer(spi, len, buffer);
         }
@@ -542,10 +617,10 @@ void send_packet(enc28j60_t* instance, uint8_t* buffer, uint16_t len) {
         write_operation(spi, ENC28J60_BIT_FIELD_SET, ECON1, ECON1_TXRTS);
 
         uint16_t count = 0;
-        while((read_register_byte(spi, EIR) & (EIR_TXIF | EIR_TXERIF)) == 0 && ++count < 1000)
+        while((read_register_byte(instance, EIR) & (EIR_TXIF | EIR_TXERIF)) == 0 && ++count < 1000)
             furi_delay_us(1);
 
-        if(!(read_register_byte(spi, EIR) & EIR_TXERIF) && count < 1000U) {
+        if(!(read_register_byte(instance, EIR) & EIR_TXERIF) && count < 1000U) {
             break;
         }
 
@@ -554,11 +629,12 @@ void send_packet(enc28j60_t* instance, uint8_t* buffer, uint16_t len) {
 
         uint8_t tsv[7];
 
-        uint16_t etxnd = read_register(spi, ETXND);
-        write_register(spi, ERDPT, etxnd + 1);
+        uint16_t etxnd = read_register(instance, ETXND);
+        write_register(instance, ERDPT, etxnd + 1);
         read_buffer(spi, sizeof(tsv), tsv);
 
-        if(!((read_register_byte(spi, EIR) & EIR_TXERIF) && (tsv[3] & 1 << 5)) || retry > 16) {
+        if(!((read_register_byte(instance, EIR) & EIR_TXERIF) && (tsv[3] & 1 << 5)) ||
+           retry > 16) {
             break;
         }
 
@@ -571,22 +647,21 @@ void send_packet(enc28j60_t* instance, uint8_t* buffer, uint16_t len) {
 // To get a packet from
 uint16_t receive_packet(enc28j60_t* instance, uint8_t* buffer, uint16_t size) {
     FuriHalSpiBusHandle* spi = instance->spi;
-    static uint16_t get_next_packet = RXSTART_INIT;
-    static bool unreleased_packet = false;
     uint16_t len = 0;
 
     furi_mutex_acquire(instance->mutex, FuriWaitForever);
 
-    if(unreleased_packet) {
-        if(get_next_packet == 0)
-            write_register(spi, ERXRDPT, RXSTOP_INIT);
+    if(instance->rx_packet_unreleased) {
+        if(instance->rx_next_packet == 0)
+            write_register(instance, ERXRDPT, RXSTOP_INIT);
         else
-            write_register(spi, ERXRDPT, get_next_packet - 1);
-        unreleased_packet = false;
+            write_register(instance, ERXRDPT, instance->rx_next_packet - 1);
+
+        instance->rx_packet_unreleased = false;
     }
 
-    if(read_register_byte(spi, EPKTCNT) > 0) {
-        write_register(spi, ERDPT, get_next_packet);
+    if(read_register_byte(instance, EPKTCNT) > 0) {
+        write_register(instance, ERDPT, instance->rx_next_packet);
 
         struct {
             uint16_t next_packet;
@@ -596,15 +671,20 @@ uint16_t receive_packet(enc28j60_t* instance, uint8_t* buffer, uint16_t size) {
 
         read_buffer(spi, sizeof(header), (uint8_t*)&header);
 
-        get_next_packet = header.next_packet;
-        len = header.byteCount - 4; //remove the CRC count
+        instance->rx_next_packet = header.next_packet;
+
+        len = header.byteCount - 4;
+
         if(len > size - 1) len = size - 1;
+
         if((header.status & 0x80) == 0)
             len = 0;
         else
             read_buffer(spi, len, buffer);
+
         buffer[len] = 0;
-        unreleased_packet = true;
+
+        instance->rx_packet_unreleased = true;
 
         write_operation(spi, ENC28J60_BIT_FIELD_SET, ECON2, ECON2_PKTDEC);
     }
@@ -619,44 +699,46 @@ uint16_t receive_packet(enc28j60_t* instance, uint8_t* buffer, uint16_t size) {
 }
 
 void enable_broadcast(enc28j60_t* instance) {
-    FuriHalSpiBusHandle* spi = instance->spi;
     furi_mutex_acquire(instance->mutex, FuriWaitForever);
-    write_register_byte(spi, ERXFCON, read_register_byte(spi, ERXFCON) | ERXFCON_BCEN);
+    write_register_byte(instance, ERXFCON, read_register_byte(instance, ERXFCON) | ERXFCON_BCEN);
     furi_mutex_release(instance->mutex);
 }
 
-void disable_broadcast(enc28j60_t* instance) {
-    FuriHalSpiBusHandle* spi = instance->spi;
+bool is_broadcast_enabled(enc28j60_t* instance) {
     furi_mutex_acquire(instance->mutex, FuriWaitForever);
-    write_register_byte(spi, ERXFCON, read_register_byte(spi, ERXFCON) & ~ERXFCON_BCEN);
+    bool enabled = (read_register_byte(instance, ERXFCON) & ERXFCON_BCEN) != 0;
+    furi_mutex_release(instance->mutex);
+    return enabled;
+}
+
+void disable_broadcast(enc28j60_t* instance) {
+    furi_mutex_acquire(instance->mutex, FuriWaitForever);
+    write_register_byte(instance, ERXFCON, read_register_byte(instance, ERXFCON) & ~ERXFCON_BCEN);
     furi_mutex_release(instance->mutex);
 }
 
 void enable_multicast(enc28j60_t* instance) {
-    FuriHalSpiBusHandle* spi = instance->spi;
     furi_mutex_acquire(instance->mutex, FuriWaitForever);
-    write_register_byte(spi, ERXFCON, read_register_byte(spi, ERXFCON) | ERXFCON_MCEN);
+    write_register_byte(instance, ERXFCON, read_register_byte(instance, ERXFCON) | ERXFCON_MCEN);
     furi_mutex_release(instance->mutex);
 }
 
 void disable_multicast(enc28j60_t* instance) {
-    FuriHalSpiBusHandle* spi = instance->spi;
     furi_mutex_acquire(instance->mutex, FuriWaitForever);
-    write_register_byte(spi, ERXFCON, read_register_byte(spi, ERXFCON) & ~ERXFCON_MCEN);
+    write_register_byte(instance, ERXFCON, read_register_byte(instance, ERXFCON) & ~ERXFCON_MCEN);
     furi_mutex_release(instance->mutex);
 }
 
 void enable_promiscuous(enc28j60_t* instance) {
-    FuriHalSpiBusHandle* spi = instance->spi;
     furi_mutex_acquire(instance->mutex, FuriWaitForever);
-    write_register_byte(spi, ERXFCON, read_register_byte(spi, ERXFCON) & ERXFCON_CRCEN);
+    write_register_byte(instance, ERXFCON, read_register_byte(instance, ERXFCON) & ERXFCON_CRCEN);
     furi_mutex_release(instance->mutex);
 }
 
 void disable_promiscuous(enc28j60_t* instance) {
-    FuriHalSpiBusHandle* spi = instance->spi;
     furi_mutex_acquire(instance->mutex, FuriWaitForever);
-    write_register_byte(spi, ERXFCON, ERXFCON_UCEN | ERXFCON_CRCEN | ERXFCON_PMEN | ERXFCON_BCEN);
+    write_register_byte(
+        instance, ERXFCON, ERXFCON_UCEN | ERXFCON_CRCEN | ERXFCON_PMEN | ERXFCON_BCEN);
     furi_mutex_release(instance->mutex);
 }
 

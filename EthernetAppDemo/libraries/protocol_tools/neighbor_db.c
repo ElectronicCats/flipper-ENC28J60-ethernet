@@ -1,9 +1,84 @@
 #include "neighbor_db.h"
+#include "../functions/startup_guard.h"
 
-static neighbor_t neighbors[NEIGHBOR_DB_MAX_ENTRIES];
+static neighbor_t* neighbors = NULL;
+
+/*
+ * API 87.1 uses an 8-byte, 8-byte-aligned heap block header. Keep one KiB
+ * available after the DB allocation for the configuration widget and other
+ * small scene allocations. This is an explicit post-allocation reserve, not
+ * a fraction of the current Passive worker stack. The reserve contributes to
+ * total-free headroom, but it is not part of the DB allocation and therefore
+ * need not be contiguous with it.
+ */
+#define NEIGHBOR_DB_HEAP_HEADER_BYTES        8U
+#define NEIGHBOR_DB_HEAP_ALIGNMENT_BYTES     8U
+#define NEIGHBOR_DB_POST_ALLOC_RESERVE_BYTES 1024U
+
+static size_t neighbor_db_heap_block_size(size_t payload_size) {
+    const size_t with_header = payload_size + NEIGHBOR_DB_HEAP_HEADER_BYTES;
+    return (with_header + NEIGHBOR_DB_HEAP_ALIGNMENT_BYTES - 1U) &
+           ~(NEIGHBOR_DB_HEAP_ALIGNMENT_BYTES - 1U);
+}
+
+static NeighborDbAcquireResult
+    neighbor_db_has_allocation_headroom(StartupDiagnosticSnapshot* diagnostic) {
+    const size_t payload_size = NEIGHBOR_DB_MAX_ENTRIES * sizeof(neighbor_t);
+    const size_t allocation_block = neighbor_db_heap_block_size(payload_size);
+    const StartupGuardRequirements requirements = {
+        .required_total_free = allocation_block + NEIGHBOR_DB_POST_ALLOC_RESERVE_BYTES,
+        .required_max_block = allocation_block,
+    };
+    const StartupGuardResult guard_result =
+        startup_guard_check_capture(diagnostic, requirements, StartupDiagnosticBoundaryPassiveDb);
+
+    if(guard_result == StartupGuardInsufficientTotal) return NeighborDbAcquireInsufficientTotal;
+    if(guard_result == StartupGuardInsufficientBlock) return NeighborDbAcquireInsufficientBlock;
+    return NeighborDbAcquireReady;
+}
+
+NeighborDbAcquireResult neighbor_db_acquire(StartupDiagnosticSnapshot* diagnostic) {
+    furi_assert(diagnostic);
+
+    if(neighbors) {
+        startup_guard_diagnostic_clear(diagnostic);
+        return NeighborDbAcquireReady;
+    }
+
+    /* calloc() is fatal on OOM in the target firmware, so guard it first. */
+    NeighborDbAcquireResult result = neighbor_db_has_allocation_headroom(diagnostic);
+    if(result != NeighborDbAcquireReady) return result;
+
+    neighbors = calloc(NEIGHBOR_DB_MAX_ENTRIES, sizeof(neighbor_t));
+    if(!neighbors) {
+        const size_t allocation_block =
+            neighbor_db_heap_block_size(NEIGHBOR_DB_MAX_ENTRIES * sizeof(neighbor_t));
+        const StartupGuardRequirements requirements = {
+            .required_total_free = allocation_block + NEIGHBOR_DB_POST_ALLOC_RESERVE_BYTES,
+            .required_max_block = allocation_block,
+        };
+        startup_guard_capture_allocation_failure(
+            diagnostic, requirements, StartupDiagnosticBoundaryPassiveDb);
+        return NeighborDbAcquireAllocationFailed;
+    }
+    return NeighborDbAcquireReady;
+}
+
+void neighbor_db_release(void) {
+    if(!neighbors) {
+        return;
+    }
+
+    free(neighbors);
+    neighbors = NULL;
+}
 
 void neighbor_db_clear(void) {
-    memset(neighbors, 0, sizeof(neighbors));
+    if(!neighbors) {
+        return;
+    }
+
+    memset(neighbors, 0, NEIGHBOR_DB_MAX_ENTRIES * sizeof(neighbor_t));
 }
 
 void neighbor_db_init(void) {
@@ -19,6 +94,10 @@ void neighbor_db_save(void) {
 }
 
 size_t neighbor_db_count_by_source(uint8_t source) {
+    if(!neighbors) {
+        return 0;
+    }
+
     size_t count = 0;
 
     for(size_t i = 0; i < NEIGHBOR_DB_MAX_ENTRIES; i++) {
@@ -31,6 +110,10 @@ size_t neighbor_db_count_by_source(uint8_t source) {
 }
 
 neighbor_t* neighbor_db_get_by_source(uint8_t source, size_t position) {
+    if(!neighbors) {
+        return NULL;
+    }
+
     size_t current = 0;
 
     for(size_t i = 0; i < NEIGHBOR_DB_MAX_ENTRIES; i++) {
@@ -47,6 +130,10 @@ neighbor_t* neighbor_db_get_by_source(uint8_t source, size_t position) {
 }
 
 void neighbor_db_clear_by_source(uint8_t source) {
+    if(!neighbors) {
+        return;
+    }
+
     for(size_t i = 0; i < NEIGHBOR_DB_MAX_ENTRIES; i++) {
         if(!neighbors[i].occupied) continue;
 
@@ -59,6 +146,10 @@ void neighbor_db_clear_by_source(uint8_t source) {
 }
 
 size_t neighbor_db_count(void) {
+    if(!neighbors) {
+        return 0;
+    }
+
     size_t count = 0;
 
     for(size_t i = 0; i < NEIGHBOR_DB_MAX_ENTRIES; i++) {
@@ -71,6 +162,10 @@ size_t neighbor_db_count(void) {
 }
 
 neighbor_t* neighbor_db_get_by_position(size_t position) {
+    if(!neighbors) {
+        return NULL;
+    }
+
     size_t current = 0;
 
     for(size_t i = 0; i < NEIGHBOR_DB_MAX_ENTRIES; i++) {
@@ -89,7 +184,7 @@ neighbor_t* neighbor_db_get_by_position(size_t position) {
 }
 
 neighbor_t* neighbor_db_get(size_t index) {
-    if(index >= NEIGHBOR_DB_MAX_ENTRIES) {
+    if(!neighbors || index >= NEIGHBOR_DB_MAX_ENTRIES) {
         return NULL;
     }
 
@@ -101,7 +196,7 @@ neighbor_t* neighbor_db_get(size_t index) {
 }
 
 neighbor_t* neighbor_db_find(const uint8_t mac[6]) {
-    if(!mac) {
+    if(!neighbors || !mac) {
         return NULL;
     }
 
@@ -118,12 +213,36 @@ neighbor_t* neighbor_db_find(const uint8_t mac[6]) {
     return NULL;
 }
 
+neighbor_t* neighbor_db_find_by_source(const uint8_t mac[6], uint8_t source) {
+    if(!neighbors || !mac) {
+        return NULL;
+    }
+
+    for(size_t i = 0; i < NEIGHBOR_DB_MAX_ENTRIES; i++) {
+        if(!neighbors[i].occupied) {
+            continue;
+        }
+
+        if(memcmp(neighbors[i].mac, mac, 6) != 0) {
+            continue;
+        }
+
+        if(!(neighbors[i].discovery_sources & source)) {
+            continue;
+        }
+
+        return &neighbors[i];
+    }
+
+    return NULL;
+}
+
 bool neighbor_db_add(const neighbor_t* neighbor) {
-    if(!neighbor) {
+    if(!neighbors || !neighbor) {
         return false;
     }
 
-    neighbor_t* existing = neighbor_db_find(neighbor->mac);
+    neighbor_t* existing = neighbor_db_find_by_source(neighbor->mac, neighbor->discovery_sources);
 
     if(existing) {
         *existing = *neighbor;
@@ -145,11 +264,11 @@ bool neighbor_db_add(const neighbor_t* neighbor) {
 }
 
 bool neighbor_db_update(const neighbor_t* neighbor) {
-    if(!neighbor) {
+    if(!neighbors || !neighbor) {
         return false;
     }
 
-    neighbor_t* existing = neighbor_db_find(neighbor->mac);
+    neighbor_t* existing = neighbor_db_find_by_source(neighbor->mac, neighbor->discovery_sources);
 
     if(!existing) {
         return false;

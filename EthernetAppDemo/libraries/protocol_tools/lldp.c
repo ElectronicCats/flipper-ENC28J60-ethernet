@@ -40,14 +40,28 @@ static void lldp_parse_chassis_id(const uint8_t* ptr, uint16_t tlv_length, lldp_
     if(tlv_length < 2) return;
 
     uint8_t subtype = ptr[0];
+    info->chassis_id_subtype = subtype;
 
     switch(subtype) {
     case LLDP_CHASSIS_MAC_ADDRESS:
-
         if(tlv_length == 7) {
             lldp_mac_to_string(&ptr[1], info->chassis_id, sizeof(info->chassis_id));
         }
+        break;
 
+    case LLDP_CHASSIS_NETWORK_ADDRESS:
+        if(tlv_length == 6 && ptr[1] == 1) {
+            lldp_ipv4_to_string(&ptr[2], info->chassis_id, sizeof(info->chassis_id));
+        }
+        break;
+
+    case LLDP_CHASSIS_COMPONENT:
+    case LLDP_CHASSIS_INTERFACE_ALIAS:
+    case LLDP_CHASSIS_PORT_COMPONENT:
+    case LLDP_CHASSIS_INTERFACE_NAME:
+    case LLDP_CHASSIS_LOCAL:
+        lldp_copy_string_field(
+            &ptr[1], tlv_length - 1, info->chassis_id, sizeof(info->chassis_id));
         break;
 
     default:
@@ -58,7 +72,33 @@ static void lldp_parse_chassis_id(const uint8_t* ptr, uint16_t tlv_length, lldp_
 static void lldp_parse_port_id(const uint8_t* ptr, uint16_t tlv_length, lldp_info_t* info) {
     if(tlv_length < 2) return;
 
-    lldp_copy_string_field(&ptr[1], tlv_length - 1, info->port_id, sizeof(info->port_id));
+    uint8_t subtype = ptr[0];
+    info->port_id_subtype = subtype;
+
+    switch(subtype) {
+    case LLDP_PORT_MAC_ADDRESS:
+        if(tlv_length == 7) {
+            lldp_mac_to_string(&ptr[1], info->port_id, sizeof(info->port_id));
+        }
+        break;
+
+    case LLDP_PORT_NETWORK_ADDRESS:
+        if(tlv_length == 6 && ptr[1] == 1) {
+            lldp_ipv4_to_string(&ptr[2], info->port_id, sizeof(info->port_id));
+        }
+        break;
+
+    case LLDP_PORT_INTERFACE_ALIAS:
+    case LLDP_PORT_COMPONENT:
+    case LLDP_PORT_INTERFACE_NAME:
+    case LLDP_PORT_AGENT_CIRCUIT_ID:
+    case LLDP_PORT_LOCAL:
+        lldp_copy_string_field(&ptr[1], tlv_length - 1, info->port_id, sizeof(info->port_id));
+        break;
+
+    default:
+        break;
+    }
 }
 
 static void lldp_parse_ttl(const uint8_t* ptr, uint16_t tlv_length, lldp_info_t* info) {
@@ -107,6 +147,199 @@ static void
     lldp_ipv4_to_string(&ptr[2], info->management_address, sizeof(info->management_address));
 }
 
+static void lldp_parse_pvid(const uint8_t* ptr, uint16_t tlv_length, lldp_info_t* info) {
+    if(tlv_length != 6) return;
+
+    uint32_t oui = ((uint32_t)ptr[0] << 16) | ((uint32_t)ptr[1] << 8) | ptr[2];
+
+    if(oui != LLDP_OUI_IEEE_802_1) return;
+
+    if(ptr[3] != LLDP_ORG_SUBTYPE_PVID) return;
+
+    info->pvid = ((uint16_t)ptr[4] << 8) | ptr[5];
+    info->has_pvid = true;
+}
+
+static void lldp_parse_vlan_name(const uint8_t* ptr, uint16_t tlv_length, lldp_info_t* info) {
+    if(tlv_length < 7) return;
+
+    uint32_t oui = ((uint32_t)ptr[0] << 16) | ((uint32_t)ptr[1] << 8) | ptr[2];
+
+    if(oui != LLDP_OUI_IEEE_802_1) return;
+
+    if(ptr[3] != LLDP_ORG_SUBTYPE_VLAN_NAME) return;
+
+    uint16_t vlan_id = ((uint16_t)ptr[4] << 8) | ptr[5];
+    uint8_t vlan_name_length = ptr[6];
+
+    if(vlan_name_length == 0) return;
+
+    if((uint16_t)(7 + vlan_name_length) != tlv_length) return;
+
+    lldp_copy_string_field(&ptr[7], vlan_name_length, info->vlan_name, sizeof(info->vlan_name));
+
+    info->vlan_id = vlan_id;
+    info->has_vlan_name = true;
+}
+
+static void lldp_parse_network_policy(const uint8_t* ptr, uint16_t tlv_length, lldp_info_t* info) {
+    if(tlv_length != 8) return;
+
+    uint32_t oui = ((uint32_t)ptr[0] << 16) | ((uint32_t)ptr[1] << 8) | ptr[2];
+
+    if(oui != LLDP_OUI_LLDP_MED) return;
+
+    if(ptr[3] != LLDP_MED_SUBTYPE_NETWORK_POLICY) return;
+
+    /*
+     * ptr[4]:
+     * Application Type
+     *
+     * ptr[5]:
+     * Policy flags
+     *
+     * ptr[6..7]:
+     * VLAN / priority / DSCP information
+     */
+
+    info->network_policy_vlan = ((uint16_t)(ptr[5] & 0x1FU) << 7) | (ptr[6] >> 1);
+    info->has_network_policy = true;
+}
+
+static void lldp_parse_poe_8023(const uint8_t* ptr, uint16_t tlv_length, lldp_info_t* info) {
+    if(!ptr || !info) return;
+
+    /*
+     * IEEE 802.3 Power via MDI TLV:
+     *
+     * OUI       : 3 bytes
+     * Subtype   : 1 byte
+     * Power MDI : 1 byte
+     * Power Pair: 1 byte
+     * Power Class: 1 byte
+     *
+     * Total: 7 bytes
+     */
+    if(tlv_length < 7) return;
+
+    uint32_t oui = ((uint32_t)ptr[0] << 16) | ((uint32_t)ptr[1] << 8) | ptr[2];
+
+    if(oui != LLDP_OUI_IEEE_802_3) return;
+
+    if(ptr[3] != LLDP_8023_SUBTYPE_POWER_VIA_MDI) return;
+
+    /*
+     * MDI power support.
+     *
+     * Bit 0:
+     * Device type (1 = PSE, 0 = PD)
+     *
+     * Bit 1:
+     * MDI power supported
+     *
+     * Bit 2:
+     * MDI power enabled
+     *
+     * Bit 3:
+     * PSE pairs controllable
+     */
+    uint8_t power_mdi = ptr[4];
+
+    info->poe_power_type = (power_mdi & 0x01U) ? 0U : 1U;
+    info->poe_supported = (power_mdi & 0x02U) != 0;
+    info->poe_type_source_priority = power_mdi;
+
+    /*
+     * PSE power pair.
+     */
+    info->poe_power_pair = ptr[5];
+
+    /*
+     * Power class.
+     */
+    info->poe_power_class = ptr[6];
+
+    /*
+     * A valid IEEE 802.3 PoE TLV was received.
+     */
+    info->has_poe_mdi = true;
+    info->has_poe = true;
+}
+
+static void lldp_parse_poe_med(const uint8_t* ptr, uint16_t tlv_length, lldp_info_t* info) {
+    if(tlv_length != 7) return;
+
+    uint32_t oui = ((uint32_t)ptr[0] << 16) | ((uint32_t)ptr[1] << 8) | ptr[2];
+
+    if(oui != LLDP_OUI_LLDP_MED) return;
+
+    if(ptr[3] != LLDP_MED_SUBTYPE_EXT_POWER) return;
+
+    /*
+     * MED Extended Power via MDI:
+     *
+     * ptr[4]:
+     * power type / source / priority
+     *
+     * ptr[5..6]:
+     * power value
+     */
+
+    uint8_t power_info = ptr[4];
+
+    info->poe_type_source_priority = power_info;
+    info->poe_power_type = (power_info >> 6) & 0x03;
+    info->poe_power_source = (power_info >> 4) & 0x03;
+    info->poe_power_priority = power_info & 0x0F;
+
+    info->poe_power_watts = ((uint16_t)ptr[5] << 8) | ptr[6];
+
+    info->has_poe = true;
+    info->has_poe_power_values = true;
+}
+
+static void
+    lldp_parse_organizational_tlv(const uint8_t* ptr, uint16_t tlv_length, lldp_info_t* info) {
+    if(tlv_length < 4) return;
+
+    uint32_t oui = ((uint32_t)ptr[0] << 16) | ((uint32_t)ptr[1] << 8) | ptr[2];
+
+    uint8_t subtype = ptr[3];
+
+    switch(oui) {
+    case LLDP_OUI_IEEE_802_1:
+
+        if(subtype == LLDP_ORG_SUBTYPE_PVID) {
+            lldp_parse_pvid(ptr, tlv_length, info);
+        } else if(subtype == LLDP_ORG_SUBTYPE_VLAN_NAME) {
+            lldp_parse_vlan_name(ptr, tlv_length, info);
+        }
+
+        break;
+
+    case LLDP_OUI_IEEE_802_3:
+
+        if(subtype == LLDP_8023_SUBTYPE_POWER_VIA_MDI) {
+            lldp_parse_poe_8023(ptr, tlv_length, info);
+        }
+
+        break;
+
+    case LLDP_OUI_LLDP_MED:
+
+        if(subtype == LLDP_MED_SUBTYPE_NETWORK_POLICY) {
+            lldp_parse_network_policy(ptr, tlv_length, info);
+        } else if(subtype == LLDP_MED_SUBTYPE_EXT_POWER) {
+            lldp_parse_poe_med(ptr, tlv_length, info);
+        }
+
+        break;
+
+    default:
+        break;
+    }
+}
+
 bool lldp_fill_neighbor(const lldp_info_t* info, neighbor_t* neighbor) {
     if(!info || !neighbor || !info->valid) {
         return false;
@@ -114,23 +347,94 @@ bool lldp_fill_neighbor(const lldp_info_t* info, neighbor_t* neighbor) {
 
     memset(neighbor, 0, sizeof(neighbor_t));
 
-    memcpy(neighbor->mac, info->source_mac, 6);
+    memcpy(neighbor->mac, info->source_mac, sizeof(neighbor->mac));
+
+    neighbor->lldp_chassis_subtype = info->chassis_id_subtype;
+    neighbor->lldp_port_subtype = info->port_id_subtype;
 
     strncpy(neighbor->name, info->system_name, sizeof(neighbor->name) - 1);
+
     strncpy(neighbor->port, info->port_id, sizeof(neighbor->port) - 1);
+
     strncpy(
         neighbor->management_address,
         info->management_address,
         sizeof(neighbor->management_address) - 1);
+
     strncpy(neighbor->chassis_id, info->chassis_id, sizeof(neighbor->chassis_id) - 1);
 
     strncpy(neighbor->description, info->system_description, sizeof(neighbor->description) - 1);
 
+    /*
+     * Standard LLDP information
+     */
     neighbor->ttl = info->ttl;
+
     neighbor->capabilities = info->system_capabilities;
+
     neighbor->enabled_capabilities = info->enabled_capabilities;
 
+    /* IEEE 802.1 VLAN information. Keep PVID and VLAN Name VID distinct. */
+    neighbor->pvid = info->pvid;
+    neighbor->has_pvid = info->has_pvid;
+    neighbor->vlan_id = info->vlan_id;
+
+    /*
+ * IEEE 802.1 VLAN name
+ */
+    if(info->has_vlan_name) {
+        strncpy(neighbor->vlan_name, info->vlan_name, sizeof(neighbor->vlan_name) - 1);
+
+        neighbor->vlan_name[sizeof(neighbor->vlan_name) - 1] = '\0';
+        neighbor->has_vlan_name = true;
+    }
+
+    /*
+ * LLDP-MED Network Policy
+ */
+    if(info->has_network_policy) {
+        neighbor->network_policy_vlan = info->network_policy_vlan;
+
+        neighbor->has_network_policy = true;
+    }
+
+    /*
+ * IEEE 802.3 / LLDP-MED PoE information
+ */
+    neighbor->poe_supported = info->poe_supported;
+
+    neighbor->poe_power_pair = info->poe_power_pair;
+
+    neighbor->poe_power_class = info->poe_power_class;
+
+    neighbor->poe_type_source_priority = info->poe_type_source_priority;
+
+    neighbor->poe_requested_power = info->poe_requested_power;
+
+    neighbor->poe_allocated_power = info->poe_allocated_power;
+
+    neighbor->poe_power_watts = info->poe_power_watts;
+
+    neighbor->poe_requested_power_watts = info->poe_requested_power_watts;
+
+    neighbor->poe_allocated_power_watts = info->poe_allocated_power_watts;
+
+    neighbor->poe_power_type = info->poe_power_type;
+
+    neighbor->poe_power_source = info->poe_power_source;
+
+    neighbor->poe_power_priority = info->poe_power_priority;
+
+    neighbor->has_poe_mdi = info->has_poe_mdi;
+    neighbor->has_poe = info->has_poe;
+
+    neighbor->has_poe_power_values = info->has_poe_power_values;
+
+    /*
+     * Discovery source
+     */
     neighbor->discovery_sources = NEIGHBOR_SOURCE_LLDP;
+
     neighbor->occupied = true;
 
     return true;
@@ -207,6 +511,10 @@ bool lldp_parse(const uint8_t* frame, uint16_t length, lldp_info_t* info) {
 
         case LLDP_TLV_MANAGEMENT_ADDRESS:
             lldp_parse_management_address(ptr, tlv_length, info);
+            break;
+
+        case LLDP_TLV_ORG_SPECIFIC:
+            lldp_parse_organizational_tlv(ptr, tlv_length, info);
             break;
 
         default:

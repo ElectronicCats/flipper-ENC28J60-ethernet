@@ -42,6 +42,11 @@ typedef struct {
     uint8_t subnet_mask[4];
     uint8_t tx_buffer[MAX_FRAMELEN]; // Transmit buffer
     uint8_t rx_buffer[MAX_FRAMELEN]; // Receive buffer
+
+    // Driver state
+    uint8_t bank;
+    uint16_t rx_next_packet;
+    bool rx_packet_unreleased;
 } enc28j60_t;
 
 /**
@@ -162,6 +167,14 @@ void send_packet(enc28j60_t* instance, uint8_t* buffer, uint16_t len);
  * @param instance Pointer to the `enc28j60_t` instance to configure.
  */
 void enable_broadcast(enc28j60_t* instance);
+
+/**
+ * @brief Checks whether broadcast Ethernet frame reception is enabled.
+ *
+ * @param instance Pointer to the `enc28j60_t` instance to inspect.
+ * @return `true` when the broadcast receive-filter bit is enabled, otherwise `false`.
+ */
+bool is_broadcast_enabled(enc28j60_t* instance);
 
 /**
  * @brief Disables reception of broadcast Ethernet frames on the ENC28J60.

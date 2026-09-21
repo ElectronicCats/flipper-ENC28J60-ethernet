@@ -234,22 +234,30 @@ void print_dhcp_info(uint8_t* buffer, uint16_t len) {
     UNUSED(len);
 
 #if DEBUG_DHCP
-    dhcp_message_t dhcp_message = dhcp_deconstruct_dhcp_message(buffer);
+    dhcp_message_view_t dhcp_message;
+    if(!dhcp_parse_message(buffer, len, &dhcp_message)) return;
 
     PRINTLN("=============== DHCP MESSAGE HEADER ===================================");
 
-    PRINTLN("> OPERATION:  %02x", dhcp_message.operation);
+    PRINTLN("> OPERATION:  %02x", dhcp_message.data[0]);
 
     PRINTLN(
         "> TRANSACTION ID: %02x%02x%02x%02x",
-        dhcp_message.xid[0],
-        dhcp_message.xid[1],
-        dhcp_message.xid[2],
-        dhcp_message.xid[3]);
+        dhcp_message.data[4],
+        dhcp_message.data[5],
+        dhcp_message.data[6],
+        dhcp_message.data[7]);
 
-    PRINT("> TYPE : %02x  ", dhcp_message.dhcp_options[2]);
+    const uint8_t* message_type;
+    uint8_t message_type_length;
+    if(!dhcp_get_option(
+           &dhcp_message, DHCP_OP_DHCP_MESSAGE_TYPE, &message_type, &message_type_length) ||
+       message_type_length != 1) {
+        return;
+    }
+    PRINT("> TYPE : %02x  ", message_type[0]);
 
-    switch(dhcp_message.dhcp_options[2]) {
+    switch(message_type[0]) {
     case DHCP_DISCOVER:
         PRINTLN("DISCOVER MESSAGE");
         break;
@@ -272,13 +280,13 @@ void print_dhcp_info(uint8_t* buffer, uint16_t len) {
     }
 
     PRINT("> CLIENT ADRESS: ");
-    PRINT_IP(dhcp_message.ciaddr);
+    PRINT_IP(dhcp_message.data + 12);
 
     PRINT("> YOUR ADRESS: ");
-    PRINT_IP(dhcp_message.yiaddr);
+    PRINT_IP(dhcp_message.data + 16);
 
     PRINT("> GATEWAY ADRESS: ");
-    PRINT_IP(dhcp_message.giaddr);
+    PRINT_IP(dhcp_message.data + 24);
 
 #endif
 }
@@ -315,7 +323,7 @@ void analize_packet(uint8_t* buffer, uint16_t len) {
         return;
     }
 
-    if(is_dhcp(buffer)) {
+    if(is_dhcp(buffer, len)) {
         print_dhcp_info(buffer, len);
     }
 }

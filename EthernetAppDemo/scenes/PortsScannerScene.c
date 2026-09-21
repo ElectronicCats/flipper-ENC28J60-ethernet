@@ -1,4 +1,7 @@
 #include "../app_user.h"
+#include "../libraries/functions/startup_guard.h"
+
+#define PORTS_SCANNER_STACK_BYTES 5120U
 
 #define TARGET_TEXT "Target"
 #define RANGE_TEXT  "Range"
@@ -82,8 +85,6 @@ void set_ip_address_ports_scanner(App* app) {
 int32_t ports_scanner_thread(void* context) {
     App* app = context;
 
-    uint8_t value = PORT_CLOSED;
-
     switch(app->scan_params.protocols_index) {
     case PORTS_SCANNER_TCP:
         tcp_syn_scan(
@@ -102,7 +103,13 @@ int32_t ports_scanner_thread(void* context) {
         break;
     }
 
-    return value;
+    return 0;
+}
+
+void variable_list_ports_scanner_callback(void* context, uint32_t index);
+
+static void ports_scanner_retry(void* context) {
+    variable_list_ports_scanner_callback(context, START);
 }
 
 void variable_list_ports_scanner_callback(void* context, uint32_t index) {
@@ -119,6 +126,8 @@ void variable_list_ports_scanner_callback(void* context, uint32_t index) {
         break;
 
     case START:
+
+        startup_guard_clear(app);
 
         if(app->is_dora) {
             // F0.4c — no longer suspends app->thread; rx_dispatch keeps
@@ -160,14 +169,50 @@ void variable_list_ports_scanner_callback(void* context, uint32_t index) {
             submenu_reset(app->submenu);
             submenu_set_header(app->submenu, "PORTS OPEN");
 
-            app->thread_alternative =
-                furi_thread_alloc_ex("Ports Sacanner", 5 * 1024, ports_scanner_thread, app);
+            if(!startup_guard_thread_slot_available(app, ports_scanner_retry)) {
+                scene_manager_set_scene_state(
+                    app->scene_manager,
+                    app_scene_ports_scanner_option,
+                    PORTS_SCANNER_SCENE_WIDGET);
+                return;
+            }
+
+            StartupGuardRequirements requirements = startup_guard_thread_requirements(
+                PORTS_SCANNER_STACK_BYTES,
+                STARTUP_GUARD_SCANNER_SEMAPHORE_HEAP_BYTES,
+                STARTUP_GUARD_SCANNER_SEMAPHORE_HEAP_BYTES);
+            if(startup_guard_check(requirements) != StartupGuardReady) {
+                scene_manager_set_scene_state(
+                    app->scene_manager,
+                    app_scene_ports_scanner_option,
+                    PORTS_SCANNER_SCENE_WIDGET);
+                startup_guard_show_low_memory(
+                    app,
+                    "Feature unavailable\nClose active services\nand try again",
+                    ports_scanner_retry);
+                return;
+            }
+
+            FuriThread* thread = furi_thread_alloc_ex(
+                "Ports Sacanner", PORTS_SCANNER_STACK_BYTES, ports_scanner_thread, app);
+            if(!thread) {
+                scene_manager_set_scene_state(
+                    app->scene_manager,
+                    app_scene_ports_scanner_option,
+                    PORTS_SCANNER_SCENE_WIDGET);
+                startup_guard_show_low_memory(
+                    app,
+                    "Feature unavailable\nClose active services\nand try again",
+                    ports_scanner_retry);
+                return;
+            }
+            if(!app_thread_claim(app, AppThreadOwnerPortsScanner, thread)) return;
 
             view_dispatcher_switch_to_view(app->view_dispatcher, LoadingView);
 
             //furi_thread_set_priority(app->thread_alternative, FuriThreadPriorityNormal);
 
-            furi_thread_start(app->thread_alternative);
+            furi_thread_start(thread);
 
             //furi_thread_join(app->thread_alternative);
 
@@ -256,13 +301,27 @@ void variable_item_change_protocol_callback(VariableItem* item) {
 void app_scene_ports_scanner_on_enter(void* context) {
     App* app = (App*)context;
 
+    startup_guard_clear(app);
     submenu_reset(app->submenu);
     submenu_set_header(app->submenu, "SCAN PORTS");
 
+    arp_load_last_scan(app);
+
     // VIEW IP LIST
+    furi_string_reset(app->text);
+
+    furi_string_cat_printf(
+        app->text,
+        "Hosts [%02d|%02d|%02d-%02d:%02d]",
+        app->last_scan_time.month,
+        app->last_scan_time.day,
+        app->last_scan_time.year % 100,
+        app->last_scan_time.hour,
+        app->last_scan_time.minute);
+
     submenu_add_item(
         app->submenu,
-        "View Scanned Hosts",
+        furi_string_get_cstr(app->text),
         VIEW_IP_LIST,
         variable_list_ports_scanner_callback,
         app);
@@ -328,6 +387,8 @@ void app_scene_ports_scanner_on_enter(void* context) {
     view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);
 }
 
+static void ports_scanner_stop_thread(App* app);
+
 bool app_scene_ports_scanner_on_event(void* context, SceneManagerEvent event) {
     App* app = (App*)context;
 
@@ -336,8 +397,7 @@ bool app_scene_ports_scanner_on_event(void* context, SceneManagerEvent event) {
     if(event.type == SceneManagerEventTypeBack) {
         switch(scene_manager_get_scene_state(app->scene_manager, app_scene_ports_scanner_option)) {
         case PORTS_SCANNER_SCENE_SHOW_PORTS:
-            furi_thread_join(app->thread_alternative);
-            furi_thread_free(app->thread_alternative);
+            ports_scanner_stop_thread(app);
             // F0.4c — no thread_resume; rx_dispatch + scanner_session
             // make app->thread no longer the chip owner.
             /* fall through */
@@ -358,8 +418,14 @@ bool app_scene_ports_scanner_on_event(void* context, SceneManagerEvent event) {
     return consumed;
 }
 
+static void ports_scanner_stop_thread(App* app) {
+    app_thread_join_and_free(app, AppThreadOwnerPortsScanner);
+}
+
 void app_scene_ports_scanner_on_exit(void* context) {
     App* app = (App*)context;
 
+    startup_guard_clear(app);
+    ports_scanner_stop_thread(app);
     variable_item_list_reset(app->varList);
 }

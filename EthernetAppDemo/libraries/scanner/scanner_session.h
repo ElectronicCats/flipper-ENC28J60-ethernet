@@ -9,10 +9,19 @@
  */
 typedef bool (*scanner_packet_predicate_fn)(const uint8_t* frame, uint16_t len, void* ctx);
 
+typedef enum {
+    ScannerWaitFailureNone,
+    ScannerWaitFailureNoMemoryTotal,
+    ScannerWaitFailureNoMemoryBlock,
+    ScannerWaitFailureNoMemoryAllocation,
+    ScannerWaitFailureRxUnavailable,
+} scanner_wait_failure_t;
+
 // Named-tag typedef so other module headers can forward-declare
 // `struct ScannerSession;` and use `struct ScannerSession*` in their
 // public signatures without dragging this whole header in.
 typedef struct ScannerSession {
+    App* app;
     enc28j60_t* ethernet;
     ViewDispatcher* view_dispatcher;
     uint8_t* ip_gateway; // borrowed: App.ip_gateway (4 bytes)
@@ -26,6 +35,11 @@ typedef struct ScannerSession {
         bool valid;
     } cache[SCANNER_RESOLVE_CACHE_ENTRIES];
     uint8_t cache_next;
+
+    bool cancelled;
+    volatile const bool* external_cancel;
+    volatile const bool* app_shutdown;
+    scanner_wait_failure_t last_wait_failure;
 } scanner_session_t;
 
 /**
@@ -42,14 +56,22 @@ void scanner_session_init(scanner_session_t* s, App* app);
  */
 void scanner_session_deinit(scanner_session_t* s);
 
+void scanner_session_set_cancel_flag(scanner_session_t* s, volatile const bool* cancel_flag);
+
+/** Return the resource-boundary failure from the most recent packet wait. */
+scanner_wait_failure_t scanner_session_get_last_wait_failure(const scanner_session_t* s);
+
+bool scanner_wait_failure_is_memory(scanner_wait_failure_t failure);
+
 /**
  * Given a target IPv4, return via mac_out the MAC of the next hop:
  *   - if target_ip is on the local subnet (per ethernet->subnet_mask),
  *     ARP-resolve target_ip directly;
  *   - otherwise, return the cached gateway MAC.
  *
- * Cached results are reused. Cache misses pay one arp_get_specific_mac
- * call, which today blocks up to ~20 s. Returns true on success.
+ * Cached results are reused. On a cache miss, the session resolves the
+ * next-hop MAC through its current dispatcher-backed request/reply flow and
+ * stores the result in the session cache. Returns true on success.
  */
 bool scanner_resolve_next_hop(scanner_session_t* s, const uint8_t target_ip[4], uint8_t mac_out[6]);
 
@@ -90,6 +112,9 @@ void scanner_send_packet_trigger(void* ctx);
  *
  * Honors cancel: if the back button is pressed during the wait, returns
  * false immediately with *len_out=0.
+ * `scanner_session_get_last_wait_failure()` distinguishes semaphore allocation
+ * and RX registration failures. Timeout, cancellation, and successful waits
+ * leave the failure as ScannerWaitFailureNone.
  *
  * F0.5d — if `trigger_fn` is non-NULL, it runs after registration and
  * before the wait. Send the request frame from inside the trigger so

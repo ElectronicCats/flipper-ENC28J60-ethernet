@@ -116,19 +116,19 @@ uint16_t get_packet_information(
             }
 
             // Check if it's DHCP
-            if(is_dhcp(packet)) {
+            dhcp_message_view_t dhcp_msg;
+            if(dhcp_parse_message(packet, len, &dhcp_msg)) {
                 *packet_type = DHCP;
-                dhcp_message_t dhcp_msg = dhcp_deconstruct_dhcp_message(packet);
 
                 // Store DHCP message type
                 if(type_message) {
-                    if(dhcp_is_discover(dhcp_msg))
+                    if(dhcp_is_discover(&dhcp_msg))
                         *type_message = DHCP_DISCOVER;
-                    else if(dhcp_is_offer(dhcp_msg))
+                    else if(dhcp_is_offer(&dhcp_msg))
                         *type_message = DHCP_OFFER;
-                    else if(dhcp_is_request(dhcp_msg))
+                    else if(dhcp_is_request(&dhcp_msg))
                         *type_message = DHCP_REQUEST;
-                    else if(dhcp_is_acknoledge(dhcp_msg))
+                    else if(dhcp_is_acknoledge(&dhcp_msg))
                         *type_message = DHCP_ACKNOLEDGE;
                 }
             }

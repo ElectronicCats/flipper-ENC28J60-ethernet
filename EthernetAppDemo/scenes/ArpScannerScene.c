@@ -1,4 +1,7 @@
 #include "../app_user.h"
+#include "../libraries/functions/startup_guard.h"
+
+#define ARP_SCANNER_STACK_BYTES 10240U
 
 typedef enum {
     SET_IP = 0,
@@ -9,6 +12,11 @@ typedef enum {
 
 typedef enum {
     ArpEventScanFinished = 1,
+    ArpEventSelectTargetIP,
+    ArpEventScanCancelled,
+    ArpEventScannerMemoryTotal,
+    ArpEventScannerMemoryBlock,
+    ArpEventScannerMemoryAllocation,
 } ArpCustomEvent;
 
 /**
@@ -138,6 +146,7 @@ void arp_menu_callback(void* context, uint32_t index) {
 // function for the arp menu scene on enter
 void app_scene_arp_scanner_menu_on_enter(void* context) {
     App* app = (App*)context;
+    arp_load_last_scan(app);
 
     submenu_reset(app->submenu);
 
@@ -169,7 +178,19 @@ void app_scene_arp_scanner_menu_on_enter(void* context) {
     submenu_add_item(app->submenu, "Start Scanning", START_SCANNER, arp_menu_callback, app);
 
     // VIEW RESULTS
-    submenu_add_item(app->submenu, "View Scanned Hosts", VIEW_RESULTS, arp_menu_callback, app);
+    furi_string_reset(app->text);
+
+    furi_string_cat_printf(
+        app->text,
+        "Hosts [%02d|%02d|%02d-%02d:%02d]",
+        app->last_scan_time.month,
+        app->last_scan_time.day,
+        app->last_scan_time.year % 100,
+        app->last_scan_time.hour,
+        app->last_scan_time.minute);
+
+    submenu_add_item(
+        app->submenu, furi_string_get_cstr(app->text), VIEW_RESULTS, arp_menu_callback, app);
 
     view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);
 }
@@ -200,7 +221,22 @@ int32_t arp_scanner_thread(void* context);
 void build_ip_submenu(App* app, uint32_t selection);
 
 // Function to set the thread and the view
+void draw_the_arp_list(App* app);
+
+static void arp_scanner_retry(void* context) {
+    draw_the_arp_list(context);
+}
+
+static void arp_scanner_show_memory_error(App* app, uint32_t event) {
+    UNUSED(event);
+    startup_guard_show_diagnostic(app, arp_scanner_retry);
+}
+
+// Function to set the thread and the view
 void draw_the_arp_list(App* app) {
+    startup_guard_clear(app);
+    widget_reset(app->widget);
+
     enc28j60_t* ethernet = app->ethernet;
 
     bool start = app->enc28j60_connected;
@@ -222,18 +258,42 @@ void draw_the_arp_list(App* app) {
         return;
     }
 
-    app->thread_alternative =
-        furi_thread_alloc_ex("ARP SCANNER", 10 * 1024, arp_scanner_thread, app);
+    app->arp_scanner_stop = false;
 
-    furi_thread_start(app->thread_alternative);
+    if(!startup_guard_thread_slot_available(app, arp_scanner_retry)) return;
+
+    StartupGuardRequirements requirements = startup_guard_thread_requirements(
+        ARP_SCANNER_STACK_BYTES,
+        STARTUP_GUARD_SCANNER_SEMAPHORE_HEAP_BYTES,
+        STARTUP_GUARD_SCANNER_SEMAPHORE_HEAP_BYTES);
+    StartupGuardResult guard_result = startup_guard_check_capture(
+        &app->startup_diagnostic, requirements, StartupDiagnosticBoundaryArpScannerWorker);
+    if(guard_result != StartupGuardReady) {
+        arp_scanner_show_memory_error(
+            app,
+            guard_result == StartupGuardInsufficientTotal ? ArpEventScannerMemoryTotal :
+                                                            ArpEventScannerMemoryBlock);
+        return;
+    }
+
+    FuriThread* thread =
+        furi_thread_alloc_ex("ARP SCANNER", ARP_SCANNER_STACK_BYTES, arp_scanner_thread, app);
+    if(!thread) {
+        startup_guard_capture_allocation_failure(
+            &app->startup_diagnostic, requirements, StartupDiagnosticBoundaryArpScannerWorker);
+        arp_scanner_show_memory_error(app, ArpEventScannerMemoryAllocation);
+        return;
+    }
+    if(!app_thread_claim(app, AppThreadOwnerArpScanner, thread)) return;
+
+    furi_thread_start(thread);
 
     view_dispatcher_switch_to_view(app->view_dispatcher, LoadingView);
 }
 
 // Function to draw to finished the thread
 void finished_arp_thread(App* app) {
-    furi_thread_join(app->thread_alternative);
-    furi_thread_free(app->thread_alternative);
+    app_thread_join_and_free(app, AppThreadOwnerArpScanner);
 }
 
 //  Callback for the Input
@@ -255,7 +315,10 @@ void set_ip_address(App* app) {
 
 // Function to show the list of IP
 void show_current_arp_list(App* app) {
+    arp_load_last_scan(app);
+
     build_ip_submenu(app, ARP_STATE_START_SCAN);
+
     view_dispatcher_switch_to_view(app->view_dispatcher, SubmenuView);
 }
 
@@ -288,19 +351,36 @@ bool app_scene_arp_scanner_on_event(void* context, SceneManagerEvent event) {
     App* app = (App*)context;
 
     if(event.type == SceneManagerEventTypeBack) {
+        if(app_thread_is_owned(app, AppThreadOwnerArpScanner)) {
+            app->arp_scanner_stop = true;
+            return true;
+        }
+
         scene_manager_previous_scene(app->scene_manager);
 
         return true;
     }
 
     if(event.type == SceneManagerEventTypeCustom) {
-        if(event.event == ArpEventScanFinished) {
+        if(event.event >= ArpEventScannerMemoryTotal &&
+           event.event <= ArpEventScannerMemoryAllocation) {
+            finished_arp_thread(app);
+            arp_scanner_show_memory_error(app, event.event);
+            return true;
+        }
+
+        if(event.event == ArpEventScanFinished || event.event == ArpEventScanCancelled) {
+            bool cancelled = event.event == ArpEventScanCancelled || app->arp_scanner_stop;
             finished_arp_thread(app);
 
-            scene_manager_set_scene_state(
-                app->scene_manager, app_scene_arp_scanner_option, ARP_STATE_SHOW_LIST);
+            if(cancelled) {
+                scene_manager_previous_scene(app->scene_manager);
+            } else {
+                scene_manager_set_scene_state(
+                    app->scene_manager, app_scene_arp_scanner_option, ARP_STATE_SHOW_LIST);
 
-            show_current_arp_list(app);
+                show_current_arp_list(app);
+            }
 
             return true;
         }
@@ -313,13 +393,11 @@ bool app_scene_arp_scanner_on_event(void* context, SceneManagerEvent event) {
 void app_scene_arp_scanner_on_exit(void* context) {
     App* app = (App*)context;
 
-    // If scene is in state 0 it finished the
-    switch(scene_manager_get_scene_state(app->scene_manager, app_scene_arp_scanner_option)) {
-    case ARP_STATE_START_SCAN:
-    case ARP_STATE_SPOOF:
+    startup_guard_clear(app);
 
-    default:
-        break;
+    if(app_thread_is_owned(app, AppThreadOwnerArpScanner)) {
+        app->arp_scanner_stop = true;
+        app_thread_join_and_free(app, AppThreadOwnerArpScanner);
     }
 }
 
@@ -331,10 +409,13 @@ void app_scene_arp_scanner_on_exit(void* context) {
 void ip_list_callback(void* context, uint32_t index) {
     App* app = (App*)context;
 
-    // Set the scene to get the index of the ip in the IP array list
+    // IP selection originated from Scan Hosts.
+    app->arp_target_selection_mode = false;
+
+    // Store the selected IP index.
     scene_manager_set_scene_state(app->scene_manager, app_scene_arp_ip_show_details_option, index);
 
-    // Go to show details scene
+    // Open IP details.
     scene_manager_next_scene(app->scene_manager, app_scene_arp_ip_show_details_option);
 }
 
@@ -348,6 +429,16 @@ void ip_list_spoofing_callback(void* context, uint32_t index) {
 
     // Return to the last view that is the spoofing
     scene_manager_previous_scene(app->scene_manager);
+}
+
+static void arp_select_button_callback(GuiButtonType result, InputType type, void* context) {
+    if(type != InputTypeShort) return;
+
+    if(result != GuiButtonTypeCenter) return;
+
+    App* app = context;
+
+    view_dispatcher_send_custom_event(app->view_dispatcher, ArpEventSelectTargetIP);
 }
 
 /**
@@ -398,6 +489,15 @@ void app_scene_arp_ip_show_details_on_enter(void* context) {
         mac_showed[4],
         mac_showed[5]);
 
+    furi_string_cat_printf(
+        app->text,
+        "\nDATE: %02d|%02d|%02d-%02d:%02d",
+        app->last_scan_time.month,
+        app->last_scan_time.day,
+        app->last_scan_time.year % 100,
+        app->last_scan_time.hour,
+        app->last_scan_time.minute);
+
     // reset Widget
     widget_reset(app->widget);
 
@@ -415,17 +515,56 @@ void app_scene_arp_ip_show_details_on_enter(void* context) {
         FontSecondary,
         furi_string_get_cstr(app->text));
 
+    widget_add_button_element(
+        app->widget, GuiButtonTypeCenter, "Select IP", arp_select_button_callback, app);
+
     // Switch to widget view
     view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
 }
 
 // Function to get the ip list
 bool app_scene_arp_ip_show_details_on_event(void* context, SceneManagerEvent event) {
-    bool consumed = false;
     App* app = (App*)context;
-    UNUSED(app);
-    UNUSED(event);
-    return consumed;
+
+    if(event.type == SceneManagerEventTypeCustom && event.event == ArpEventSelectTargetIP) {
+        uint32_t index = scene_manager_get_scene_state(
+            app->scene_manager, app_scene_arp_ip_show_details_option);
+
+        // Save selected IP as target.
+        memcpy(app->scan_params.target_ip, app->ip_list[index].ip, 4);
+
+        // Keep Ping target synchronized.
+        memcpy(app->scan_params.ip_ping, app->ip_list[index].ip, 4);
+
+        /*
+         * Normal Scan Hosts flow:
+         *
+         *   Scan Hosts -> IP Details
+         *
+         * We only need one previous_scene().
+         */
+        if(!app->arp_target_selection_mode) {
+            scene_manager_previous_scene(app->scene_manager);
+        }
+        /*
+         * External target selection:
+         *
+         *   Ping -> ARP list -> IP Details
+         *
+         * We need to leave both ARP scenes and return
+         * to the scene that requested the target IP.
+         */
+        else {
+            scene_manager_previous_scene(app->scene_manager);
+            scene_manager_previous_scene(app->scene_manager);
+        }
+
+        app->arp_target_selection_mode = false;
+
+        return true;
+    }
+
+    return false;
 }
 
 // Function for the ip list
@@ -437,7 +576,11 @@ void app_scene_arp_ip_show_details_on_exit(void* context) {
 
 void build_ip_submenu(App* app, uint32_t selection) {
     submenu_reset(app->submenu);
-    submenu_set_header(app->submenu, "SCANNED HOSTS");
+    furi_string_reset(app->text);
+
+    furi_string_cat_printf(app->text, "SCANNED HOSTS (%u)", app->ip_counter);
+
+    submenu_set_header(app->submenu, furi_string_get_cstr(app->text));
 
     for(uint8_t i = 0; i < app->ip_counter; i++) {
         furi_string_reset(app->text);
@@ -482,6 +625,7 @@ int32_t arp_scanner_thread(void* context) {
 
     scanner_session_t scanner;
     scanner_session_init(&scanner, app);
+    scanner_session_set_cancel_flag(&scanner, &app->arp_scanner_stop);
 
     arp_scan_network(
         &scanner,
@@ -490,9 +634,25 @@ int32_t arp_scanner_thread(void* context) {
         &app->ip_counter,
         app->scan_params.range_ip);
 
+    scanner_wait_failure_t wait_failure = scanner_session_get_last_wait_failure(&scanner);
+
+    bool cancelled = scanner.cancelled || app->arp_scanner_stop;
+
+    if(!cancelled && wait_failure == ScannerWaitFailureNone) {
+        arp_save_last_scan(app);
+    }
+
     scanner_session_deinit(&scanner);
 
-    view_dispatcher_send_custom_event(app->view_dispatcher, ArpEventScanFinished);
+    uint32_t event = cancelled ? ArpEventScanCancelled : ArpEventScanFinished;
+    if(wait_failure == ScannerWaitFailureNoMemoryTotal) {
+        event = ArpEventScannerMemoryTotal;
+    } else if(wait_failure == ScannerWaitFailureNoMemoryBlock) {
+        event = ArpEventScannerMemoryBlock;
+    } else if(wait_failure == ScannerWaitFailureNoMemoryAllocation) {
+        event = ArpEventScannerMemoryAllocation;
+    }
+    view_dispatcher_send_custom_event(app->view_dispatcher, event);
 
     return 0;
 }

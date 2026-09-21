@@ -1,112 +1,178 @@
 ---
 name: enc28j60-fase-actual
-description: Active context for the ENC28J60 app refactor. Consult before any commit, file creation, or direction change. Phase 0 closed and merged to main on 2026-05-07.
+description: Repository interpretation and working guidance for the FLIPPER ETHERNET Flipper Zero application.
 ---
 
-# Current phase: F0 closed (v2.0). F1 not yet started.
+# FLIPPER ETHERNET repository guidance
 
-## Where we are now
+This skill teaches agents how to interpret and work with the FLIPPER ETHERNET
+repository. It does not replace the canonical documentation or the historical
+roadmap documents.
 
-- Phase 0 refactor merged to `main` via PR #7 on 2026-05-07
-  (merge commit `e972464`). Local + remote `main` carry v2.0.
-- 27 phase tags created locally (`v2.0-f0.0` .. `v2.0-f0.5h`) plus
-  the release tag `v2.0` on the merge commit. **Push status of
-  these tags fluctuates — verify with `git ls-remote --tags origin
-  'v2.0*'` if it matters; only `v2.0-f0.5h` was confirmed on origin
-  at close time.**
-- Pre-commit hooks active in this repo (`.pre-commit-config.yaml`
-  has trailing-whitespace, end-of-file-fixer, no-commit-to-branch,
-  clang-format, conventional-pre-commit). `pre-commit install` was
-  run; subsequent commits are validated automatically.
-- Build artifacts are no longer tracked: `dist/`, `*.fap`, `*.elf`,
-  `compile_commands.json`, etc. are in `.gitignore` since F0.5f.
-  Distribution path: GitHub Release on tag `v2.0` (manual upload of
-  the `.fap`) until F0.8 lands a CI workflow.
+## Knowledge layers and authority
 
-## What is done (high-level — see commit log + tags for details)
+### Current truth
 
-| Phase | Tag(s) | Summary |
-|---|---|---|
-| F0.0 | v2.0-f0.0 | Bootstrap, license carve-out, INT pin researched, SDK pinned, issue templates, project skill. |
-| F0.1 | v2.0-f0.1 | `App.scan_params` centralizes 7 file-static `target_ip`s across 6 scenes. |
-| F0.2 | v2.0-f0.2 | `libraries/settings/{c,h}` persists MAC/IP/`is_static_ip`/scan_params via `flipper_format`. v2 schema (F0.5f) adds `is_dora`, gateway IP, gateway MAC. |
-| F0.3a-e | v2.0-f0.3a..e | `libraries/scanner/scanner_session.{c,h}` primitive. ping_thread, arp_scan, port scan, OS probe, ICMP probe migrated. |
-| F0.4a-g | v2.0-f0.4..f0.4g.1 | RX dispatcher decoupling. INT-driven (F0.5c). Auto-ARP / auto-ICMP handlers. `app_worker.c` deleted (F0.4e). DORA in alt thread. `arp_get_specific_mac` migrated for `scanner_resolve_next_hop` (F0.4f). PingScene migrated off direct `receive_packet` (F0.4g.1). |
-| F0.5a-h | v2.0-f0.5a/c/d/d-wave2/e/f/g/h | Chip-level mutex (B-6 closed). INT pin enabled (D2). Race fixes: H2 send→register, H3 handler-out-of-mutex UAF, H4 App malloc, H5 mac_helper sized [6], M7 pause kicks thread. PCAP overflow guards. Settings v2 + DORA cancellable. UDP redundant-ARP removed. OS Detector quick wins + EXPERIMENTAL label. **F0.5b skipped intentionally** — chip protocol forces a CS toggle per command, no real win from a "bulk SPI" rewrite. |
-| F0.6 | (rolled into F0.5* commits) | Dev scaffolding cleanup: TestingScene, ofp_tseq, dead `flipper_process_dora`, prod printf hex-dumps, etc. |
-| F0.7 | (rolled into F0.5* commits) | Eight audit bugs: PCAP timestamps, is_duplicated_ip underflow, tcp_send_xmas_probe, MAC/subnet length mismatch, TCP fall-through, pcap_scan overflow, pre-DORA auto-reply IP conflict, MainMenu logo blocking. |
+- Current source under `EthernetAppDemo/` is the ground truth for the current
+  implementation. Establish compile-time reachability before treating code as
+  active.
+- `docs/APP_BEHAVIOR.md` defines intended user-visible behavior and records
+  known user-observed deviations. It is not implementation authority.
+- `docs/ARCHITECTURE.md` describes current software structure and invariants.
+- `docs/HARDWARE.md` describes the current ENC28J60 integration and separates
+  source-proven transitions from unresolved hardware/SDK contracts.
 
-`docs/ARCHITECTURE.md` (rewritten as v2.0 reference, F0.5h closure)
-has the structured layer/threading/RX-flow view. `docs/BACKLOG.md`
-tracks closed and deferred items.
+### Current project state
 
-## What's deferred to F1 (in BACKLOG.md)
+- `docs/DECISIONS.md` owns accepted decisions and their present status.
+- `docs/BACKLOG.md` owns current unresolved work, conditional questions,
+  product/resource limits, and closed history.
 
-- **B-9** OS Detector reliability rewrite (RX vs dispatcher race,
-  sample-slot collision, premature PORT_OPEN, blocking UI). v2.0
-  ships labelled EXPERIMENTAL.
-- **F0.4g.2** os_detector burst-probe RX onto rx_dispatch handler.
-- **B-7 follow-up** delete dead `tcp_handshake_process` / `_spoof`,
-  migrate `arp_get_specific_mac` callers in `ArpSpoofingSpecificIP`.
-- **F0.8** dual-build CI (admin / pentest .fap variants).
-- **PCAP per-batch flush.**
-- **Protocol expansion** (LLDP, mDNS, IPv6, responder family).
-- **F0.0 Task 9** (manual UI) — enable GitHub Discussions in
-  Settings → Features.
+Point to these documents instead of copying their scene lists, settings keys,
+memory tables, decisions, or findings into this skill.
 
-## What NOT to touch
+### Historical design lineage
 
-- Driver files (`libraries/chip/enc28j60.{c,h}`) keep the
-  GPL-2.0-or-later SPDX header. New code added to them inherits the
-  license. Don't rename `ETHERCARD_*` macros — they document the
-  derivation boundary.
-- `enc28j60_t.mutex` (F0.5a) — every public chip function takes it.
-  Static helpers (`write_register`, `set_bank_with_mask`, etc.) do
-  NOT take it; they inherit from the caller.
-- The remaining `rx_dispatch_pause/resume` callsite in
-  `GetIPScene.c` (around DORA) — the DHCP state machine consumes
-  raw packets in order; the chip mutex isn't enough. Don't remove
-  this until DORA itself migrates onto an rx_dispatch handler (F1).
-- `scanner_wait_for_packet`'s contract: predicate captures state
-  via `pred_ctx`; rx_buffer is NOT preserved after the wait returns
-  (F0.5g doc fix). Don't write callers that re-read the frame.
-- Handlers run inside the dispatch mutex (F0.5d). Keep them fast,
-  no register/unregister inside, no slow I/O. SnifferScene's
-  ~30 ms SD write is the slowest one tolerated; document any new
-  slow handler.
-- `application.fam` — no SDK pin (Unleashed unlshd-087 doesn't
-  support `fap_min_sdk_version`).
-- ARP-spoof-to-IP feature — gated by `DEV_MODE`. F0.8 will
-  introduce `PENTEST_MODE` and re-gate.
+- `ENC28J60_REFACTOR_PLAN.md` preserves the high-level refactor and roadmap
+  intent from its period.
+- `docs/superpowers/specs/**` preserves broader historical capability and design
+  specifications.
+- `docs/superpowers/plans/**` preserves implementation plans for particular
+  development steps.
+- Git history and release records can establish when and how the repository
+  evolved, but do not override current source or canonical documentation.
+- Use Git history to establish implementation lineage when current source shows
+  that a historical capability exists but the historical plan no longer describes
+  its present architecture. Prefer the commits that introduced or materially
+  reworked the capability over inferring progress from document checklists alone.
 
-## Repo conventions
+Historical plans/specifications preserve design intent and planned
+implementation history. Git history and current source establish what actually
+landed and how that implementation subsequently evolved.
+They are not authoritative descriptions of the current implementation.
 
-- All commit messages in English. Conventional Commits required by
-  pre-commit hook. **Do not put dots in scope** — `fix(f0.5f):` is
-  rejected by the parser; use `fix: F0.5f — ...` instead.
-- Annotated tags `v<MAJOR>.<MINOR>-f<N>.<M>` for each sub-phase that
-  warrants a checkpoint.
-- Hardware-validate on a Flipper before tagging a phase final
-  whenever the device is available. Test rig at
-  `/tmp/eth-testrig-up.sh` / `eth-testrig-down.sh` brings up
-  10.10.10.0/24 + dnsmasq + http.server + tcpdump on the laptop's
-  USB ethernet adapter (default `enx000ec6be9018`).
-- Don't claim files are "dead" without a fresh `grep -rn` over
-  `EthernetAppDemo` confirming zero callers across the project,
-  including header-only references.
-- After Edit batches, **always grep / git diff before commit** to
-  confirm the changes actually landed (see
-  `~/.claude/projects/.../memory/feedback_verify_batched_edits.md`).
+## Historical roadmap and design lineage
 
-## Quick references
+Consult the historical roadmap, specs, and plans when investigating roadmap
+progress, feature lineage, unfinished capabilities, architectural evolution,
+future roadmap redesign, or whether an old capability still needs work.
 
-- Active backlog: `docs/BACKLOG.md` (B-9 active; B-1..B-8 closed).
-- Architecture: `docs/ARCHITECTURE.md` (v2.0 reference).
-- Decisions: `docs/DECISIONS.md` (D1 license, D2 INT pin, D3 SDK).
-- Hardware: `docs/HARDWARE.md`.
-- Master plan (historical): `ENC28J60_REFACTOR_PLAN.md` at the root.
-- F0.x plans: `docs/superpowers/plans/`.
-- Test rig scripts: `/tmp/eth-testrig-up.sh`, `down.sh`. Pcap to
-  `/tmp/eth-testrig.pcap`.
-- Flipper CLI debug: `/tmp/flipper-log.py` (pyserial @ 230400 on
-  `/dev/ttyACM1`) and `/tmp/flipper-cmd.py`.
+For each historical item, identify its original problem and acceptance intent,
+then reconcile it in this order:
+
+1. current source and build-time reachability;
+2. `docs/APP_BEHAVIOR.md`;
+3. `docs/ARCHITECTURE.md` and `docs/HARDWARE.md` as relevant;
+4. `docs/DECISIONS.md`;
+5. `docs/BACKLOG.md`.
+
+Classify the item as `IMPLEMENTED`, `PARTIALLY IMPLEMENTED`, `SUPERSEDED`,
+`OBSOLETE`, `HISTORICAL / NOT CURRENTLY ADOPTED`, or `CURRENT CANDIDATE`,
+with evidence. An unchecked historical checklist item is not proof that work
+remains, and a similarly named module is not proof that the intended capability
+landed.
+
+Use `CURRENT CANDIDATE` only when current project evidence such as
+`docs/BACKLOG.md`, `docs/DECISIONS.md`, or an explicitly adopted current
+planning decision establishes that the capability is still under consideration.
+Historical inclusion alone supports only `HISTORICAL / NOT CURRENTLY ADOPTED`.
+
+## Durable implementation evolution
+
+Use these as orientation, then verify details in current source and canonical
+documents:
+
+- Bootstrap work established the documentation, decision, issue-template, and
+  ENC-driver license boundaries that later work evolved.
+- Cross-scene scan configuration moved into `App.scan_params`. Current source
+  still has separate Ping and Ports/OS target fields, so central storage did not
+  by itself deliver the intended shared-target behavior.
+- Settings persistence landed and evolved beyond its first design: the current
+  writer emits schema v3 and the loader accepts v1 through v3. Current save and
+  editor semantics must still be compared with `APP_BEHAVIOR.md`.
+- `scanner_session_t` landed, then evolved from the early polling POC into
+  reusable next-hop resolution and registered/semaphore-backed packet waits.
+  Its presence does not prove that every receive path uses RX Dispatch.
+- RX Dispatch replaced the old application receive worker as the primary RX
+  architecture and later gained ENC `/INT` wake-up. It is not universal: direct
+  RX and pause boundaries must be traced from current source.
+- ENC register-bank/SPI ownership and feature-worker lifecycle were hardened
+  after the early plans. Current `AppThreadOwner` and shared-worker rules, not
+  old per-scene thread sketches, define application-owned worker coexistence.
+- Historical roadmap items LLDP, CDP, and EAPOL were described as separate
+  capabilities. Current source consolidates them as modes of Passive Discovery
+  under one feature worker, protocol-handler table, RX-wait path, live neighbor
+  database, detail UI, and persistence model.
+- Saved Passive Neighbor History was added as a later cross-session capability;
+  it is not represented by the early LLDP-only decomposition.
+- Sniffer and PCAP support predated the roadmap and later evolved through RX
+  registration, capture/navigation hardening, and on-demand indexing. Broader
+  historical PCAP-filter/analyzer/report goals are not implied by that base.
+- Startup/resource guards were added during later hardening. They are advisory
+  preflight checks with SDK-dependent assumptions, not allocation reservations.
+- Historical dual-artifact CI, bulk-SPI, alternate controller-SRAM layout, and
+  later LAN/OT/drop-box goals must be reconciled individually; their appearance
+  in an approved historical design does not make them current commitments.
+
+The historical roadmap's UI/module decomposition is therefore a lineage map,
+not a required shape for future features. A formerly separate roadmap item may
+now belong inside an existing feature, mode, backend, or persistence model.
+
+## Analysis workflow
+
+1. Check branch, HEAD, working-tree state, manifest, and compile-time flags.
+2. Read the current canonical owner for the question; consult historical
+   material when intent or lineage matters.
+3. Trace callers, state changes, ownership, lifetime, cancellation, cleanup,
+   RX/TX paths, and resource coexistence through current source.
+4. Compare user-visible behavior with `docs/APP_BEHAVIOR.md` and unresolved work
+   with `docs/BACKLOG.md`.
+5. Verify historical debugging hypotheses independently against current source.
+6. Keep SDK/HAL behavior unresolved unless an authoritative contract proves it.
+
+Prefer static code analysis, call-flow tracing, ownership/lifecycle analysis,
+and comparison with a known working path. Do not rely on Flipper CLI logging as
+the primary way to prove behavior.
+
+## Method for future roadmap analysis
+
+For a historical capability, ask:
+
+- What problem and user capability did it intend?
+- Is that capability implemented, partial, superseded, obsolete, or unadopted?
+- Which current user-facing feature is its closest owner: an extension, submode,
+  or genuinely new feature?
+- Which current backend, RX/TX path, and persistence model can be reused?
+- Would it change RX ownership, add persistent state, or increase heap, stack,
+  storage, or contiguous-block pressure?
+- Which current backlog findings or external contracts block it?
+- Would it conflict with documented ownership, lifecycle, filter, or resource
+  invariants?
+
+Answering these questions produces evidence for a later roadmap decision; it
+does not itself approve the capability or its placement.
+
+## Architectural invariants to preserve
+
+- `App` owns application-lifetime state and reusable GUI resources.
+- At most one application-owned feature worker occupies the shared worker slot;
+  it must stop and join before borrowed feature state is released.
+- RX Dispatch is primary but not universal. Direct-RX exceptions and dispatcher
+  pause boundaries require explicit coordination.
+- RX registration context remains valid until unregistration and callback
+  quiescence are established.
+- Public ENC28J60 operations use the controller instance and its synchronization
+  boundary; do not reintroduce file-static bank ownership.
+- Feature-specific receive-filter changes restore the documented baseline on
+  every exit path.
+- Automatic responders can overlap dispatcher-active features and require data
+  valid for their callback lifetime.
+- Total free heap and largest contiguous block are distinct constraints. Do not
+  claim a leak, persistent fragmentation, or stack overflow without proof.
+
+## Change discipline
+
+Keep current implementation, intended behavior, current project state, and
+historical intent distinct. Update the canonical owner of current information,
+preserve dated historical records, and review the final diff for unintended
+source, build, workflow, license, or historical-document changes.

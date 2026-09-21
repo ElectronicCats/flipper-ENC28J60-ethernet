@@ -1,6 +1,9 @@
 #include "../app_user.h"
 #include "../modules/ping_module.h"
 #include "../modules/arp_module.h"
+#include "../libraries/functions/startup_guard.h"
+
+#define PING_STACK_BYTES 10240U
 
 // F0.4g — predicate context for the ping reply match. Lives only on
 // the ping_thread stack; predicate runs in rx_dispatch and writes
@@ -60,16 +63,23 @@ void menu_ping_options_callback(void* context, uint32_t index) {
     App* app = (App*)context;
 
     if(index == 0) {
+        app->arp_target_selection_mode = false;
+
         // Switch to the ping scene
         scene_manager_next_scene(app->scene_manager, app_scene_ping_option);
     }
 
     if(index == 1) {
+        app->arp_target_selection_mode = false;
+
         // Switch to the ping set IP scene
         scene_manager_next_scene(app->scene_manager, app_scene_ping_set_ip_option);
     }
 
     if(index == 2) {
+        // We are entering ARP only to select a target IP.
+        app->arp_target_selection_mode = true;
+
         scene_manager_set_scene_state(
             app->scene_manager, app_scene_arp_scanner_option, ARP_STATE_SHOW_LIST);
 
@@ -80,6 +90,8 @@ void menu_ping_options_callback(void* context, uint32_t index) {
 // Function for the testing scene on enter
 void app_scene_ping_menu_scene_on_enter(void* context) {
     App* app = (App*)context;
+
+    arp_load_last_scan(app);
 
     // reset submenu and switch view
     submenu_reset(app->submenu);
@@ -95,7 +107,19 @@ void app_scene_ping_menu_scene_on_enter(void* context) {
 
     furi_string_reset(app->text);
 
-    submenu_add_item(app->submenu, "View Scanned Hosts", 2, menu_ping_options_callback, app);
+    furi_string_cat_printf(
+        app->text,
+        "Hosts [%02d|%02d|%02d-%02d:%02d]",
+        app->last_scan_time.month,
+        app->last_scan_time.day,
+        app->last_scan_time.year % 100,
+        app->last_scan_time.hour,
+        app->last_scan_time.minute);
+
+    submenu_add_item(
+        app->submenu, furi_string_get_cstr(app->text), 2, menu_ping_options_callback, app);
+
+    furi_string_reset(app->text);
 
     furi_string_cat_printf(
         app->text,
@@ -217,16 +241,39 @@ void app_scene_ping_set_ip_scene_on_exit(void* context) {
  */
 
 // Function for ping scene on enter
-void app_scene_ping_scene_on_enter(void* context) {
+static void ping_start(void* context) {
     App* app = (App*)context;
+
+    startup_guard_clear(app);
+    widget_reset(app->widget);
+
+    if(!startup_guard_thread_slot_available(app, ping_start)) return;
+
+    StartupGuardRequirements requirements = startup_guard_thread_requirements(
+        PING_STACK_BYTES,
+        STARTUP_GUARD_SCANNER_SEMAPHORE_HEAP_BYTES,
+        STARTUP_GUARD_SCANNER_SEMAPHORE_HEAP_BYTES);
+    if(startup_guard_check(requirements) != StartupGuardReady) {
+        startup_guard_show_low_memory(
+            app, "Feature unavailable\nClose active services\nand try again", ping_start);
+        return;
+    }
 
     // F0.4c — no thread_suspend; ping_thread uses scanner_session.
     // Allocate and start the thread
-    app->thread_alternative = furi_thread_alloc_ex("PING", 10 * 1024, ping_thread, app);
-    furi_thread_start(app->thread_alternative);
+    FuriThread* thread = furi_thread_alloc_ex("PING", PING_STACK_BYTES, ping_thread, app);
+    if(!thread) {
+        startup_guard_show_low_memory(
+            app, "Feature unavailable\nClose active services\nand try again", ping_start);
+        return;
+    }
+    if(app_thread_claim(app, AppThreadOwnerPing, thread)) {
+        furi_thread_start(thread);
+    }
+}
 
-    // Reset the widget and switch view
-    widget_reset(app->widget);
+void app_scene_ping_scene_on_enter(void* context) {
+    ping_start(context);
 }
 
 // Function for  ping scene on event
@@ -272,9 +319,8 @@ bool app_scene_ping_scene_on_event(void* context, SceneManagerEvent event) {
 void app_scene_ping_scene_on_exit(void* context) {
     App* app = (App*)context;
 
-    // Join and free the thread
-    furi_thread_join(app->thread_alternative);
-    furi_thread_free(app->thread_alternative);
+    startup_guard_clear(app);
+    app_thread_join_and_free(app, AppThreadOwnerPing);
     // F0.4c — no thread_resume.
 }
 

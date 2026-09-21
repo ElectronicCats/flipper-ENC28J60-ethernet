@@ -360,6 +360,8 @@ static bool os_icmp_probe(
 static void parse_tcp_options(const uint8_t* tcp_start, uint8_t tcp_header_len, tcp_opts_t* opts) {
     memset(opts, 0, sizeof(tcp_opts_t));
 
+    if(!tcp_start || tcp_header_len < TCP_HEADER_LEN || tcp_header_len > 60) return;
+
     uint8_t opts_len = tcp_header_len - 20;
     opts->options_length = opts_len;
 
@@ -576,6 +578,7 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
     // F0.3f — scanner session for ARP cache + cancel + os_icmp_probe.
     scanner_session_t scanner;
     scanner_session_init(&scanner, app);
+    scanner_session_set_cancel_flag(&scanner, &app->os_detector_stop);
 
     os_scoreboard_t sb = {0};
     os_scoreboard_init(&sb);
@@ -597,7 +600,7 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
     uint16_t ids[packet_count] = {0};
     uint16_t windows[packet_count] = {0};
     uint32_t sequences[packet_count] = {0};
-    uint32_t last_seq_seen[9] = {0}; // uno por probe_port
+    uint32_t last_seq_seen[11] = {0}; // one entry per probe port
     bool respuestas[packet_count] = {0};
     uint16_t ids_an[packet_count] = {0};
 
@@ -622,10 +625,10 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
     // like a real fingerprint failure. Now app->os_guess stays NO_DETECTED
     // and the scene reports UNKNOWN with a clear root cause: ARP failed.
     if(!scanner_resolve_next_hop(&scanner, target_ip, target_mac)) {
-        app->os_guess = NO_DETECTED;
+        app->os_guess = false;
         app->ports_count = 0;
         scanner_session_deinit(&scanner);
-        return -1;
+        return NO_DETECTED;
     }
 
     uint8_t attemp = 0;
@@ -657,6 +660,7 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
         memset(app->ethernet->rx_buffer, 0, 1500);
 
         for(uint8_t p = 0; p < probe_port_count; p++) {
+            if(scanner_cancel_requested(&scanner)) break;
             if(port_closed[p] || port_responded[p] || port_filtered[p]) {
                 continue;
             }
@@ -680,7 +684,7 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
         }
 
         uint32_t start_time = furi_get_tick();
-        while(furi_get_tick() - start_time < 800) {
+        while(furi_get_tick() - start_time < 800 && !scanner_cancel_requested(&scanner)) {
             uint16_t packen_len = 0;
 
             packen_len = receive_packet(app->ethernet, app->ethernet->rx_buffer, 1500);
@@ -797,6 +801,10 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
 
                         if(is_synack) {
                             uint8_t tcp_header_len = (((uint8_t*)&tcp_header)[12] >> 4) * 4;
+                            if(tcp_header_len < TCP_HEADER_LEN || tcp_header_len > 60 ||
+                               packen_len < ETHERNET_HEADER_LEN + IP_HEADER_LEN + tcp_header_len) {
+                                continue;
+                            }
 
                             uint16_t resp_src_port;
                             bytes_to_uint(
@@ -872,7 +880,10 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
             }
         }
 
+        if(scanner_cancel_requested(&scanner)) break;
+
         for(uint8_t p = 0; p < probe_port_count; p++) {
+            if(scanner_cancel_requested(&scanner)) break;
             if(port_closed[p] || port_responded[p] || port_filtered[p]) {
                 continue;
             }
@@ -952,6 +963,8 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
             furi_delay_ms(20 + (furi_hal_random_get() % 30));
         }
 
+        if(scanner_cancel_requested(&scanner)) break;
+
         bool all_done = true;
 
         for(uint8_t i = 0; i < probe_port_count; i++) {
@@ -974,6 +987,13 @@ int32_t os_scan(void* context, uint8_t* target_ip) {
                 continue;
             }
         }
+    }
+
+    if(scanner_cancel_requested(&scanner)) {
+        app->os_guess = false;
+        app->ports_count = 0;
+        scanner_session_deinit(&scanner);
+        return NO_DETECTED;
     }
 
     for(uint8_t i = 0; i < probe_port_count; i++) {

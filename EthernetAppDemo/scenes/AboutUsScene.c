@@ -8,8 +8,10 @@ void app_scene_about_us_on_enter(void* context) {
     App* app = (App*)context;
 
     // Allocate and start the thread
-    app->thread_alternative = furi_thread_alloc_ex("About Us", 3 * 1024, about_us_thread, app);
-    furi_thread_start(app->thread_alternative);
+    FuriThread* thread = furi_thread_alloc_ex("About Us", 3 * 1024, about_us_thread, app);
+    if(app_thread_claim(app, AppThreadOwnerAbout, thread)) {
+        furi_thread_start(thread);
+    }
 
     // Reset the widget and switch view
     widget_reset(app->widget);
@@ -32,9 +34,7 @@ void app_scene_about_us_on_exit(void* context) {
 
     UNUSED(app);
 
-    // Join and free the thread
-    furi_thread_join(app->thread_alternative);
-    furi_thread_free(app->thread_alternative);
+    app_thread_join_and_free(app, AppThreadOwnerAbout);
 }
 
 /**
@@ -126,9 +126,9 @@ int32_t about_us_thread(void* context) {
 
     bool write_once = true;
 
-    while(furi_hal_gpio_read(&gpio_button_back)) {
+    while(!app->thread_shutdown_requested && furi_hal_gpio_read(&gpio_button_back)) {
         if(!furi_hal_gpio_read(&gpio_button_left)) {
-            while(!furi_hal_gpio_read(&gpio_button_left))
+            while(!app->thread_shutdown_requested && !furi_hal_gpio_read(&gpio_button_left))
                 furi_delay_ms(1);
 
             if(counter == 0)
@@ -140,7 +140,7 @@ int32_t about_us_thread(void* context) {
         }
 
         if(!furi_hal_gpio_read(&gpio_button_right)) {
-            while(!furi_hal_gpio_read(&gpio_button_right))
+            while(!app->thread_shutdown_requested && !furi_hal_gpio_read(&gpio_button_right))
                 furi_delay_ms(1);
 
             counter++;

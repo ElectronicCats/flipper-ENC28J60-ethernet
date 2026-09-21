@@ -33,8 +33,6 @@
 #include "modules/ping_module.h"
 #include "modules/os_detector_module.h"
 
-#define MAX_OS_SCAN_PORTS 16
-
 #include "libraries/functions/functions.h"
 
 #define DEV_MODE 0
@@ -50,7 +48,9 @@
 #define PATHAPP    "apps_data/ethernet" // Path
 #define PATHAPPEXT EXT_PATH(PATHAPP) // Add path to the Flipper
 
-#define PATHPCAPS PATHAPPEXT "/files" // Path to save pcaps
+#define PATHPCAPS         PATHAPPEXT "/files" // Path to save pcaps
+#define PATH_LAST_SCAN    PATHAPPEXT "/last_scan.bin"
+#define MAX_OS_SCAN_PORTS 16
 
 // F0.4e — ethernet_app_flags_t / ALL_FLAGS / MASK_FLAGS / IS_NOT_LINK_UP
 // were the worker thread's signaling protocol (flag_dhcp_dora set by
@@ -68,20 +68,35 @@ typedef enum {
 // For Passive Discovery scene
 typedef enum {
     PassiveDiscoveryStateConfig,
+    PassiveDiscoveryStateStarting,
     PassiveDiscoveryStateListening,
     PassiveDiscoveryStateFinished,
+    PassiveDiscoveryStateErrorDbTotalMemory,
+    PassiveDiscoveryStateErrorDbBlockMemory,
+    PassiveDiscoveryStateErrorDbAllocation,
+    PassiveDiscoveryStateErrorWorkerMemory,
+    PassiveDiscoveryStateErrorScannerMemory,
+    PassiveDiscoveryStateErrorBusy,
+    PassiveDiscoveryStateErrorDevice,
+    PassiveDiscoveryStateErrorLink,
+    PassiveDiscoveryStateErrorRxUnavailable,
 } passive_discovery_state_t;
 
 // For Passive Discovery scene protocols
 typedef enum {
     PassiveProtocolALL,
     PassiveProtocolLLDP,
-    PassiveProtocolEAPOL,
     PassiveProtocolCDP,
+    PassiveProtocolEAPOL,
     PassiveProtocolClearAll,
 
     PassiveProtocolCount
 } passive_protocol_t;
+
+typedef struct {
+    DateTime datetime;
+    uint8_t host_count;
+} arp_scan_header_t;
 
 // For Passive Discovery scene protocol names
 typedef struct {
@@ -106,11 +121,66 @@ typedef struct {
 // The full definition lives in libraries/chip/rx_dispatch.h, which is
 // included below the App typedef (it depends on App* in its API).
 typedef struct rx_handle rx_handle_t;
+typedef struct PassiveHistory PassiveHistory;
+typedef void (*startup_retry_callback_t)(void* context);
+
+/*
+ * Temporary Stage 1 diagnostic snapshot. Values are captured at the guard
+ * boundary before any error-screen allocations can change the heap. Keep this
+ * fixed-size and App-owned so the diagnostic itself needs no heap allocation.
+ */
+typedef enum {
+    StartupDiagnosticResultNone = 0,
+    StartupDiagnosticResultTotal,
+    StartupDiagnosticResultBlock,
+    StartupDiagnosticResultAllocation,
+} StartupDiagnosticResult;
+
+typedef enum {
+    StartupDiagnosticBoundaryNone = 0,
+    StartupDiagnosticBoundaryPassiveDb,
+    StartupDiagnosticBoundaryReadPcapStart,
+    StartupDiagnosticBoundaryReadPcapPostIndex,
+    StartupDiagnosticBoundaryReadPcapWorker,
+    StartupDiagnosticBoundaryArpScannerWorker,
+    StartupDiagnosticBoundaryScannerWait,
+} StartupDiagnosticBoundary;
+
+typedef struct StartupDiagnosticSnapshot {
+    size_t free_heap;
+    size_t max_block;
+    size_t required_total;
+    size_t required_block;
+    uint8_t result;
+    uint8_t boundary;
+    bool valid;
+} StartupDiagnosticSnapshot;
+
+typedef enum {
+    PassiveNeighborSourceLive,
+    PassiveNeighborSourceSaved,
+} PassiveNeighborSource;
+
+typedef enum {
+    AppThreadOwnerNone = 0,
+    AppThreadOwnerAbout,
+    AppThreadOwnerArpScanner,
+    AppThreadOwnerArpSpoofing,
+    AppThreadOwnerArpSpoofingSpecific,
+    AppThreadOwnerGetIp,
+    AppThreadOwnerOsDetector,
+    AppThreadOwnerPassiveDiscovery,
+    AppThreadOwnerPing,
+    AppThreadOwnerPortsScanner,
+    AppThreadOwnerReadPcaps,
+    AppThreadOwnerSniffer,
+} AppThreadOwner;
 
 // Struct for the App
 typedef struct {
     arp_list ip_list[255];
     uint8_t ip_counter; // Variable for countrt of ip_list
+    DateTime last_scan_time;
     uint8_t ip_gateway[4]; // Array to save the gateway ip
     uint8_t mac_gateway[6]; // Array to save the mac_gateway
 
@@ -127,6 +197,8 @@ typedef struct {
     // alt thread's DORA loop can break out before
     // its 10 s timeout fires.
     bool open_pcap_after_sniff;
+    bool read_pcap_from_sniffer;
+    bool pcap_browser_started;
     volatile bool sniffer_stop;
     volatile bool sniffer_finished;
     bool sniffer_link_error;
@@ -134,7 +206,17 @@ typedef struct {
     uint16_t passive_neighbor_count;
     uint8_t passive_selected_neighbor;
     uint8_t passive_details_page;
+    uint8_t passive_neighbor_source;
+    PassiveHistory* passive_history;
+    uint8_t passive_saved_mac[6];
+    uint8_t passive_saved_protocol;
+    volatile bool passive_capture_operational;
+    startup_retry_callback_t startup_retry_callback;
+    StartupDiagnosticSnapshot startup_diagnostic;
     volatile bool arpspoofing_stop;
+    volatile bool arp_scanner_stop;
+    volatile bool os_detector_stop;
+    volatile bool thread_shutdown_requested;
 
     SceneManager* scene_manager;
     ViewDispatcher* view_dispatcher;
@@ -162,6 +244,9 @@ typedef struct {
     // is gone; rx_dispatch owns the chip and per-scene alt threads do
     // any heavy lifting.
     FuriThread* thread_alternative; // Per-scene alt thread (one at a time)
+    AppThreadOwner thread_alternative_owner;
+
+    bool arp_target_selection_mode;
 
     port_result_t ports[MAX_OS_SCAN_PORTS];
     uint8_t ports_count;
@@ -175,7 +260,16 @@ typedef struct {
 
     rx_handle_t* auto_arp_handle;
     rx_handle_t* auto_icmp_handle;
+
+    uint64_t* packet_positions; // Read PCAP scene-owned packet offset table
 } App;
+
+bool arp_load_last_scan(App* app);
+bool arp_save_last_scan(App* app);
+bool app_thread_claim(App* app, AppThreadOwner owner, FuriThread* thread);
+bool app_thread_is_owned(const App* app, AppThreadOwner owner);
+uint32_t app_thread_join_and_free(App* app, AppThreadOwner owner);
+void app_thread_shutdown(App* app);
 
 // F0.2 — settings persistence. Must be included AFTER the App typedef
 // because settings.h declares functions taking `App*`, and App is an

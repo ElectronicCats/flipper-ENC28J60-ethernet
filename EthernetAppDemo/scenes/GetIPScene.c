@@ -1,4 +1,7 @@
 #include "../app_user.h"
+#include "../libraries/functions/startup_guard.h"
+
+#define GET_IP_STACK_BYTES 4096U
 
 uint8_t router_ip[4] = {192, 168, 0, 1};
 
@@ -22,16 +25,18 @@ static int32_t get_ip_dora_thread(void* context) {
         ethernet,
         ethernet->ip_address,
         app->ip_gateway,
-        ethernet->subnet_mask,
+        app->mac_gateway,
         "Flippa 0",
         &app->dora_cancel);
     rx_dispatch_resume();
 
+    if(app->dora_cancel) return 0;
+
     if(got_ip) {
         app->is_dora = true;
         send_arp_gratuitous(ethernet, ethernet->mac_address, ethernet->ip_address);
-        view_dispatcher_send_custom_event(app->view_dispatcher, ip_gotten_event);
         app->is_static_ip = true;
+        view_dispatcher_send_custom_event(app->view_dispatcher, ip_gotten_event);
     } else {
         view_dispatcher_send_custom_event(app->view_dispatcher, ip_no_gotten_event);
     }
@@ -39,10 +44,10 @@ static int32_t get_ip_dora_thread(void* context) {
 }
 
 // Function for the testing scene on enter
-void app_scene_get_ip_scene_on_enter(void* context) {
+static void get_ip_start(void* context) {
     App* app = (App*)context;
 
-    // Reset the widget and switch view
+    startup_guard_clear(app);
     widget_reset(app->widget);
 
     // Start ethernet
@@ -52,20 +57,41 @@ void app_scene_get_ip_scene_on_enter(void* context) {
     }
 
     if(app->enc28j60_connected) {
+        if(!startup_guard_thread_slot_available(app, get_ip_start)) return;
+
+        StartupGuardRequirements requirements =
+            startup_guard_thread_requirements(GET_IP_STACK_BYTES, 0U, 0U);
+        if(startup_guard_check(requirements) != StartupGuardReady) {
+            startup_guard_show_low_memory(
+                app, "Feature unavailable\nClose active services\nand try again", get_ip_start);
+            return;
+        }
+
         // F0.4e — replaced flag_dhcp_dora signal-to-worker with a
         // dedicated alt thread that runs DORA directly.
         // F0.5f — clear the cancel flag before starting; on_exit may
         // have left it set from a prior cancelled run.
         app->dora_cancel = false;
-        app->thread_alternative =
-            furi_thread_alloc_ex("Get IP DORA", 4 * 1024, get_ip_dora_thread, app);
-        furi_thread_start(app->thread_alternative);
+        FuriThread* thread =
+            furi_thread_alloc_ex("Get IP DORA", GET_IP_STACK_BYTES, get_ip_dora_thread, app);
+        if(!thread) {
+            startup_guard_show_low_memory(
+                app, "Feature unavailable\nClose active services\nand try again", get_ip_start);
+            return;
+        }
+        if(app_thread_claim(app, AppThreadOwnerGetIp, thread)) {
+            furi_thread_start(thread);
+        }
     } else {
         draw_device_no_connected(app);
     }
 
     // Change view
     view_dispatcher_switch_to_view(app->view_dispatcher, WidgetView);
+}
+
+void app_scene_get_ip_scene_on_enter(void* context) {
+    get_ip_start(context);
 }
 
 // Function for the testing scene on event
@@ -79,10 +105,12 @@ bool app_scene_get_ip_scene_on_event(void* context, SceneManagerEvent event) {
             break;
 
         case ip_no_gotten_event:
+            app_thread_join_and_free(app, AppThreadOwnerGetIp);
             draw_ip_not_got_it(app);
             break;
 
         case ip_gotten_event:
+            app_thread_join_and_free(app, AppThreadOwnerGetIp);
             draw_your_ip_is(app);
             break;
 
@@ -96,13 +124,12 @@ bool app_scene_get_ip_scene_on_event(void* context, SceneManagerEvent event) {
 // Function for the testing scene on exit
 void app_scene_get_ip_scene_on_exit(void* context) {
     App* app = (App*)context;
-    if(app->thread_alternative) {
+    startup_guard_clear(app);
+    if(app_thread_is_owned(app, AppThreadOwnerGetIp)) {
         // F0.5f — request cancel before join. The DORA loop polls this
         // flag every iteration and breaks out early, so join completes
         // within ~ms instead of the 10 s DHCP timeout.
         app->dora_cancel = true;
-        furi_thread_join(app->thread_alternative);
-        furi_thread_free(app->thread_alternative);
-        app->thread_alternative = NULL;
+        app_thread_join_and_free(app, AppThreadOwnerGetIp);
     }
 }
